@@ -1,8 +1,7 @@
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/use-auth";
-import BlockEditor from "@/components/editor/BlockEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +12,9 @@ import { PageTree } from "@/features/pages/PageTree";
 import { CreatePageForm } from "@/features/pages/CreatePageForm";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { TrashView } from "@/features/pages/components/TrashView";
+
+// BlockNote makes up most of the bundle; load it only when a page is opened.
+const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
 
 type Workspace = {
     id: string;
@@ -299,7 +301,15 @@ export default function WorkspaceHome() {
 
                     <section className="min-w-0 flex-1">
                         {pageId ? (
-                            <BlockEditor key={pageId} pageId={pageId} />
+                            <Suspense
+                                fallback={
+                                    <p className="p-6 text-sm text-muted-foreground">
+                                        Editor wird geladen …
+                                    </p>
+                                }
+                            >
+                                <BlockEditor key={pageId} pageId={pageId} />
+                            </Suspense>
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
                                 <div>
