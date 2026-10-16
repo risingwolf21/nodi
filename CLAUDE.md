@@ -81,22 +81,39 @@ funktionieren.
     unterstützen.
 -   Änderungen schrittweise entwickeln und testen.
 
+### Getroffene Entscheidungen (Nutzer, 2026-10-16)
+
+Diese Entscheidungen sind verbindlich:
+
+-   **LWW-Ordnung:** Maßgeblich ist die **Bearbeitungszeit auf dem
+    Client**, durchgesetzt vom Server. Eine serverseitige
+    Funktion/RPC übernimmt einen Schreibvorgang nur, wenn seine
+    Bearbeitungszeit neuer ist als der gespeicherte Stand; Zeitstempel
+    aus der Zukunft werden auf die Serverzeit `now()` gekappt; bei
+    Gleichstand entscheidet die Mutation-ID.
+-   **Offline-Umfang:** Dokumentinhalt bereits geöffneter Seiten ist
+    offline les- und bearbeitbar. Workspaces und Seitenbaum werden
+    **nur lesend** gecacht.
+-   **Neue Seiten offline:** vorerst **nein**. Seiten-IDs werden schon
+    clientseitig erzeugt (`crypto.randomUUID()`), eine spätere
+    Erweiterung bleibt möglich.
+-   **Logout mit ungesyncten Änderungen:** zuerst synchronisieren. Ist
+    das nicht möglich, warnen und wählen lassen: „Abbrechen" oder
+    „Trotzdem abmelden und lokale Änderungen verwerfen". Danach den
+    lokalen Cache dieses Kontos löschen.
+-   **Berechtigungen:** `visibility` und `owner_id` einer Seite darf
+    nur deren Owner ändern.
+-   **Tests:** Vitest (mit `fake-indexeddb` für IndexedDB-Logik) darf
+    eingeführt werden.
+-   **Merge Requests:** Jedes Arbeitspaket bekommt einen eigenen Pull
+    Request mit nachvollziehbarer Beschreibung. Die CI-Pipeline
+    (`.github/workflows/ci.yml`) muss grün sein.
+
 ### Noch nicht festgelegt
 
-Nicht eigenmächtig entscheiden, wenn die Implementierung davon abhängt:
-
--   Welche Seitendaten neben dem Dokumentinhalt offline verfügbar sein
-    sollen.
--   Ob neue Seiten offline erstellt werden müssen oder zunächst nur
-    vorhandene Seiten offline bearbeitet werden.
--   Wie lange lokale Daten nach Abmeldung oder Kontowechsel aufbewahrt
-    werden sollen.
 -   Ob Konfliktinformationen für den Nutzer sichtbar sein sollen, obwohl
     die fachliche Strategie LWW ist.
--   Ob zusätzliche Test-Frameworks eingeführt werden sollen.
--   Ob eine serverseitige RPC oder Datenbankfunktion für konfliktrobuste
-    Synchronisierung eingeführt werden soll. Das ist voraussichtlich
-    sinnvoll, muss aber zum bestehenden Schema passen.
+-   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen.
 
 ## 3. Bekannter technischer Ist-Zustand
 
@@ -147,16 +164,19 @@ export default defineConfig({
 
 Der `base`-Pfad ist für GitHub Pages wichtig. PWA-Manifest, Service
 Worker, Icons und alle Assets müssen mit `/nodi/` funktionieren. **Keine
-unbedachten root-absoluten URLs** wie `/favicon.svg` einführen, die auf
-GitHub Pages an der falschen Stelle aufgelöst werden könnten.
+unbedachten root-absoluten URLs** einführen, die auf GitHub Pages an der
+falschen Stelle aufgelöst werden könnten. Ausnahme: Verweise in
+`index.html` auf Dateien in `public/` (z. B. `/favicon.svg`) schreibt
+Vite im Build zu `/nodi/…` um; das ist geprüft. In Laufzeit-Code, im
+Manifest und im Service Worker gilt diese Umschreibung **nicht**.
 
 ### `index.html`
 
-Bisherige Struktur:
+Bisherige Struktur (seit Paket 1 mit `lang="de"`):
 
 ``` html
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -170,12 +190,14 @@ Bisherige Struktur:
 </html>
 ```
 
-Bekannte Punkte: - `lang="en"` sollte geprüft und wahrscheinlich auf
-`de` geändert werden, falls die App hauptsächlich deutschsprachig ist. -
-Favicon-Pfad ist root-absolut und kann unter `/nodi/` fehlschlagen. -
-Manifest-Link und iOS-PWA-Metadaten fehlten in der geprüften Version. -
-Viewport sollte für iOS Safe Areas gegebenenfalls `viewport-fit=cover`
-berücksichtigen.
+Bekannte Punkte:
+
+-   Der Favicon-Pfad `/favicon.svg` funktioniert unter `/nodi/`, weil
+    Vite ihn im Build umschreibt. `favicon.svg` ist aber noch das
+    Vite-Logo und wird mit dem neuen Icon ersetzt.
+-   Manifest-Link, `theme-color` und iOS-PWA-Metadaten fehlen noch.
+-   Viewport sollte für iOS Safe Areas `viewport-fit=cover`
+    berücksichtigen.
 
 ### `src/main.tsx`
 
@@ -204,24 +226,30 @@ createRoot(document.getElementById('root')!).render(
 -   `src/index.css` verwendet Tailwind CSS 4, `tw-animate-css`,
     `shadcn/tailwind.css` und `@fontsource-variable/geist`.
 -   Es gibt Light- und Dark-Theme-CSS-Variablen.
--   `src/App.css` enthält noch generische Vite-Startseiten-Styles. Vor
-    dem Löschen prüfen, ob sie tatsächlich unbenutzt sind.
+-   Die ungenutzte Vite-Vorlage `src/App.css` wurde in Paket 1 entfernt.
 -   Mobile Layout und iOS Safe Areas müssen in der tatsächlichen App
     geprüft werden. Keine globale CSS-Neustrukturierung ohne Bedarf.
 
 ### Bekannte Dateien
 
+Stand nach Paket 1:
+
 ``` text
+.env.example
 index.html
 vite.config.ts
+.github/workflows/
+  ci.yml                    # Lint, Build, DB-Migrationen, pgTAP-Tests
+  deploy.yml                # GitHub Pages, nur bei Push auf `production`
 src/
   App.tsx
   main.tsx
-  App.css
   index.css
+  vite-env.d.ts
   components/
     auth/AuthForm.tsx
     editor/BlockEditor.tsx
+    ui/                     # shadcn: button, card, input, label, separator
     workspace/WorkspaceHome.tsx
   features/
     pages/
@@ -229,19 +257,29 @@ src/
       PageTree.tsx
       PageTreeItem.tsx
       types.ts
+      components/PageActionsDialog.tsx
+      components/TrashView.tsx
+      hooks/usePages.ts
   lib/
     auth-context.tsx
     auth-provider.tsx
     supabase.ts
     use-auth.tsx
-  assets/
+    utils.ts                # re-exportiert `cn` aus dem Paket `cn`
 public/
-  favicon.svg
-  icons.svg
+  favicon.svg               # noch Vite-Logo
+supabase/
+  config.toml
+  migrations/               # profiles, workspaces, pages, page_shares
+  tests/page_permissions.test.sql   # pgTAP
 ```
 
-Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen. Ob
-weitere Ordner oder Migrationen vorhanden sind, ist nicht bestätigt.
+Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
+
+### TypeScript
+
+`tsconfig.app.json` setzt `strict` nicht explizit. Unter TypeScript 6
+ist `strict` aber Standard (geprüft mit TS 6.0.3).
 
 ## 4. Bekannter Editor-Ablauf und wichtige Risiken
 
@@ -468,6 +506,25 @@ Darstellung lesbar ist. Erstelle daraus die tatsächlich benötigten
 Assets und prüfe sie im Manifest und auf iOS. Erfinde keine Dateipfade,
 bevor Dateien wirklich existieren.
 
+Gestaltungsvorgabe des Nutzers (Branding-Tafel vom 2026-10-16):
+
+-   Abgerundetes Quadrat mit Verlauf von Indigo (oben links) zu sehr
+    dunklem Navy (unten rechts).
+-   Darin ein weißes, kräftiges kleines „n" als Bogen; am Fuß des
+    rechten Schenkels ein violetter Punkt (`#6366F1`).
+-   Wortmarke „nodi" (klein, fett, dunkles Navy), Claim „Deine Ideen.
+    Überall."
+-   Manifest-Werte: `name`/`short_name` „nodi", `description` „Deine
+    Ideen. Überall.", `display` `standalone`, `background_color`
+    `#0B0F14`, `theme_color` `#6366F1`.
+-   Größen: 192×192 und 512×512 (Android/PWA), 180×180
+    (`apple-touch-icon`); 1024×1024 nur falls ein App-Store-Export
+    nötig wird.
+-   Achtung: Die Tafel zeigt root-absolute Icon-Pfade (`/icons/…`) und
+    `purpose: "any maskable"` in einem Eintrag. Für `/nodi/` relative
+    Pfade verwenden und `any` und `maskable` als getrennte Icons mit
+    passendem Innenabstand bereitstellen.
+
 ## 8. Offline-Dokumente und Synchronisierung
 
 ### Grundprinzip
@@ -575,12 +632,22 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
     gleichsetzen; beide relevanten Pfade testen.
 -   Keine Änderungen an GitHub Actions oder Firebase-Konfiguration ohne
     vorherige Prüfung des tatsächlichen Deployment-Workflows.
+-   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
+    **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
+    `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
+-   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
+    Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
+    auf frischer DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
 Vorhandene Test-Infrastruktur zuerst ermitteln. Kein Test-Framework nur
 aus Gewohnheit hinzufügen; wenn Tests fehlen, einen kleinen Vorschlag
 mit Aufwand und Nutzen machen.
+
+Aktueller Stand: Datenbanktests mit pgTAP unter `supabase/tests/`,
+lokal ausführbar mit `supabase db start` und `supabase test db`.
+Frontend-Tests gibt es noch nicht; Vitest ist freigegeben (siehe §2).
 
 Mindestens prüfen:
 
@@ -677,21 +744,28 @@ Dateien/Bereiche, die besonders wichtig sind:
 -   GitHub-Actions-Workflow für GitHub Pages, falls vorhanden
 -   vorhandene Tests und ESLint-/TypeScript-Konfiguration
 
-Danach schlage eine **kleine Reihenfolge von Arbeitspaketen** vor:
+Die Ist-Analyse ist erledigt (2026-10-16). Vereinbarte Reihenfolge der
+Arbeitspakete, je ein Pull Request:
 
-1.  Architektur-/Ist-Zustand dokumentieren und offensichtliche
-    Build-/Pfadprobleme identifizieren.
-2.  PWA-Basis samt Manifest, Service Worker und Icon-Assets einrichten,
-    ohne Dokumentenspeicherung zu verändern.
-3.  PWA-Build und GitHub-Pages-Pfade prüfen.
-4.  Lokalen Dokument-Store mit minimalem, testbarem API entwerfen und
-    integrieren.
-5.  Persistente Sync-Warteschlange implementieren.
-6.  Serverseitige LWW-Konfliktregel anhand des tatsächlichen
-    Supabase-Schemas implementieren.
-7.  UI-Status, Fehlerbehandlung und Wiederholungsmechanismus ergänzen.
-8.  Offline-/Mehrgeräte-Szenarien testen und Dokumentation
-    aktualisieren.
+1.  **Aufräumen und Doku:** `lang="de"`, ungenutzte Vorlagen-Dateien
+    entfernen, `.env.example`, README, diese Datei aktualisieren.
+2.  **RLS härten:** `owner_id`/`visibility`/`workspace_id` von Seiten
+    nur durch den Owner änderbar; `updated_by`/`updated_at` von
+    `page_documents` serverseitig setzen; pgTAP-Tests.
+3.  **Papierkorb-Bug:** wiederhergestellte Unterseite mit archivierter
+    Elternseite ist unsichtbar.
+4.  **PWA-Basis:** `vite-plugin-pwa`, Manifest, neues Icon, iOS-Meta,
+    kontrollierte Updates, Editor per `lazy()` laden.
+5.  **Mobiles Layout:** responsive Sidebar, Seitenaktionen auf Touch
+    sichtbar, Safe Areas.
+6.  **Serverseitige LWW-Regel:** RPC mit atomarem bedingtem Update
+    gemäß §2; pgTAP-Tests.
+7.  **Lokaler Dokument-Store:** IndexedDB je Nutzer; Datenzugriff aus
+    `BlockEditor` herauslösen.
+8.  **Persistente Sync-Warteschlange:** Mutation-ID, Zusammenfassen,
+    Backoff, Fehlerklassen, Mehrfach-Tabs.
+9.  **Offline-Start, Status, Logout:** Seitenbaum lesend cachen,
+    Sync-Status, Logout-Policy gemäß §2.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -701,17 +775,26 @@ Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
 ## 13. Aktuelle offene Fragen / bekannte Lücken
 
-Diese Punkte sind noch nicht abschließend geprüft:
+Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   Vollständiges Ende von `src/components/editor/BlockEditor.tsx`.
--   Tatsächliches Schema von `page_documents` einschließlich
-    `updated_at`, `updated_by`, Constraints und RLS.
+-   `pages`-UPDATE-Policy: `with check (can_edit_page(id))` liest den
+    alten Datensatz. Workspace-Mitglieder können daher vermutlich
+    `owner_id`, `visibility` und `workspace_id` fremder Seiten ändern.
+-   `page_documents.updated_by` und `updated_at` kommen vom Client und
+    werden nicht geprüft.
+-   `usePages.restorePage`: Eine Unterseite, deren Elternseite noch
+    archiviert ist, wird nach dem Wiederherstellen nirgends angezeigt.
+-   `BlockEditor` lädt nur von Supabase und speichert nur im Speicher;
+    kein Speichern bei `pagehide`/`visibilitychange`.
+-   Read-only geteilte Seiten sind im Editor bearbeitbar; Speichern
+    scheitert dann an RLS.
+-   Layout ist nicht mobil nutzbar (feste Sidebar `w-64`,
+    Hover-only-Aktionen im Seitenbaum).
+
+Noch nicht abschließend geprüft:
+
 -   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
--   Ob Dokumentmetadaten und Seitenbaum offline verfügbar sein sollen.
--   Vorhandene GitHub-Actions-Konfiguration und genaue
-    Deployment-Schritte.
--   Verfügbarkeit von Tests und gewünschte Teststrategie.
--   Tatsächliche finale Icon-Dateien und gewünschte visuelle Details.
+-   Tatsächliche finale Icon-Dateien (Vorgabe siehe §7).
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
