@@ -1,0 +1,19 @@
+<!-- Quelle für maskable- und apple-touch-Icons: Hintergrund ohne Rundung,
+     Zeichen auf 80 % verkleinert, damit es in der maskable Safe Zone liegt. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B50EE"/>
+      <stop offset="0.55" stop-color="#2A2390"/>
+      <stop offset="1" stop-color="#0D0B33"/>
+    </linearGradient>
+    <!-- Derselbe Verlauf in den Koordinaten der skalierten Gruppe,
+         damit der Ring um den Punkt exakt die Hintergrundfarbe trifft. -->
+    <linearGradient id="background-scaled" href="#background" x1="-64" y1="-64" x2="576" y2="576" gradientUnits="userSpaceOnUse"/>
+  </defs>
+  <rect width="512" height="512" fill="url(#background)"/>
+  <g transform="translate(256 256) scale(0.8) translate(-256 -256)">
+    <path d="M168 400V248a88 88 0 0 1 176 0v152" fill="none" stroke="#FFFFFF" stroke-width="88"/>
+    <circle cx="382" cy="392" r="40" fill="#6366F1" stroke="url(#background-scaled)" stroke-width="16"/>
+  </g>
+</svg>
