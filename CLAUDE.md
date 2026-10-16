@@ -777,11 +777,6 @@ Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
 Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   `pages`-UPDATE-Policy: `with check (can_edit_page(id))` liest den
-    alten Datensatz. Workspace-Mitglieder können daher vermutlich
-    `owner_id`, `visibility` und `workspace_id` fremder Seiten ändern.
--   `page_documents.updated_by` und `updated_at` kommen vom Client und
-    werden nicht geprüft.
 -   `usePages.restorePage`: Eine Unterseite, deren Elternseite noch
     archiviert ist, wird nach dem Wiederherstellen nirgends angezeigt.
 -   `BlockEditor` lädt nur von Supabase und speichert nur im Speicher;
@@ -791,8 +786,18 @@ Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 -   Layout ist nicht mobil nutzbar (feste Sidebar `w-64`,
     Hover-only-Aktionen im Seitenbaum).
 
+Behoben in Paket 2 (`20261016175500_protect_page_columns.sql`):
+Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
+`id`/`workspace_id`/`created_by`/`created_at` unveränderlich sind und
+`page_documents.updated_at`/`updated_by` vom Server gesetzt werden.
+
 Noch nicht abschließend geprüft:
 
+-   Löschen: Jedes Workspace-Mitglied kann workspace-sichtbare Seiten
+    endgültig löschen (`can_edit_page`). Ob das gewollt ist, ist offen.
+-   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
+    Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
+    Verschieben derzeit nicht an.
 -   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
 -   Tatsächliche finale Icon-Dateien (Vorgabe siehe §7).
 
