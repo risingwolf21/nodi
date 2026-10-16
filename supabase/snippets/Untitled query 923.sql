@@ -1,1 +1,0 @@
-insert into workspaces(name, owner_id) values ('tessetset', (select auth.uid() as uid))
