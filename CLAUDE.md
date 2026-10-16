@@ -141,27 +141,28 @@ haben kann.
         jeweils `^0.56.0`
     -   Tailwind CSS 4 und `@tailwindcss/vite`
     -   shadcn-Ökosystem, `lucide-react`, Geist Variable Font
--   `vite-plugin-pwa` war in der geprüften `package.json` **nicht
-    vorhanden**.
+-   Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
+    (devDependencies), `workbox-window` (dependency).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
 
 ### `vite.config.ts`
 
-Der bisherige Inhalt enthält:
+Enthält `base: "/nodi/"`, die Plugins `react()`, `tailwindcss()` und
+seit Paket 4 `VitePWA(...)` sowie den Alias `@` → `src`.
 
-``` ts
-export default defineConfig({
-  base: "/nodi/",
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-    },
-  },
-});
-```
+PWA-Konfiguration (Paket 4):
+
+-   `generateSW`, `registerType: "prompt"`, `injectRegister: false`:
+    Registrierung und Update-Hinweis in
+    `src/components/pwa/UpdatePrompt.tsx`. Ein neuer Service Worker
+    übernimmt erst nach Bestätigung durch den Nutzer; stündliche
+    Update-Prüfung für installierte Apps.
+-   Precache nur für die App-Shell (`js, css, html, svg, png, woff2`).
+    Keine `runtimeCaching`-Regeln: Supabase-Anfragen (cross-origin)
+    laufen am Service Worker vorbei und landen in keinem Cache.
+-   Manifest-Werte gemäß §7, Icon-Pfade relativ zum Manifest.
 
 Der `base`-Pfad ist für GitHub Pages wichtig. PWA-Manifest, Service
 Worker, Icons und alle Assets müssen mit `/nodi/` funktionieren. **Keine
@@ -173,32 +174,15 @@ Manifest und im Service Worker gilt diese Umschreibung **nicht**.
 
 ### `index.html`
 
-Bisherige Struktur (seit Paket 1 mit `lang="de"`):
+`lang="de"`, Favicon (`/favicon.svg`, neues Icon),
+`apple-touch-icon`, `description`, `theme-color`,
+`apple-mobile-web-app-title` und `apple-mobile-web-app-status-bar-style`
+(`default`). Den Manifest-Link fügt `vite-plugin-pwa` im Build ein.
+Root-absolute Pfade auf `public/` schreibt Vite zu `/nodi/…` um.
 
-``` html
-<!doctype html>
-<html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nodi</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-```
-
-Bekannte Punkte:
-
--   Der Favicon-Pfad `/favicon.svg` funktioniert unter `/nodi/`, weil
-    Vite ihn im Build umschreibt. `favicon.svg` ist aber noch das
-    Vite-Logo und wird mit dem neuen Icon ersetzt.
--   Manifest-Link, `theme-color` und iOS-PWA-Metadaten fehlen noch.
--   Viewport sollte für iOS Safe Areas `viewport-fit=cover`
-    berücksichtigen.
+Offen für Paket 5: `viewport-fit=cover` erst zusammen mit
+Safe-Area-Abständen einführen, sonst liegen Inhalte unter Notch und
+Home-Indicator.
 
 ### `src/main.tsx`
 
@@ -233,7 +217,7 @@ createRoot(document.getElementById('root')!).render(
 
 ### Bekannte Dateien
 
-Stand nach Paket 1:
+Stand nach Paket 4:
 
 ``` text
 .env.example
@@ -250,8 +234,9 @@ src/
   components/
     auth/AuthForm.tsx
     editor/BlockEditor.tsx
+    pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator
-    workspace/WorkspaceHome.tsx
+    workspace/WorkspaceHome.tsx   # lädt BlockEditor per lazy()
   features/
     pages/
       CreatePageForm.tsx
@@ -261,6 +246,7 @@ src/
       components/PageActionsDialog.tsx
       components/TrashView.tsx
       hooks/usePages.ts
+      page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
     auth-provider.tsx
@@ -268,7 +254,11 @@ src/
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
 public/
-  favicon.svg               # noch Vite-Logo
+  favicon.svg               # App-Icon (abgerundet), Quelle für pwa-*.png
+  icons/                    # pwa-192, pwa-512, maskable-512, apple-touch-icon-180
+design/
+  icon-full-bleed.svg       # Quelle für maskable- und apple-touch-Icon
+  README.md                 # wie die PNGs erzeugt werden
 supabase/
   config.toml
   migrations/               # profiles, workspaces, pages, page_shares
@@ -809,7 +799,10 @@ Noch nicht abschließend geprüft:
     Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
     Verschieben derzeit nicht an.
 -   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
--   Tatsächliche finale Icon-Dateien (Vorgabe siehe §7).
+-   Installation auf echtem iOS- und Android-Gerät (Paket 4 nur im
+    Desktop-Chromium geprüft).
+-   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
+    keine Error-Boundary.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
