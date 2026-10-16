@@ -47,6 +47,15 @@ jobs:
           grep -q 'src="/nodi/assets/' dist/index.html \
             || (echo "dist/index.html verwendet nicht den Base-Pfad /nodi/" && exit 1)
 
+      - name: Check PWA output
+        run: |
+          test -f dist/sw.js || (echo "dist/sw.js fehlt" && exit 1)
+          grep -q 'rel="manifest" href="/nodi/manifest.webmanifest"' dist/index.html \
+            || (echo "Manifest-Link fehlt oder hat falschen Pfad" && exit 1)
+          for icon in pwa-192 pwa-512 maskable-512 apple-touch-icon-180; do
+            test -f "dist/icons/$icon.png" || (echo "dist/icons/$icon.png fehlt" && exit 1)
+          done
+
   database:
     name: Database migrations & tests
     runs-on: ubuntu-latest
