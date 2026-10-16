@@ -130,6 +130,7 @@ haben kann.
     -   `npm run build` → `tsc -b && vite build`
     -   `npm run lint` → `eslint .`
     -   `npm run preview` → `vite preview`
+    -   `npm test` → `vitest run` (seit Paket 3)
 -   Runtime-Abhängigkeiten umfassen unter anderem:
     -   React `^19.2.8`
     -   React DOM `^19.2.8`
@@ -647,7 +648,10 @@ mit Aufwand und Nutzen machen.
 
 Aktueller Stand: Datenbanktests mit pgTAP unter `supabase/tests/`,
 lokal ausführbar mit `supabase db start` und `supabase test db`.
-Frontend-Tests gibt es noch nicht; Vitest ist freigegeben (siehe §2).
+Frontend-Unit-Tests mit Vitest (`npm test`), Testdateien liegen als
+`*.test.ts` neben dem getesteten Modul. Reine Logik (z. B.
+`src/features/pages/page-hierarchy.ts`) wird ohne React und Supabase
+getestet.
 
 Mindestens prüfen:
 
@@ -777,8 +781,6 @@ Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
 Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   `usePages.restorePage`: Eine Unterseite, deren Elternseite noch
-    archiviert ist, wird nach dem Wiederherstellen nirgends angezeigt.
 -   `BlockEditor` lädt nur von Supabase und speichert nur im Speicher;
     kein Speichern bei `pagehide`/`visibilitychange`.
 -   Read-only geteilte Seiten sind im Editor bearbeitbar; Speichern
@@ -791,8 +793,16 @@ Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
 `id`/`workspace_id`/`created_by`/`created_at` unveränderlich sind und
 `page_documents.updated_at`/`updated_by` vom Server gesetzt werden.
 
+Behoben in Paket 3: Wiederherstellen einer Unterseite stellt auch ihre
+archivierten Elternseiten wieder her (Variante A, Nutzerentscheidung
+2026-10-16); die UI fragt vorher nach. Logik in
+`src/features/pages/page-hierarchy.ts`.
+
 Noch nicht abschließend geprüft:
 
+-   Bestandsdaten: Aktive Seiten, deren Elternseite archiviert ist
+    (durch den alten Bug entstanden), sind unsichtbar und würden beim
+    endgültigen Löschen der Elternseite mitgelöscht.
 -   Löschen: Jedes Workspace-Mitglied kann workspace-sichtbare Seiten
     endgültig löschen (`can_edit_page`). Ob das gewollt ist, ist offen.
 -   Verschieben (`parent_id`-Update) prüft nicht, ob die neue

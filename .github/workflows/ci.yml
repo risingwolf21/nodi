@@ -34,6 +34,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       # Ohne Supabase-Secrets: Der Build prüft nur Typen und Bundling,
       # das Ergebnis wird nicht ausgeliefert.
       - name: Build application
