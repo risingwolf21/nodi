@@ -1,5 +1,5 @@
 
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 import { AuthForm } from "@/components/auth/AuthForm";
 import WorkspaceHome from "@/components/workspace/WorkspaceHome";
 

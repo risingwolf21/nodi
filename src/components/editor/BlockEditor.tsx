@@ -9,7 +9,7 @@ import type { PartialBlock } from "@blocknote/core";
 import "@blocknote/mantine/style.css";
 
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth } from "@/lib/use-auth";
 
 type BlockEditorProps = {
     pageId: string;
