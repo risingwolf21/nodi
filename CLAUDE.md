@@ -629,6 +629,21 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 -   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
     **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
     `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
+-   Ablauf des Deploys: **`migrate` → `build` → `deploy`**. Der Job
+    `migrate` verknüpft das Supabase-Projekt und führt
+    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt er
+    fehl, wird nicht gebaut und nicht deployt. Benötigte Secrets:
+    `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
+    `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
+    (`cancel-in-progress: false`).
+-   **Regel für Migrationen:** Zwischen `migrate` und `deploy` läuft noch
+    das alte Frontend gegen das neue Schema. Migrationen müssen daher
+    rückwärtskompatibel sein (erst erweitern, alte Wege später in einer
+    eigenen Migration entfernen).
+-   Passt die Remote-Historie nicht zu `supabase/migrations` (z. B. eine
+    Migration wurde von Hand im SQL-Editor eingespielt), bricht
+    `db push` ab. Abhilfe lokal:
+    `supabase migration repair --status applied <version>`.
 -   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
     Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
     auf frischer DB, `supabase db lint`, `supabase test db`.
