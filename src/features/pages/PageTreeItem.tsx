@@ -42,7 +42,7 @@ export function PageTreeItem({
                     }
                     aria-expanded={expanded}
                     onClick={() => setExpanded((value) => !value)}
-                    className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background"
+                    className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background pointer-coarse:size-9"
                 >
                     {hasChildren ? (expanded ? "▾" : "▸") : "·"}
                 </button>
@@ -60,7 +60,7 @@ export function PageTreeItem({
                     aria-label={`Unterseite zu ${page.title} erstellen`}
                     title="Unterseite erstellen"
                     onClick={() => onAddChild(page.id)}
-                    className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+                    className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
                 >
                     +
                 </button>
@@ -73,7 +73,7 @@ export function PageTreeItem({
                         aria-label={`Aktionen für ${page.title}`}
                         aria-expanded={menuOpen}
                         onClick={() => setMenuOpen((value) => !value)}
-                        className="flex size-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+                        className="flex size-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
                     >
                         …
                     </button>

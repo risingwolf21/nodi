@@ -140,7 +140,7 @@ export function TrashView({
                     </div>
                 </div>
 
-                <ul>{renderPages(page.id, depth + 1)}</ul>
+                <ul className="pl-3">{renderPages(page.id, depth + 1)}</ul>
             </li>
         ));
     }

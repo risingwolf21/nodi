@@ -208,7 +208,7 @@ function EditorContent({
                 </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4 sm:px-6 sm:py-8">
                 <div className="mx-auto max-w-3xl">
                     <BlockNoteView editor={editor} />
                 </div>
