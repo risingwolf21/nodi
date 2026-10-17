@@ -763,6 +763,27 @@ Arbeitspakete, je ein Pull Request:
     Backoff, Fehlerklassen, Mehrfach-Tabs.
 9.  **Offline-Start, Status, Logout:** Seitenbaum lesend cachen,
     Sync-Status, Logout-Policy gemäß §2.
+10. **Notion-Look-and-Feel** (Nutzerwunsch 2026-10-17, nach 7–9).
+    Muster und Anmutung wie Notion, aber keine Logos, Icons oder Grafiken
+    von Notion übernehmen. Entscheidungen des Nutzers:
+    -   **Seitenleiste:** heller grauer Hintergrund, kompakte Zeilen,
+        Aufklapp-Pfeile, Emoji je Seite, Workspace oben, „Neue Seite“ und
+        Papierkorb unten, Aktionen beim Überfahren (Touch: sichtbar).
+    -   **Seitenkopf:** großer, direkt im Inhalt bearbeitbarer Titel,
+        wählbares Emoji-Icon (Spalte `pages.icon` existiert bereits, keine
+        Migration nötig), schmale Leiste oben mit Pfad, Speicherstatus und
+        „…“-Menü.
+    -   **Optik:** ruhige, neutrale Palette und Abstände, schmale
+        zentrierte Textspalte, Dark Mode automatisch nach
+        Systemeinstellung. **Branding:** neutral, nodi-Indigo `#6366F1`
+        nur als Akzent (Logo, Auswahl, Fokus, Links).
+    -   **Editor auf Deutsch:** BlockNote-Übersetzung aktivieren.
+    -   **Mobil (PWA):** wie die Notion-App. Startansicht ist die
+        Seitenliste als ganzer Bildschirm, eine Seite öffnet sich mit
+        Zurück-Pfeil oben links. Ersetzt die Schublade aus Paket 5 auf
+        kleinen Bildschirmen.
+    -   Nicht im ersten Wurf: Titelbilder (Storage), Verschieben per
+        Drag & Drop (braucht Zyklenprüfung), Suche, Favoriten.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
