@@ -264,8 +264,9 @@ design/
   README.md                 # wie die PNGs erzeugt werden
 supabase/
   config.toml
-  migrations/               # profiles, workspaces, pages, page_shares
-  tests/page_permissions.test.sql   # pgTAP
+  migrations/               # profiles, workspaces, pages, page_shares,
+                            # Spaltenschutz (P2), save_page_document (P6)
+  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -593,6 +594,30 @@ gewöhnliches `upsert` mit Client-Zeitstempel genügt dafür nicht. Keine
 Datenbankfunktion oder Migration erfinden, bevor die tatsächlichen
 Spalten, Constraints und RLS-Regeln geprüft sind.
 
+**Umsetzung (Paket 6, `20261017180000_save_page_document_lww.sql`):**
+
+-   Neue Spalten `page_documents.client_updated_at` (Bearbeitungszeit,
+    `not null`, Default `now()`; Bestand mit `updated_at` befüllt) und
+    `last_mutation_id`.
+-   RPC `save_page_document(p_page_id, p_document, p_edited_at,
+    p_mutation_id)` → `(applied, stored_edited_at, stored_mutation_id)`.
+    `security invoker`, d. h. die RLS-Policies von `page_documents`
+    gelten; `execute` nur für `authenticated`.
+-   Ordnung: `(client_updated_at, last_mutation_id)`. Übernommen wird
+    nur ein streng größeres Paar, atomar per
+    `insert … on conflict do update … where`. `p_edited_at` wird auf
+    `now()` gekappt.
+-   Auswertung im Client: `applied = true` → synchronisiert.
+    `applied = false` und `stored_mutation_id` = eigene ID → schon
+    früher übernommen (Wiederholung). Sonst → von einem neueren Stand
+    verdrängt; Serverstand neu laden.
+-   Fehlercodes: `42501` keine Schreibrechte oder Seite existiert
+    nicht (RLS greift vor dem Fremdschlüssel), `22023` Dokument ist
+    kein JSON-Array, `22004` Argument fehlt. Alle dauerhaft, nicht
+    wiederholen.
+-   `updated_at`/`updated_by` bleiben Serverzeit und Autor des letzten
+    übernommenen Schreibvorgangs.
+
 LWW kann Änderungen eines anderen Geräts bewusst überschreiben. Falls
 die App später wertvolle Inhalte schützt, sollte geprüft werden, ob
 überschriebenen Inhalt als Konfliktkopie aufbewahrt werden soll; das ist
@@ -806,6 +831,17 @@ Noch nicht abschließend geprüft:
     außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
+-   `BlockEditor` schreibt noch per direktem `upsert` (bis Paket 7).
+    Dieser Weg aktualisiert `client_updated_at` nicht. Sobald der
+    Editor die RPC nutzt, direkte `insert`/`update`-Rechte auf
+    `page_documents` entziehen, damit die LWW-Regel nicht umgangen
+    werden kann.
+-   Grenzfall der Kappung: Wird eine Mutation mit Zeitstempel aus der
+    Zukunft nach einem verlorenen Response wiederholt und wurde sie
+    inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
+    und kann gewinnen.
+-   UI für verdrängte Schreibvorgänge ist noch nicht entschieden (siehe
+    §2 „Noch nicht festgelegt“).
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
