@@ -180,9 +180,9 @@ Manifest und im Service Worker gilt diese Umschreibung **nicht**.
 (`default`). Den Manifest-Link fügt `vite-plugin-pwa` im Build ein.
 Root-absolute Pfade auf `public/` schreibt Vite zu `/nodi/…` um.
 
-Offen für Paket 5: `viewport-fit=cover` erst zusammen mit
-Safe-Area-Abständen einführen, sonst liegen Inhalte unter Notch und
-Home-Indicator.
+Seit Paket 5 mit `viewport-fit=cover`. Safe-Area-Abstände
+(`env(safe-area-inset-*)`) sitzen gezielt an Kopfzeile, Seitenleiste,
+Inhaltsbereich und Update-Hinweis.
 
 ### `src/main.tsx`
 
@@ -212,8 +212,11 @@ createRoot(document.getElementById('root')!).render(
     `shadcn/tailwind.css` und `@fontsource-variable/geist`.
 -   Es gibt Light- und Dark-Theme-CSS-Variablen.
 -   Die ungenutzte Vite-Vorlage `src/App.css` wurde in Paket 1 entfernt.
--   Mobile Layout und iOS Safe Areas müssen in der tatsächlichen App
-    geprüft werden. Keine globale CSS-Neustrukturierung ohne Bedarf.
+-   Mobiles Layout (Paket 5): Unter `md` (768 px) ist die Seitenleiste
+    eine Schublade unterhalb der Kopfzeile (Menü-Button, Abdunkelung,
+    Escape, schließt nach Seitenauswahl). Ab `md` unverändert statisch.
+    Touch-Geräte (`pointer-coarse:`) zeigen die Seitenaktionen immer und
+    mit größeren Tap-Flächen. Keine globale CSS-Neustrukturierung.
 
 ### Bekannte Dateien
 
@@ -775,8 +778,6 @@ Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
     kein Speichern bei `pagehide`/`visibilitychange`.
 -   Read-only geteilte Seiten sind im Editor bearbeitbar; Speichern
     scheitert dann an RLS.
--   Layout ist nicht mobil nutzbar (feste Sidebar `w-64`,
-    Hover-only-Aktionen im Seitenbaum).
 
 Behoben in Paket 2 (`20261016175500_protect_page_columns.sql`):
 Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
@@ -799,8 +800,10 @@ Noch nicht abschließend geprüft:
     Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
     Verschieben derzeit nicht an.
 -   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
--   Installation auf echtem iOS- und Android-Gerät (Paket 4 nur im
-    Desktop-Chromium geprüft).
+-   Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
+    und 5 nur in Chromium mit Geräte-Emulation geprüft).
+-   Das Aktionsmenü im Seitenbaum schließt sich nicht bei Tipp
+    außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
 

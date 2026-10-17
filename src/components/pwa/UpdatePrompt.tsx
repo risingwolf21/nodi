@@ -32,7 +32,7 @@ export function UpdatePrompt() {
         <div
             role="status"
             aria-live="polite"
-            className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border bg-background p-4 shadow-lg"
+            className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border bg-background p-4 shadow-lg"
         >
             <p className="flex-1 text-sm">
                 Eine neue Version von nodi ist verfügbar. Beim Neuladen gehen
