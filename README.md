@@ -67,5 +67,14 @@ einem pgTAP-Test absichern.
   den Branch `production`. Benötigt die Repository-Secrets
   `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
+## PWA
+
+nodi ist als PWA installierbar (Manifest und Service Worker über
+`vite-plugin-pwa`). Der Service Worker cached nur die App-Shell. Eine neue
+Version wird erst nach Bestätigung im Hinweis „Neu laden“ aktiv. Der
+Service Worker ist nur im Produktionsbuild aktiv, zum Testen also
+`npm run build && npm run preview`. Icons und ihre Quellen: siehe
+[`design/README.md`](design/README.md).
+
 Die App läuft unter dem Base-Pfad `/nodi/` (`vite.config.ts`). Neue Assets und
 URLs müssen unter diesem Pfad funktionieren.
