@@ -12,12 +12,51 @@ permissions:
   pages: write
   id-token: write
 
+# Laufende Deploys nicht abbrechen: Ein abgebrochener Migrations-Job könnte
+# die Datenbank in einem Zwischenstand hinterlassen. Neue Läufe warten.
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  # Migrationen laufen vor dem Build. Schlägt dieser Job fehl, wird das
+  # Frontend nicht deployt. Migrationen müssen daher mit dem noch laufenden
+  # alten Frontend kompatibel sein (siehe CLAUDE.md §9).
+  migrate:
+    name: Apply database migrations
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Supabase configuration
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN" || (echo "SUPABASE_ACCESS_TOKEN fehlt" && exit 1)
+          test -n "$SUPABASE_DB_PASSWORD" || (echo "SUPABASE_DB_PASSWORD fehlt" && exit 1)
+          test -n "$SUPABASE_PROJECT_ID" || (echo "SUPABASE_PROJECT_ID fehlt" && exit 1)
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Show migration status
+        run: supabase migration list
+
+      # Wendet nur Migrationen an, die in der Remote-Historie fehlen.
+      # Bricht ab, wenn die Remote-Historie nicht zu supabase/migrations passt.
+      - name: Push migrations
+        run: supabase db push --yes
+
   build:
+    needs: migrate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
