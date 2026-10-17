@@ -108,12 +108,18 @@ Diese Entscheidungen sind verbindlich:
 -   **Merge Requests:** Jedes Arbeitspaket bekommt einen eigenen Pull
     Request mit nachvollziehbarer Beschreibung. Die CI-Pipeline
     (`.github/workflows/ci.yml`) muss grün sein.
+-   **Verdrängte Schreibvorgänge (Nutzer, 2026-10-17, Option A):**
+    Lehnt der Server eine lokale Änderung ab, weil ein anderes Gerät
+    eine neuere Version hat, lädt die App automatisch den Serverstand
+    und zeigt einen kurzen, nicht blockierenden Hinweis: „Diese Seite
+    wurde auf einem anderen Gerät geändert. Die neuere Version wurde
+    geladen.“ Kein Dialog, keine Rückfrage. Nie „Gespeichert“ anzeigen,
+    wenn die eigene Änderung verdrängt wurde.
 
 ### Noch nicht festgelegt
 
--   Ob Konfliktinformationen für den Nutzer sichtbar sein sollen, obwohl
-    die fachliche Strategie LWW ist.
--   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen.
+-   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen
+    (vorerst nein; später nachrüstbar).
 
 ## 3. Bekannter technischer Ist-Zustand
 
@@ -840,8 +846,8 @@ Noch nicht abschließend geprüft:
     Zukunft nach einem verlorenen Response wiederholt und wurde sie
     inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
     und kann gewinnen.
--   UI für verdrängte Schreibvorgänge ist noch nicht entschieden (siehe
-    §2 „Noch nicht festgelegt“).
+-   UI für verdrängte Schreibvorgänge: entschieden (Option A, §2),
+    Umsetzung in Paket 7/8.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
