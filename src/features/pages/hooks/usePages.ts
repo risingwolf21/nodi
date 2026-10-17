@@ -1,6 +1,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
 import type { Page } from "../types";
 
 type StoredPage = Page & {
@@ -165,33 +166,12 @@ export function usePages(
         [workspaceId],
     );
 
-    const getDescendantIds = useCallback(
-        (pageId: string, sourcePages: Page[]) => {
-            const ids = new Set<string>();
-
-            function collect(id: string) {
-                if (ids.has(id)) return;
-
-                ids.add(id);
-
-                sourcePages
-                    .filter((page) => page.parent_id === id)
-                    .forEach((child) => collect(child.id));
-            }
-
-            collect(pageId);
-
-            return [...ids];
-        },
-        [],
-    );
-
     const archivePage = useCallback(
         async (pageId: string): Promise<string[]> => {
             setError("");
 
             const allPages = [...pages, ...archivedPages];
-            const ids = getDescendantIds(pageId, allPages);
+            const ids = collectDescendantIds(pageId, allPages);
 
             if (!pages.some((page) => page.id === pageId)) {
                 throw new Error("Die Seite wurde nicht gefunden.");
@@ -219,14 +199,14 @@ export function usePages(
 
             return ids;
         },
-        [pages, archivedPages, workspaceId, getDescendantIds],
+        [pages, archivedPages, workspaceId],
     );
 
     const restorePage = useCallback(
         async (pageId: string): Promise<string[]> => {
             setError("");
 
-            const ids = getDescendantIds(pageId, archivedPages);
+            const ids = collectRestoreIds(pageId, archivedPages);
 
             if (!archivedPages.some((page) => page.id === pageId)) {
                 throw new Error("Die archivierte Seite wurde nicht gefunden.");
@@ -256,7 +236,7 @@ export function usePages(
 
             return ids;
         },
-        [archivedPages, workspaceId, getDescendantIds],
+        [archivedPages, workspaceId],
     );
 
 
@@ -264,7 +244,7 @@ export function usePages(
         async (pageId: string): Promise<string[]> => {
             setError("");
 
-            const ids = getDescendantIds(pageId, archivedPages);
+            const ids = collectDescendantIds(pageId, archivedPages);
 
             if (!archivedPages.some((page) => page.id === pageId)) {
                 throw new Error(
@@ -289,7 +269,7 @@ export function usePages(
 
             return ids;
         },
-        [archivedPages, workspaceId, getDescendantIds],
+        [archivedPages, workspaceId],
     );
 
 

@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { Page } from "../types";
+import { findArchivedAncestors } from "../page-hierarchy";
 import { Undo2, Trash2 } from "lucide-react";
 
 type TrashViewProps = {
@@ -20,6 +21,12 @@ export function TrashView({
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [pageToDelete, setPageToDelete] = useState<Page | null>(null);
+    const [pageToRestore, setPageToRestore] = useState<Page | null>(null);
+
+    // Root first, so the dialog reads like a breadcrumb.
+    const ancestorsToRestore = pageToRestore
+        ? findArchivedAncestors(pageToRestore.id, pages).reverse()
+        : [];
 
     const pageIds = new Set(pages.map((page) => page.id));
     const childrenByParent = new Map<string | null, Page[]>();
@@ -50,6 +57,7 @@ export function TrashView({
 
         try {
             await onRestore(pageId);
+            setPageToRestore(null);
         } catch (err) {
             setError(
                 err instanceof Error
@@ -59,6 +67,18 @@ export function TrashView({
         } finally {
             setBusyId(null);
         }
+    }
+
+    // Archived parent pages are restored too; ask first so that pages
+    // the user did not click do not reappear unexpectedly.
+    function requestRestore(page: Page) {
+        if (findArchivedAncestors(page.id, pages).length > 0) {
+            setError("");
+            setPageToRestore(page);
+            return;
+        }
+
+        void handleRestore(page.id);
     }
 
     async function handleDelete() {
@@ -91,7 +111,7 @@ export function TrashView({
                     <button
                         type="button"
                         title={page.title}
-                        onClick={() => handleRestore(page.id)}
+                        onClick={() => requestRestore(page)}
                         className="min-w-0 flex-1 truncate text-left text-sm hover:text-foreground"
                     >
                         {page.title}
@@ -103,7 +123,7 @@ export function TrashView({
                             variant="ghost"
                             title="Wiederherstellen"
                             aria-label={`„${page.title}“ wiederherstellen`}
-                            onClick={() => handleRestore(page.id)}
+                            onClick={() => requestRestore(page)}
                         >
                             <Undo2 className="h-4 w-4" />
                         </Button>
@@ -120,7 +140,7 @@ export function TrashView({
                     </div>
                 </div>
 
-                <ul>{renderPages(page.id, depth + 1)}</ul>
+                <ul className="pl-3">{renderPages(page.id, depth + 1)}</ul>
             </li>
         ));
     }
@@ -154,6 +174,70 @@ export function TrashView({
                 </p>
             ) : (
                 <ul className="space-y-1">{renderPages(null)}</ul>
+            )}
+
+            {pageToRestore && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    onMouseDown={(event) => {
+                        if (
+                            event.target === event.currentTarget &&
+                            busyId === null
+                        ) {
+                            setPageToRestore(null);
+                        }
+                    }}
+                >
+                    <section
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="restore-with-parents-title"
+                        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+                    >
+                        <h3
+                            id="restore-with-parents-title"
+                            className="text-lg font-semibold"
+                        >
+                            Mit übergeordneten Seiten wiederherstellen?
+                        </h3>
+
+                        <p className="text-sm text-muted-foreground">
+                            „{pageToRestore.title}“ liegt in einer Seite, die
+                            sich ebenfalls im Papierkorb befindet. Damit sie
+                            wieder an ihrem Platz erscheint, werden auch diese
+                            Seiten wiederhergestellt:{" "}
+                            {ancestorsToRestore
+                                .map((ancestor) => `„${ancestor.title}“`)
+                                .join(" › ")}
+                            . Andere Unterseiten bleiben im Papierkorb.
+                        </p>
+
+                        {error && (
+                            <p role="alert" className="text-sm text-destructive">
+                                {error}
+                            </p>
+                        )}
+
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="outline"
+                                disabled={busyId !== null}
+                                onClick={() => setPageToRestore(null)}
+                            >
+                                Abbrechen
+                            </Button>
+
+                            <Button
+                                disabled={busyId !== null}
+                                onClick={() => void handleRestore(pageToRestore.id)}
+                            >
+                                {busyId === pageToRestore.id
+                                    ? "Stellt wieder her …"
+                                    : "Wiederherstellen"}
+                            </Button>
+                        </div>
+                    </section>
+                </div>
             )}
 
             {pageToDelete && (

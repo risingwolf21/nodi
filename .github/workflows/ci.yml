@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      # Ohne Supabase-Secrets: Der Build prüft nur Typen und Bundling,
+      # das Ergebnis wird nicht ausgeliefert.
+      - name: Build application
+        run: npm run build
+
+      - name: Check GitHub Pages base path
+        run: |
+          grep -q 'src="/nodi/assets/' dist/index.html \
+            || (echo "dist/index.html verwendet nicht den Base-Pfad /nodi/" && exit 1)
+
+      - name: Check PWA output
+        run: |
+          test -f dist/sw.js || (echo "dist/sw.js fehlt" && exit 1)
+          grep -q 'rel="manifest" href="/nodi/manifest.webmanifest"' dist/index.html \
+            || (echo "Manifest-Link fehlt oder hat falschen Pfad" && exit 1)
+          for icon in pwa-192 pwa-512 maskable-512 apple-touch-icon-180; do
+            test -f "dist/icons/$icon.png" || (echo "dist/icons/$icon.png fehlt" && exit 1)
+          done
+
+  database:
+    name: Database migrations & tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      # Startet eine leere lokale Datenbank und wendet alle Migrationen an.
+      - name: Start database and apply migrations
+        run: supabase db start
+
+      - name: Lint database schema
+        run: supabase db lint --fail-on error
+
+      - name: Run pgTAP tests
+        run: supabase test db
