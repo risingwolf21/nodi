@@ -88,6 +88,18 @@ export class LocalDocumentStore {
         return record;
     }
 
+    /** Every document with a local edit the server has not confirmed yet. */
+    async listUnsynced(): Promise<LocalDocument[]> {
+        const database = await this.open();
+        const stored: unknown[] = await promisify(
+            database.transaction(DOCUMENTS).objectStore(DOCUMENTS).getAll(),
+        );
+
+        return stored
+            .map(parseLocalDocument)
+            .filter((record): record is LocalDocument => record !== null && !record.synced);
+    }
+
     /** Stores a local edit. It is unsynced until the server confirms it. */
     async putLocalEdit(record: LocalDocument): Promise<void> {
         const database = await this.open();

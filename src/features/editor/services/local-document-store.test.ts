@@ -68,6 +68,13 @@ describe("LocalDocumentStore", () => {
         expect(await store.get(pageId)).toBeNull();
     });
 
+    it("lists only documents with unsynced edits", async () => {
+        await store.putLocalEdit(localEdit());
+        await store.putLocalEdit(localEdit({ pageId: "page-2", synced: true }));
+
+        expect(await store.listUnsynced()).toEqual([localEdit()]);
+    });
+
     describe("markSynced", () => {
         it("marks the version that was sent", async () => {
             await store.putLocalEdit(localEdit());
