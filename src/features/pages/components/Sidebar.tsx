@@ -12,6 +12,8 @@ type SidebarProps = {
     onWorkspaceChange: (workspaceId: string) => void;
     pages: Page[];
     archivedPages: Page[];
+    /** Shared with the user from other workspaces; read-only in the tree. */
+    sharedPages: Page[];
     selectedPageId: string;
     /** Offline: the tree is a cached copy and cannot be changed. */
     readOnly: boolean;
@@ -36,6 +38,7 @@ export function Sidebar({
     onWorkspaceChange,
     pages,
     archivedPages,
+    sharedPages,
     selectedPageId,
     readOnly,
     status,
@@ -126,15 +129,36 @@ export function Sidebar({
                 {trashOpen ? (
                     <TrashView pages={archivedPages} onRestore={onRestore} onDelete={onDelete} />
                 ) : (
-                    <PageTree
-                        pages={pages}
-                        selectedPageId={selectedPageId}
-                        readOnly={readOnly}
-                        onSelect={onSelect}
-                        onAddChild={(parentId) => onCreatePage(parentId)}
-                        onRename={onRename}
-                        onArchive={onArchive}
-                    />
+                    <>
+                        <PageTree
+                            pages={pages}
+                            selectedPageId={selectedPageId}
+                            readOnly={readOnly}
+                            onSelect={onSelect}
+                            onAddChild={(parentId) => onCreatePage(parentId)}
+                            onRename={onRename}
+                            onArchive={onArchive}
+                        />
+                        {sharedPages.length > 0 && (
+                            <section aria-labelledby="shared-pages-title" className="mt-4">
+                                <h2
+                                    id="shared-pages-title"
+                                    className="px-2 pb-1 text-xs font-medium text-muted-foreground"
+                                >
+                                    Mit mir geteilt
+                                </h2>
+                                <PageTree
+                                    pages={sharedPages}
+                                    selectedPageId={selectedPageId}
+                                    readOnly
+                                    onSelect={onSelect}
+                                    onAddChild={() => undefined}
+                                    onRename={() => undefined}
+                                    onArchive={() => undefined}
+                                />
+                            </section>
+                        )}
+                    </>
                 )}
             </nav>
 

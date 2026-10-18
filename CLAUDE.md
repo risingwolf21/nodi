@@ -275,6 +275,7 @@ src/
         sync-engine.ts               # sendet alle ungesyncten Änderungen
         account-sync.ts              # eine Sync-Engine je Konto und Tab
         document-changes.ts          # BroadcastChannel zwischen Tabs
+        revoked-documents.ts         # lokale Kopien nicht mehr lesbarer Seiten löschen
     pages/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
@@ -282,10 +283,13 @@ src/
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
+      components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
+      hooks/useSharedPages.ts       # „Mit mir geteilt“, Cache zuerst, nur lesend
       hooks/useWorkspaces.ts
       services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
+      services/page-sharing.ts      # RPCs share_page/list_page_shares, Entziehen
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
@@ -961,8 +965,10 @@ Arbeitspakete, je ein Pull Request:
         nicht für ihre Unterseiten (später erweiterbar).
     -   **Aufteilung:** 11a Datenbank (RPCs, Vererbung, Links, pgTAP,
         Schlüssel-Checks), 11b Oberfläche zum Teilen und „Mit mir
-        geteilt“, lokale Kopie bei Entzug löschen, 11c öffentliche
-        Seitenansicht ohne Login.
+        geteilt“, lokale Kopie bei Entzug löschen, 11c öffentlicher Link
+        im Teilen-Dialog und öffentliche Seitenansicht ohne Login (der
+        Link-Schalter kam nach 11c, damit ein erzeugter Link sofort
+        funktioniert).
     -   **Umsetzung 11a** (`20261018120000_page_sharing.sql`):
         `has_page_share(page, require_edit)` geht rekursiv über
         `parent_id` nach oben (Stopp an `private`, Tiefe ≤ 50 gegen
@@ -984,6 +990,30 @@ Arbeitspakete, je ein Pull Request:
         Viewer kann lesen, aber nicht schreiben (`save_page_document` →
         `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
         Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
+    -   **Umsetzung 11b** (nur Frontend, keine Migration):
+        -   `pages.owner_id` wird mitgeladen (`Page.owner_id`; alte
+            Caches ohne Owner gelten als „nicht teilbar“ bis zum
+            nächsten Laden). „Teilen“ im Seitenmenü nur für den Owner
+            und nur online; der Server prüft es ohnehin.
+        -   `ShareDialog`: Einladen per E-Mail mit Rolle „Kann lesen“ /
+            „Kann bearbeiten“ (`share_page`), Liste (`list_page_shares`),
+            Rolle ändern = erneut `share_page`, Entfernen = `delete` auf
+            `page_shares`. Fehlercodes als deutsche Meldungen.
+        -   „Mit mir geteilt“ (`useSharedPages`): lesbare, nicht
+            archivierte Seiten außerhalb der eigenen Workspaces
+            (`workspace_id not in (…)`, RLS entscheidet). Seiten, deren
+            Elternseite nicht sichtbar ist, sind Wurzeln. Cache zuerst
+            (Schlüssel `shared-pages` in `nodi-<userId>-tree`), offline
+            nur lesend. Titel, Icon und Breite geteilter Seiten sind
+            nicht änderbar; der Inhalt folgt `can_edit_page`.
+        -   Entzug: `deleteRevokedLocalCopies` fragt beim Start und bei
+            `online` alle lesbaren Seiten-IDs ab und löscht lokal nur
+            **synchronisierte** Kopien anderer Seiten (in einer
+            Transaktion). Ungesyncte Änderungen bleiben (keine stillen
+            Datenverluste; die Sync-Engine meldet `42501`). Ohne
+            vollständige Antwort (Fehler, offline, `count` ≠ Zeilen)
+            wird nichts gelöscht. Seitenbaum- und Geteilt-Cache werden
+            bei der nächsten Serverantwort ersetzt.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -1050,6 +1080,13 @@ Noch nicht abschließend geprüft:
     inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
     und kann gewinnen.
 -   UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
+-   Teilen (11b): Lokale Kopien entzogener Seiten werden nur beim Start
+    und bei `online` bereinigt, nicht während die App lange offen ist.
+    Mehr als 1000 lesbare Seiten (`max_rows`) → keine Bereinigung.
+    Ungesyncte Änderungen an einer entzogenen Seite bleiben mit Fehler
+    stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
+    Editoren aus anderen Workspaces können Titel und Icon geteilter
+    Seiten nicht ändern (nur Inhalt).
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.

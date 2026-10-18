@@ -147,6 +147,31 @@ export class LocalDocumentStore {
         return { record: record ?? remoteRecord, replaced };
     }
 
+    /**
+     * Deletes the copies of pages the user can no longer read (access
+     * revoked, page deleted). Unsynced edits are kept: they must not
+     * disappear silently; the sync engine reports them as failed.
+     * Checks and deletes in one transaction, so an edit stored meanwhile
+     * is never lost. Returns the ids of the deleted copies.
+     */
+    async deleteSyncedExcept(readablePageIds: ReadonlySet<string>): Promise<string[]> {
+        const database = await this.open();
+        const transaction = database.transaction(DOCUMENTS, "readwrite");
+        const store = transaction.objectStore(DOCUMENTS);
+
+        const stored: unknown[] = await promisify(store.getAll());
+        const deleted: string[] = [];
+        for (const value of stored) {
+            const record = parseLocalDocument(value);
+            if (!record || !record.synced || readablePageIds.has(record.pageId)) continue;
+            store.delete(record.pageId);
+            deleted.push(record.pageId);
+        }
+
+        await completion(transaction);
+        return deleted;
+    }
+
     private async update(
         pageId: string,
         change: (current: LocalDocument | null) => LocalDocument | null,

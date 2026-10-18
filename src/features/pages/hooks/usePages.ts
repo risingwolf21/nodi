@@ -9,10 +9,14 @@ import type { Page, PageSettings, StoredPage } from "../types";
 export const OFFLINE_READ_ONLY_MESSAGE =
     "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
 
-const toPage = ({ id, title, parent_id, icon, full_width }: StoredPage): Page => ({
+// Columns of a page in the tree (StoredPage).
+export const PAGE_COLUMNS = "id,title,parent_id,owner_id,is_archived,icon,full_width";
+
+export const toPage = ({ id, title, parent_id, owner_id, icon, full_width }: StoredPage): Page => ({
     id,
     title,
     parent_id,
+    owner_id,
     icon,
     full_width,
 });
@@ -86,7 +90,7 @@ export function usePages(
 
                 const response = await supabase
                     .from("pages")
-                    .select("id,title,parent_id,is_archived,icon,full_width")
+                    .select(PAGE_COLUMNS)
                     .eq("workspace_id", workspaceId)
                     .order("created_at", { ascending: true });
                 serverAnswered = true;
@@ -164,6 +168,7 @@ export function usePages(
                 id: crypto.randomUUID(),
                 title: normalizedTitle,
                 parent_id: parentId,
+                owner_id: userId,
                 icon: null,
                 full_width: false,
             };
