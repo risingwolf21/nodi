@@ -151,6 +151,13 @@ export default function WorkspaceHome() {
         }
     }
 
+    // The open page belongs to the previous workspace; its history entry
+    // would reopen it when switching back.
+    function changeWorkspace(nextWorkspaceId: string) {
+        closePage();
+        setWorkspaceId(nextWorkspaceId);
+    }
+
     async function createPage(parentId: string | null, section: PageSection) {
         setError("");
 
@@ -241,7 +248,7 @@ export default function WorkspaceHome() {
                         <Sidebar
                             workspaces={workspaces}
                             workspaceId={workspaceId}
-                            onWorkspaceChange={setWorkspaceId}
+                            onWorkspaceChange={changeWorkspace}
                             pages={pages}
                             archivedPages={archivedPages}
                             sharedPages={sharedPages}
@@ -272,6 +279,7 @@ export default function WorkspaceHome() {
                     <section className={cn("min-w-0 flex-1 md:block", page ? "block" : "hidden")}>
                         {page ? (
                             <PageView
+                                key={page.id}
                                 page={page}
                                 ancestors={ancestors}
                                 readOnly={readOnly || (sharedPage !== null && sharedPagesFromCache)}

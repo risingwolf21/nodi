@@ -32,11 +32,16 @@ export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon }: 
     // Escape discards the draft; blur() runs before the state update lands.
     const discardDraft = useRef(false);
 
+    // Once per new page: editable can flip back on later (e.g. after a
+    // reload from the server), which must not take the focus again.
+    const focusedPageId = useRef("");
+
     useEffect(() => {
-        if (!focusTitle || !editable) return;
+        if (!focusTitle || !editable || focusedPageId.current === page.id) return;
+        focusedPageId.current = page.id;
         titleRef.current?.focus();
         titleRef.current?.select();
-    }, [focusTitle, editable]);
+    }, [focusTitle, editable, page.id]);
 
     function commitTitle() {
         const next = discardDraft.current ? "" : (draft?.trim() ?? "");
