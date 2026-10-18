@@ -259,7 +259,9 @@ src/
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
-                            # menu.tsx (schließt bei Klick außerhalb)
+                            # menu.tsx (schließt bei Klick außerhalb);
+                            # dialog.tsx (natives <dialog>: Escape, Fokus
+                            # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
     workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor
   features/
@@ -1159,11 +1161,17 @@ Arbeitspakete, je ein Pull Request:
         -   Workspaces sind per API nicht mehr löschbar (die App bietet
             es nicht an; Kaskade hätte private Seiten anderer gelöscht).
         -   pgTAP: `page_tree_hardening.test.sql`.
-    -   **13b Editor-Speichern** unabhängig vom Netz (geplant).
-    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (geplant).
-    -   **13d Deploy-Gate:** Lint, Tests und Build vor `migrate` (geplant).
-    -   **13e Aufräumen:** gemeinsamer Dialog, Doppel-Absenden, Doku
-        (geplant).
+    -   **13b Editor-Speichern** unabhängig vom Netz: Lokales Speichern
+        wartet nicht mehr auf Sync oder Netz; eine Eingabe gilt als
+        „wird getippt“, bis sie lokal liegt; `WorkspaceHome` je Konto.
+    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (siehe §4,
+        `hooks/load-cache-then-server.ts`).
+    -   **13d Deploy-Gate:** `build` (Lint, Tests, Build, Bundle-Checks)
+        und `verify-database` (Migrationen, `db lint`, pgTAP) laufen vor
+        `migrate` und `deploy`.
+    -   **13e Aufräumen:** ein natives `<dialog>` für alle Modals
+        (`components/ui/dialog.tsx`), kein doppeltes Absenden bei „Neue
+        Seite“/„Workspace erstellen“, Papierkorb-Korrekturen, Doku.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
