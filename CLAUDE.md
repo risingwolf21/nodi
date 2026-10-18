@@ -150,6 +150,8 @@ haben kann.
 -   Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
     (devDependencies), `workbox-window` (dependency).
 -   Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
+-   Seit Paket 14e: `leaflet` `1.9.4` (dependency, nur in der
+    nachgeladenen Karte) und `@types/leaflet` (devDependency).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -283,6 +285,9 @@ src/
       components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
       components/CalendarView.tsx    # Monatskalender (14d)
+      components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
+      components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
+      services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -1325,6 +1330,29 @@ Arbeitspakete, je ein Pull Request:
             nicht laden. 14e daher zusammen mit 14b–14d releasen; 14e-b
             lässt unbekannte Typen künftig aus.
         -   pgTAP: `database_places.test.sql`.
+    -   **Umsetzung 14e-b** (nur Frontend, keine Migration):
+        -   Eigenschaft „Ort“: In Tabelle und Eintrag öffnet ein Klick den
+            Orts-Editor mit Adresssuche (Nominatim, nur auf Enter, eine
+            Anfrage pro Sekunde, deutsche Ergebnisse, höchstens fünf) und
+            kleiner Karte (Klick setzt den Punkt ohne Adresse) sowie
+            „Leeren“. Angezeigt wird die Adresse, sonst die Koordinaten;
+            „Karte“ öffnet den Ort auf openstreetmap.org. Filtern und
+            Sortieren nach dem angezeigten Text.
+        -   Ansicht „Landkarte“: ein Marker je Eintrag mit Ort (Tooltip mit
+            Titel als Text, Klick öffnet den Eintrag), Ausschnitt passt
+            sich den Markern an; „Ort“ in der Leiste wählt die Eigenschaft
+            (`config.placePropertyId`, sonst die erste); ohne
+            Orts-Eigenschaft: „Orts-Eigenschaft anlegen“. Darunter die Zahl
+            der Einträge ohne Ort und „Neu“.
+        -   Leaflet und `leaflet.css` stecken in einem eigenen, nachgeladenen
+            Chunk (`MapCanvas`); Marker sind `circleMarker` (keine
+            Icon-Bilder). Kacheln von `tile.openstreetmap.org` mit
+            Quellenangabe; der Service Worker cached sie nicht, offline
+            zeigt die Karte Marker ohne Hintergrund.
+        -   Die Parser lassen unbekannte Eigenschafts- und Ansichtstypen
+            aus, statt die ganze Datenbank abzulehnen.
+        -   Noch nicht: Marker gruppieren bei vielen Einträgen, Einträge
+            auf der Karte verschieben, Kacheln offline.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, Columns3, LayoutGrid, List, Plus, Rss, Table2 } from "lucide-react";
+import { CalendarDays, Columns3, LayoutGrid, List, Map as MapIcon, MapPin, Plus, Rss, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import type { Page } from "@/features/pages/types";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import {
     dateProperty,
     defaultOptions,
     groupProperty,
+    placeProperty,
     visibleProperties,
 } from "../database-model";
 import { useDatabase } from "../hooks/useDatabase";
@@ -22,6 +23,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
 import { GalleryView } from "./GalleryView";
 import { ListView } from "./ListView";
+import { MapView } from "./MapView";
 import { TableView } from "./TableView";
 import { FilterPanel, PropertiesPanel, PropertyChoicePanel, SortPanel } from "./ViewSettingsPanels";
 
@@ -32,6 +34,7 @@ const VIEW_ICONS = {
     gallery: LayoutGrid,
     feed: Rss,
     calendar: CalendarDays,
+    map: MapIcon,
 } satisfies Record<ViewType, unknown>;
 
 type DatabaseViewProps = {
@@ -191,6 +194,7 @@ export function DatabaseView({
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
+    const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
 
     // Views other than the table open a new entry at once (like Notion); a
     // board column or a calendar day also sets its value.
@@ -262,6 +266,20 @@ export function DatabaseView({
                                 editable={editable}
                                 onChoose={(groupByPropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
+                                }
+                                onError={report}
+                            />
+                        )}
+                        {activeView.type === "map" && (
+                            <PropertyChoicePanel
+                                label="Ort"
+                                icon={MapPin}
+                                emptyText="Keine Orts-Eigenschaft."
+                                choices={data.properties.filter((property) => property.type === "place")}
+                                current={mapPlace}
+                                editable={editable}
+                                onChoose={(placePropertyId) =>
+                                    updateView(activeView.id, { config: { ...activeView.config, placePropertyId } })
                                 }
                                 onError={report}
                             />
@@ -382,6 +400,19 @@ export function DatabaseView({
                     }
                     onAddDateProperty={async () => {
                         await addProperty("date");
+                    }}
+                    onError={report}
+                />
+            )}
+            {activeView?.type === "map" && (
+                <MapView
+                    rows={rows}
+                    placeProperty={mapPlace}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                    onAddPlaceProperty={async () => {
+                        await addProperty("place");
                     }}
                     onError={report}
                 />
