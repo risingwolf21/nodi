@@ -26,7 +26,12 @@ export function findArchivedAncestors(
     pageId: string,
     archivedPages: Page[],
 ): Page[] {
-    const pagesById = new Map(archivedPages.map((page) => [page.id, page]));
+    return findAncestors(pageId, archivedPages);
+}
+
+/** Ancestors of a page within `pages`, nearest first; safe against cycles. */
+export function findAncestors(pageId: string, pages: Page[]): Page[] {
+    const pagesById = new Map(pages.map((page) => [page.id, page]));
     const ancestors: Page[] = [];
     const visited = new Set([pageId]);
 

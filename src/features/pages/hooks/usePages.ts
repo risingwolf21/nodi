@@ -9,7 +9,12 @@ import type { Page, StoredPage } from "../types";
 export const OFFLINE_READ_ONLY_MESSAGE =
     "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
 
-const toPage = ({ id, title, parent_id }: StoredPage): Page => ({ id, title, parent_id });
+const toPage = ({ id, title, parent_id, icon }: StoredPage): Page => ({
+    id,
+    title,
+    parent_id,
+    icon,
+});
 
 type UsePagesResult = {
     pages: Page[];
@@ -20,6 +25,7 @@ type UsePagesResult = {
     fromCache: boolean;
     createPage: (title: string, parentId: string | null) => Promise<Page>;
     renamePage: (pageId: string, title: string) => Promise<void>;
+    setPageIcon: (pageId: string, icon: string | null) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
     restorePage: (pageId: string) => Promise<string[]>;
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
@@ -79,7 +85,7 @@ export function usePages(
 
                 const response = await supabase
                     .from("pages")
-                    .select("id,title,parent_id,is_archived")
+                    .select("id,title,parent_id,is_archived,icon")
                     .eq("workspace_id", workspaceId)
                     .order("created_at", { ascending: true });
                 serverAnswered = true;
@@ -157,6 +163,7 @@ export function usePages(
                 id: crypto.randomUUID(),
                 title: normalizedTitle,
                 parent_id: parentId,
+                icon: null,
             };
 
             setError("");
@@ -208,6 +215,26 @@ export function usePages(
                         ? { ...page, title: normalizedTitle }
                         : page,
                 ),
+            );
+        },
+        [workspaceId, requireOnline],
+    );
+
+    const setPageIcon = useCallback(
+        async (pageId: string, icon: string | null) => {
+            requireOnline();
+            setError("");
+
+            const { error: updateError } = await supabase
+                .from("pages")
+                .update({ icon })
+                .eq("id", pageId)
+                .eq("workspace_id", workspaceId);
+
+            if (updateError) throw updateError;
+
+            setPages((current) =>
+                current.map((page) => (page.id === pageId ? { ...page, icon } : page)),
             );
         },
         [workspaceId, requireOnline],
@@ -331,6 +358,7 @@ export function usePages(
         fromCache,
         createPage,
         renamePage,
+        setPageIcon,
         archivePage,
         restorePage,
         permanentlyDeletePage,
