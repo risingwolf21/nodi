@@ -3,7 +3,8 @@ import {
     useCreateBlockNote,
     useEditorChange,
 } from "@blocknote/react";
-import { BlockNoteView } from "@blocknote/mantine";
+import { BlockNoteView, type Theme } from "@blocknote/mantine";
+import { de } from "@blocknote/core/locales";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -30,6 +31,15 @@ type BlockEditorProps = {
 type LoadResult =
     | { pageId: string; initial: InitialDocument }
     | { pageId: string; error: string };
+
+// The app's tokens switch with the system color scheme, so one theme
+// serves light and dark; BlockNote keeps its own colors for the rest.
+const editorTheme: Theme = {
+    colors: {
+        editor: { text: "var(--foreground)", background: "var(--background)" },
+    },
+    fontFamily: "var(--font-sans)",
+};
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
@@ -92,6 +102,7 @@ function EditorContent({
     const applyingRemoteContent = useRef(false);
 
     const editor = useCreateBlockNote({
+        dictionary: de,
         initialContent:
             initial.document.content.length > 0
                 ? initial.document.content
@@ -227,6 +238,7 @@ function EditorContent({
                 <div className="mx-auto max-w-3xl">
                     <BlockNoteView
                         editor={editor}
+                        theme={{ light: editorTheme, dark: editorTheme }}
                         editable={canEdit !== false}
                     />
                 </div>
