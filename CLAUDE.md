@@ -222,7 +222,10 @@ createRoot(document.getElementById('root')!).render(
 -   Optik (Paket 10): neutrale Palette, nodi-Indigo nur als Akzent
     (Token `--brand`: Fokus, Auswahl, Links, Logo). Dark Mode folgt
     `prefers-color-scheme` (Variante `dark:` ebenso, keine `.dark`-Klasse).
-    `--page-gutter` hält Titel und Editortext bündig.
+    `--page-gutter` hält Titel und Editortext bündig. Textspalte max.
+    860 px; je Seite umschaltbar auf „Volle Breite“ (Seitenmenü, Spalte
+    `pages.full_width`, Migration `20261018090000_page_full_width.sql`,
+    über Geräte synchronisiert, nur mit Schreibrecht und online).
 -   Layout (Paket 10, ersetzt die Schublade aus Paket 5): ab `md`
     Seitenleiste + Seite nebeneinander. Unter `md` wie die Notion-App:
     Startbildschirm ist die Seitenliste, eine Seite öffnet sich im
@@ -303,7 +306,8 @@ supabase/
   config.toml
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
-                            # nur noch per RPC schreibbar (P8)
+                            # nur noch per RPC schreibbar (P8),
+                            # pages.full_width (P10)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
 ```
 
