@@ -16,12 +16,19 @@ describe("PageTreeCache", () => {
 
     it("keeps workspaces and the pages of each workspace", async () => {
         await cache.putWorkspaces([{ id: "w1", name: "Persönlich" }]);
-        await cache.putPages("w1", [{ id: "p1", title: "A", parent_id: null, is_archived: false }]);
-        await cache.putPages("w2", [{ id: "p2", title: "B", parent_id: null, is_archived: true }]);
+        await cache.putPages("w1", [{ id: "p1", title: "A", parent_id: null, is_archived: false, icon: "📘", full_width: true }]);
+        await cache.putPages("w2", [{ id: "p2", title: "B", parent_id: null, is_archived: true, icon: null, full_width: false }]);
 
         expect(await cache.getWorkspaces()).toEqual([{ id: "w1", name: "Persönlich" }]);
         expect(await cache.getPages("w1")).toEqual([
-            { id: "p1", title: "A", parent_id: null, is_archived: false },
+            { id: "p1", title: "A", parent_id: null, is_archived: false, icon: "📘", full_width: true },
+        ]);
+    });
+
+    it("reads trees cached before pages had icons and widths", async () => {
+        await cache.putPages("w1", [{ id: "p1", title: "A", parent_id: null, is_archived: false }] as never);
+        expect(await cache.getPages("w1")).toEqual([
+            { id: "p1", title: "A", parent_id: null, is_archived: false, icon: null, full_width: false },
         ]);
     });
 

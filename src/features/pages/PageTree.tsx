@@ -26,8 +26,8 @@ export function PageTree({
 
     if (rootPages.length === 0) {
         return (
-            <p className="px-3 py-2 text-sm text-muted-foreground">
-                Noch keine Seiten vorhanden.
+            <p className="px-2 py-1 text-sm text-muted-foreground">
+                Noch keine Seiten
             </p>
         );
     }
@@ -39,6 +39,7 @@ export function PageTree({
                     key={page.id}
                     page={page}
                     pages={pages}
+                    depth={0}
                     selectedPageId={selectedPageId}
                     readOnly={readOnly}
                     onSelect={onSelect}
