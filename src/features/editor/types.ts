@@ -1,4 +1,5 @@
 import type { PartialBlock } from "@blocknote/core";
+import type { RequestFailureReason } from "@/lib/request-errors";
 
 export type DocumentContent = PartialBlock[];
 
@@ -25,8 +26,6 @@ export type LocalDocument = DocumentVersion & {
     /** Last known edit permission; null until the server has been asked. */
     canEdit: boolean | null;
 };
-
-export type RequestFailureReason = "offline" | "auth" | "temporary" | "permanent";
 
 export type SaveOutcome =
     | { kind: "saved" }

@@ -1,9 +1,8 @@
-import { RemoteRequestError } from "../document-sync";
+import { RemoteRequestError, type RequestFailureReason } from "@/lib/request-errors";
 import type {
     DocumentContent,
     LocalDocument,
     RemoteDocumentApi,
-    RequestFailureReason,
 } from "../types";
 import type { DocumentChanges } from "./document-changes";
 import type { LocalDocumentStore } from "./local-document-store";
