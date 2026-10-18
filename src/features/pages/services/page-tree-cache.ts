@@ -35,14 +35,17 @@ function parseStoredPages(value: unknown): StoredPage[] | null {
             (item.parent_id === null || typeof item.parent_id === "string") &&
             typeof item.is_archived === "boolean",
     );
-    // Trees cached before packages 10 and 11b have no icon, width or
-    // owner; they stay valid (no owner: not shareable until reloaded).
+    // Trees cached before packages 10, 11b and 12b have no icon, width,
+    // owner or section; they stay valid (no owner: not shareable until
+    // reloaded).
     return valid
-        ? value.map(({ id, title, parent_id, owner_id, is_archived, icon, full_width }: StoredPage) => ({
+        ? value.map(({ id, title, parent_id, owner_id, visibility, is_archived, icon, full_width }: StoredPage) => ({
               id,
               title,
               parent_id,
               owner_id: typeof owner_id === "string" ? owner_id : "",
+              // Before package 12b; since 12a all existing pages are private.
+              visibility: visibility === "workspace" ? "workspace" : "private",
               is_archived,
               icon: typeof icon === "string" ? icon : null,
               full_width: full_width === true,
