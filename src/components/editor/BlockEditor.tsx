@@ -275,8 +275,8 @@ export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
         };
     }, [pageId, store]);
 
-    // Das Ergebnis der vorherigen Seite während des Ladens ignorieren.
-    // Dadurch muss der Effect keinen synchronen Reset ausführen.
+    // The result of the previous page is ignored while the next one loads,
+    // so the effect needs no synchronous reset.
     if (!user || !store || !loadResult || loadResult.pageId !== pageId) {
         return (
             <EditorFrame

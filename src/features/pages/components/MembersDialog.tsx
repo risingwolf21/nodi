@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { workspaceMembers, type WorkspaceMember } from "../services/workspace-members";
 
@@ -89,158 +90,146 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
     }
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onMouseDown={(event) => {
-                if (event.target === event.currentTarget && !busy) onClose();
-            }}
-        >
-            <section
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="members-title"
-                className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
-            >
-                <div className="space-y-1">
-                    <h2 id="members-title" className="truncate text-lg font-semibold">
-                        Mitglieder von „{workspaceName}“
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                        Mitglieder sehen und bearbeiten alle Seiten im Bereich „Workspace“. Private Seiten
-                        sieht nur, wem sie gehören.
-                    </p>
-                </div>
+        <Dialog labelledBy="members-title" onClose={onClose} busy={busy} className="max-w-md">
+            <div className="space-y-1">
+                <h2 id="members-title" className="truncate text-lg font-semibold">
+                    Mitglieder von „{workspaceName}“
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                    Mitglieder sehen und bearbeiten alle Seiten im Bereich „Workspace“. Private Seiten
+                    sieht nur, wem sie gehören.
+                </p>
+            </div>
 
-                {isOwner && (
-                    <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
-                        <Input
-                            type="email"
-                            aria-label="E-Mail-Adresse"
-                            placeholder="E-Mail-Adresse"
-                            value={email}
-                            onChange={(event) => setEmail(event.target.value)}
-                            disabled={busy}
-                            autoFocus
-                            required
-                            className="min-w-0 flex-1"
-                        />
-                        <Button type="submit" disabled={busy}>
-                            Hinzufügen
-                        </Button>
-                    </form>
-                )}
+            {isOwner && (
+                <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                        type="email"
+                        aria-label="E-Mail-Adresse"
+                        placeholder="E-Mail-Adresse"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        disabled={busy}
+                        autoFocus
+                        required
+                        className="min-w-0 flex-1"
+                    />
+                    <Button type="submit" disabled={busy}>
+                        Hinzufügen
+                    </Button>
+                </form>
+            )}
 
-                {error && (
-                    <p role="alert" className="text-sm text-destructive">
-                        {error}
-                    </p>
-                )}
+            {error && (
+                <p role="alert" className="text-sm text-destructive">
+                    {error}
+                </p>
+            )}
 
-                {members === null ? (
-                    error ? (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                setError("");
-                                setReloadCount((count) => count + 1);
-                            }}
-                        >
-                            Erneut laden
-                        </Button>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">Wird geladen …</p>
-                    )
+            {members === null ? (
+                error ? (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            setError("");
+                            setReloadCount((count) => count + 1);
+                        }}
+                    >
+                        Erneut laden
+                    </Button>
                 ) : (
-                    <ul className="divide-y">
-                        {members.map((member) => (
-                            <li key={member.userId} className="flex flex-wrap items-center gap-2 py-2">
-                                <span className="min-w-0 basis-full truncate text-sm sm:basis-0 sm:flex-1">
-                                    {member.email}
-                                    {member.userId === userId && (
-                                        <span className="text-muted-foreground"> (du)</span>
-                                    )}
-                                </span>
-                                <span className="text-xs text-muted-foreground">{ROLE_LABELS[member.role]}</span>
-                                {isOwner && member.role !== "owner" && (
-                                    confirmRemove === member.userId ? (
-                                        <Button
-                                            type="button"
-                                            variant="destructive"
-                                            size="sm"
-                                            disabled={busy}
-                                            onClick={() => void remove(member.userId)}
-                                        >
-                                            Wirklich entfernen
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            disabled={busy}
-                                            aria-label={`${member.email} entfernen`}
-                                            onClick={() => setConfirmRemove(member.userId)}
-                                        >
-                                            Entfernen
-                                        </Button>
-                                    )
+                    <p className="text-sm text-muted-foreground">Wird geladen …</p>
+                )
+            ) : (
+                <ul className="divide-y">
+                    {members.map((member) => (
+                        <li key={member.userId} className="flex flex-wrap items-center gap-2 py-2">
+                            <span className="min-w-0 basis-full truncate text-sm sm:basis-0 sm:flex-1">
+                                {member.email}
+                                {member.userId === userId && (
+                                    <span className="text-muted-foreground"> (du)</span>
                                 )}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-
-                {confirmRemove && (
-                    <p className="text-xs text-muted-foreground">
-                        Geteilte Seiten dieser Person gehen an dich. Ihre privaten Seiten bleiben erhalten,
-                        sind aber nicht mehr sichtbar.
-                    </p>
-                )}
-
-                {members !== null && !isOwner && (
-                    <div className="space-y-2 border-t pt-4">
-                        {confirmLeave ? (
-                            <>
-                                <p className="text-sm text-muted-foreground">
-                                    Deine Seiten im Bereich „Workspace“ gehen an den Owner. Deine privaten Seiten
-                                    bleiben erhalten, du siehst sie aber erst wieder, wenn du erneut hinzugefügt
-                                    wirst.
-                                </p>
-                                <div className="flex justify-end gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={busy}
-                                        onClick={() => setConfirmLeave(false)}
-                                    >
-                                        Abbrechen
-                                    </Button>
+                            </span>
+                            <span className="text-xs text-muted-foreground">{ROLE_LABELS[member.role]}</span>
+                            {isOwner && member.role !== "owner" && (
+                                confirmRemove === member.userId ? (
                                     <Button
                                         type="button"
                                         variant="destructive"
+                                        size="sm"
                                         disabled={busy}
-                                        onClick={() => void leave()}
+                                        onClick={() => void remove(member.userId)}
                                     >
-                                        Workspace verlassen
+                                        Wirklich entfernen
                                     </Button>
-                                </div>
-                            </>
-                        ) : (
-                            <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmLeave(true)}>
-                                Workspace verlassen …
-                            </Button>
-                        )}
-                    </div>
-                )}
+                                ) : (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={busy}
+                                        aria-label={`${member.email} entfernen`}
+                                        onClick={() => setConfirmRemove(member.userId)}
+                                    >
+                                        Entfernen
+                                    </Button>
+                                )
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
 
-                <div className="flex justify-end">
-                    <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
-                        Fertig
-                    </Button>
+            {confirmRemove && (
+                <p className="text-xs text-muted-foreground">
+                    Geteilte Seiten dieser Person gehen an dich. Ihre privaten Seiten bleiben erhalten,
+                    sind aber nicht mehr sichtbar.
+                </p>
+            )}
+
+            {members !== null && !isOwner && (
+                <div className="space-y-2 border-t pt-4">
+                    {confirmLeave ? (
+                        <>
+                            <p className="text-sm text-muted-foreground">
+                                Deine Seiten im Bereich „Workspace“ gehen an den Owner. Deine privaten Seiten
+                                bleiben erhalten, du siehst sie aber erst wieder, wenn du erneut hinzugefügt
+                                wirst.
+                            </p>
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={busy}
+                                    onClick={() => setConfirmLeave(false)}
+                                >
+                                    Abbrechen
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={busy}
+                                    onClick={() => void leave()}
+                                >
+                                    Workspace verlassen
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmLeave(true)}>
+                            Workspace verlassen …
+                        </Button>
+                    )}
                 </div>
-            </section>
-        </div>
+            )}
+
+            <div className="flex justify-end">
+                <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+                    Fertig
+                </Button>
+            </div>
+        </Dialog>
     );
 }

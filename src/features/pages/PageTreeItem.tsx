@@ -53,7 +53,7 @@ export function PageTreeItem({
                 <button
                     type="button"
                     aria-label={expanded ? "Unterseiten einklappen" : "Unterseiten ausklappen"}
-                    aria-expanded={expanded}
+                    aria-expanded={hasChildren ? expanded : undefined}
                     disabled={!hasChildren}
                     onClick={() => setExpanded((value) => !value)}
                     className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent disabled:opacity-0 pointer-coarse:size-8"

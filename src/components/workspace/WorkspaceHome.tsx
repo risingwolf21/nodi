@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,13 @@ function pageIdFromHistory(state: unknown): string {
     return typeof pageId === "string" ? pageId : "";
 }
 
+/** Local copies of pages that are no longer readable go at the next contact with the server. */
+function cleanUpRevokedCopies(userId: string): void {
+    deleteRevokedLocalCopies(userId, localDocumentStoreFor(userId)).catch((err: unknown) => {
+        console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
+    });
+}
+
 export default function WorkspaceHome() {
     const { user, offline: authOffline, signOut } = useAuth();
 
@@ -52,6 +59,9 @@ export default function WorkspaceHome() {
     // A page created just now: its title gets the focus.
     const [newPageId, setNewPageId] = useState("");
     const [workspaceName, setWorkspaceName] = useState("");
+    const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+    // Repeated taps on "Neue Seite" while one is being created add nothing.
+    const creatingPage = useRef(false);
     const [error, setError] = useState("");
     const [signOutStep, setSignOutStep] = useState<
         | { kind: "idle" }
@@ -115,12 +125,7 @@ export default function WorkspaceHome() {
     useEffect(() => {
         if (!userId) return;
 
-        const store = localDocumentStoreFor(userId);
-        const deleteRevoked = () => {
-            deleteRevokedLocalCopies(userId, store).catch((err: unknown) => {
-                console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
-            });
-        };
+        const deleteRevoked = () => cleanUpRevokedCopies(userId);
         deleteRevoked();
         window.addEventListener("online", deleteRevoked);
         return () => window.removeEventListener("online", deleteRevoked);
@@ -159,6 +164,8 @@ export default function WorkspaceHome() {
     }
 
     async function createPage(parentId: string | null, section: PageSection) {
+        if (creatingPage.current) return;
+        creatingPage.current = true;
         setError("");
 
         try {
@@ -167,11 +174,15 @@ export default function WorkspaceHome() {
         } catch (err) {
             console.error("Page creation failed:", err);
             setError(err instanceof Error ? err.message : "Die Seite konnte nicht erstellt werden.");
+        } finally {
+            creatingPage.current = false;
         }
     }
 
     async function createWorkspace(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (creatingWorkspace) return;
+        setCreatingWorkspace(true);
         setError("");
 
         try {
@@ -179,6 +190,8 @@ export default function WorkspaceHome() {
             setWorkspaceName("");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Der Workspace konnte nicht erstellt werden.");
+        } finally {
+            setCreatingWorkspace(false);
         }
     }
 
@@ -222,14 +235,16 @@ export default function WorkspaceHome() {
                             <CardContent>
                                 <form onSubmit={createWorkspace} className="space-y-4">
                                     <Input
+                                        aria-label="Name des Workspace"
                                         value={workspaceName}
                                         onChange={(event) => setWorkspaceName(event.target.value)}
                                         placeholder="z. B. Persönlicher Workspace"
                                         required
                                         maxLength={100}
+                                        disabled={creatingWorkspace}
                                     />
-                                    <Button className="w-full" type="submit">
-                                        Workspace erstellen
+                                    <Button className="w-full" type="submit" disabled={creatingWorkspace}>
+                                        {creatingWorkspace ? "Wird erstellt …" : "Workspace erstellen"}
                                     </Button>
                                 </form>
                             </CardContent>
@@ -359,9 +374,7 @@ export default function WorkspaceHome() {
                         closePage();
                         reloadWorkspaces();
                         // The workspace's pages are no longer readable.
-                        deleteRevokedLocalCopies(user.id, localDocumentStoreFor(user.id)).catch((err: unknown) => {
-                            console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
-                        });
+                        cleanUpRevokedCopies(user.id);
                     }}
                 />
             )}
