@@ -310,10 +310,11 @@ export default function WorkspaceHome() {
                 />
             )}
 
-            {sharingPage && (
+            {sharingPage && user && (
                 <ShareDialog
                     key={sharingPage.id}
                     page={sharingPage}
+                    userId={user.id}
                     onClose={() => setSharingPage(null)}
                 />
             )}

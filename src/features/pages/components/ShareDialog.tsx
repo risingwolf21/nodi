@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { publicPageUrl } from "@/features/public/public-page";
 import { pageSharing, type PageShare, type SharePermission } from "../services/page-sharing";
 import type { Page } from "../types";
 
 type ShareDialogProps = {
     page: Page;
+    userId: string;
     onClose: () => void;
 };
 
@@ -42,9 +44,15 @@ function PermissionSelect({
     );
 }
 
-/** Owner only (the server checks it too): invite by e-mail, change, revoke. */
-export function ShareDialog({ page, onClose }: ShareDialogProps) {
+/**
+ * Owner only (the server checks it too): invite by e-mail, change, revoke,
+ * and publish the page with a public link.
+ */
+export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
     const [shares, setShares] = useState<PageShare[] | null>(null);
+    // undefined while loading, null when the page is not published.
+    const [publicToken, setPublicToken] = useState<string | null | undefined>(undefined);
+    const [copied, setCopied] = useState(false);
     const [reloadCount, setReloadCount] = useState(0);
     const [email, setEmail] = useState("");
     const [permission, setPermission] = useState<SharePermission>("read");
@@ -71,6 +79,26 @@ export function ShareDialog({ page, onClose }: ShareDialogProps) {
         };
     }, [page.id, reloadCount]);
 
+    useEffect(() => {
+        let active = true;
+
+        pageSharing.getPublicLink(page.id).then(
+            (token) => {
+                if (active) setPublicToken(token);
+            },
+            (err: unknown) => {
+                if (active) {
+                    setPublicToken(null);
+                    setError(err instanceof Error ? err.message : "Der öffentliche Link konnte nicht geladen werden.");
+                }
+            },
+        );
+
+        return () => {
+            active = false;
+        };
+    }, [page.id]);
+
     async function run(action: () => Promise<void>): Promise<boolean> {
         setBusy(true);
         setError("");
@@ -93,6 +121,19 @@ export function ShareDialog({ page, onClose }: ShareDialogProps) {
 
         if (await run(() => pageSharing.share(page.id, address, permission))) setEmail("");
     }
+
+    async function copyLink(url: string) {
+        setError("");
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+        } catch (err) {
+            console.warn("Link konnte nicht kopiert werden:", err);
+            setError("Der Link konnte nicht kopiert werden. Markiere ihn und kopiere ihn von Hand.");
+        }
+    }
+
+    const publicUrl = publicToken ? publicPageUrl(publicToken) : "";
 
     return (
         <div
@@ -181,6 +222,66 @@ export function ShareDialog({ page, onClose }: ShareDialogProps) {
                                 </li>
                             ))}
                         </ul>
+                    )}
+                </div>
+
+                <div className="border-t pt-4">
+                    <h3 className="mb-1 text-sm font-medium">Öffentlicher Link</h3>
+                    {publicToken === undefined ? (
+                        <p className="text-sm text-muted-foreground">Wird geladen …</p>
+                    ) : publicToken === null ? (
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm text-muted-foreground">
+                                Jeder mit dem Link kann diese Seite lesen, ohne Anmeldung. Unterseiten nicht.
+                            </p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() =>
+                                    void run(async () => {
+                                        setPublicToken(await pageSharing.createPublicLink(page.id, userId));
+                                        setCopied(false);
+                                    })
+                                }
+                            >
+                                Link erstellen
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <Input
+                                    readOnly
+                                    aria-label="Öffentlicher Link"
+                                    value={publicUrl}
+                                    onFocus={(event) => event.currentTarget.select()}
+                                    className="min-w-0 flex-1"
+                                />
+                                <Button type="button" variant="outline" onClick={() => void copyLink(publicUrl)}>
+                                    {copied ? "Kopiert" : "Kopieren"}
+                                </Button>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs text-muted-foreground">
+                                    Jeder mit dem Link kann diese Seite lesen. Unterseiten nicht.
+                                </p>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void run(async () => {
+                                            await pageSharing.deletePublicLink(page.id);
+                                            setPublicToken(null);
+                                        })
+                                    }
+                                >
+                                    Link deaktivieren
+                                </Button>
+                            </div>
+                        </div>
                     )}
                 </div>
 

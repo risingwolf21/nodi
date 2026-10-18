@@ -1,8 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 const rpc = vi.hoisted(() => vi.fn());
+const insert = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/supabase", () => ({ supabase: { rpc } }));
+vi.mock("@/lib/supabase", () => ({
+    supabase: {
+        rpc,
+        from: () => ({
+            insert: (row: unknown) => {
+                insert(row);
+                return { select: () => ({ single: () => Promise.resolve({ data: { token: "t1" }, error: null, status: 201 }) }) };
+            },
+        }),
+    },
+}));
 
 const { pageSharing, parseShares, shareErrorMessage } = await import("./page-sharing");
 
@@ -45,5 +56,12 @@ describe("pageSharing.share", () => {
             p_email: "x@nodi.test",
             p_permission: "read",
         });
+    });
+});
+
+describe("pageSharing.createPublicLink", () => {
+    it("creates the link as the owner and returns its token", async () => {
+        expect(await pageSharing.createPublicLink("p1", "u1")).toBe("t1");
+        expect(insert).toHaveBeenCalledWith({ page_id: "p1", created_by: "u1" });
     });
 });
