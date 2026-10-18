@@ -1,6 +1,5 @@
 
-import { lazy, Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,27 +12,28 @@ import type { Page } from "@/features/pages/types";
 import { PageTree } from "@/features/pages/PageTree";
 import { CreatePageForm } from "@/features/pages/CreatePageForm";
 import { usePages } from "@/features/pages/hooks/usePages";
+import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { TrashView } from "@/features/pages/components/TrashView";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
 
-type Workspace = {
-    id: string;
-    name: string;
-};
-
-
 export default function WorkspaceHome() {
     const { user, signOut } = useAuth();
 
-    const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-    const [workspaceId, setWorkspaceId] = useState("");
+    const {
+        workspaces,
+        workspaceId,
+        setWorkspaceId,
+        loading,
+        error: workspacesError,
+        fromCache: workspacesFromCache,
+        createWorkspace: createNewWorkspace,
+    } = useWorkspaces(user?.id);
     const [pageId, setPageId] = useState("");
     const [workspaceName, setWorkspaceName] = useState("");
     const [pageTitle, setPageTitle] = useState("");
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [parentForNewPage, setParentForNewPage] = useState<string | null>(null);
     const [showTrash, setShowTrash] = useState(false);
@@ -44,6 +44,7 @@ export default function WorkspaceHome() {
         pages,
         archivedPages,
         error: pagesError,
+        fromCache: pagesFromCache,
         createPage: createWorkspacePage,
         renamePage,
         archivePage,
@@ -56,63 +57,8 @@ export default function WorkspaceHome() {
         mode: PageActionMode;
     } | null>(null);
 
-    const loadWorkspaces = useCallback(async () => {
-        if (!user) return;
-
-        const { data: memberships, error: membershipError } = await supabase
-            .from("workspace_members")
-            .select("workspace_id")
-            .eq("user_id", user.id);
-
-        if (membershipError) throw membershipError;
-
-        const ids = (memberships ?? []).map((item) => item.workspace_id);
-
-        if (ids.length === 0) {
-            setWorkspaces([]);
-            setWorkspaceId("");
-            return;
-        }
-
-        const { data, error: workspaceError } = await supabase
-            .from("workspaces")
-            .select("id, name")
-            .in("id", ids)
-            .order("created_at", { ascending: true });
-
-        if (workspaceError) throw workspaceError;
-
-        const items = (data ?? []) as Workspace[];
-        setWorkspaces(items);
-
-        setWorkspaceId((current) =>
-            items.some((item) => item.id === current)
-                ? current
-                : (items[0]?.id ?? ""),
-        );
-    }, [user]);
-
-    useEffect(() => {
-        let active = true;
-
-        async function load() {
-            try {
-                await loadWorkspaces();
-            } catch (err) {
-                if (active) {
-                    setError(err instanceof Error ? err.message : "Workspaces konnten nicht geladen werden.");
-                }
-            } finally {
-                if (active) setLoading(false);
-            }
-        }
-
-        void load();
-
-        return () => {
-            active = false;
-        };
-    }, [loadWorkspaces]);
+    // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
+    const readOnly = workspacesFromCache || pagesFromCache;
 
     // Sends edits that are still waiting, also those of pages not open now.
     const userId = user?.id;
@@ -142,33 +88,14 @@ export default function WorkspaceHome() {
 
     async function createWorkspace(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!user) return;
-
         setError("");
 
-        const { data: sessionData } = await supabase.auth.getSession();
-        const sessionUser = sessionData.session?.user;
-
-        if (!sessionUser) {
-            setError("Keine aktive Supabase-Sitzung.");
-            return;
+        try {
+            await createNewWorkspace(workspaceName);
+            setWorkspaceName("");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Der Workspace konnte nicht erstellt werden.");
         }
-
-        const { error: insertError } = await supabase
-            .from("workspaces")
-            .insert({
-                name: workspaceName.trim(),
-                owner_id: sessionUser.id,
-            });
-
-        if (insertError) {
-            console.error("Workspace insert failed:", insertError);
-            setError(insertError.message);
-            return;
-        }
-
-        setWorkspaceName("");
-        await loadWorkspaces();
     }
 
     async function handleCreatePage(event: FormEvent<HTMLFormElement>) {
@@ -233,13 +160,20 @@ export default function WorkspaceHome() {
                 </div>
             </header>
 
-            {(error || pagesError) && (
+            {(error || workspacesError || pagesError) && (
                 <p className="border-b px-5 py-3 text-sm text-destructive" role="alert">
-                    {error || pagesError}
+                    {error || workspacesError || pagesError}
                 </p>
             )}
 
-            {workspaces.length === 0 ? (
+            {readOnly && (
+                <p className="border-b px-5 py-2 text-sm text-muted-foreground" role="status">
+                    Offline: Die Seitenliste stammt aus dem lokalen Speicher. Seiten anlegen,
+                    umbenennen und den Papierkorb gibt es erst wieder mit Internetverbindung.
+                </p>
+            )}
+
+            {workspaces.length === 0 && workspacesError ? null : workspaces.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center p-6">
                     <Card className="w-full max-w-md">
                         <CardHeader>
@@ -305,33 +239,37 @@ export default function WorkspaceHome() {
                         </div>
 
 
-                        <CreatePageForm
-                            title={pageTitle}
-                            parentId={parentForNewPage}
-                            pages={pages}
-                            onTitleChange={setPageTitle}
-                            onParentChange={setParentForNewPage}
-                            onSubmit={handleCreatePage}
-                        />
+                        {!readOnly && (
+                            <CreatePageForm
+                                title={pageTitle}
+                                parentId={parentForNewPage}
+                                pages={pages}
+                                onTitleChange={setPageTitle}
+                                onParentChange={setParentForNewPage}
+                                onSubmit={handleCreatePage}
+                            />
+                        )}
 
-                        <div className="px-3 pb-2">
-                            <Button
-                                type="button"
-                                variant={showTrash ? "secondary" : "ghost"}
-                                className="w-full justify-start"
-                                onClick={() => setShowTrash((current) => !current)}
-                            >
-                                {showTrash ? "← Zurück zu den Seiten" : "Papierkorb"}
-                                {!showTrash && archivedPages.length > 0 && (
-                                    <span className="ml-auto text-xs text-muted-foreground">
-                                        {archivedPages.length}
-                                    </span>
-                                )}
-                            </Button>
-                        </div>
+                        {!readOnly && (
+                            <div className="px-3 pb-2">
+                                <Button
+                                    type="button"
+                                    variant={showTrash ? "secondary" : "ghost"}
+                                    className="w-full justify-start"
+                                    onClick={() => setShowTrash((current) => !current)}
+                                >
+                                    {showTrash ? "← Zurück zu den Seiten" : "Papierkorb"}
+                                    {!showTrash && archivedPages.length > 0 && (
+                                        <span className="ml-auto text-xs text-muted-foreground">
+                                            {archivedPages.length}
+                                        </span>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
 
 
-                        {showTrash ? (
+                        {showTrash && !readOnly ? (
                             <div className="flex-1 overflow-y-auto">
                                 <TrashView
                                     pages={archivedPages}
@@ -344,6 +282,7 @@ export default function WorkspaceHome() {
                                 <PageTree
                                     pages={pages}
                                     selectedPageId={pageId}
+                                    readOnly={readOnly}
                                     onSelect={selectPage}
                                     onAddChild={(parentId) => {
                                         setParentForNewPage(parentId);

@@ -6,6 +6,7 @@ type PageTreeItemProps = {
     page: Page;
     pages: Page[];
     selectedPageId: string;
+    readOnly: boolean;
     onSelect: (pageId: string) => void;
     onAddChild: (parentId: string) => void;
     onRename: (page: Page) => void;
@@ -16,6 +17,7 @@ export function PageTreeItem({
     page,
     pages,
     selectedPageId,
+    readOnly,
     onRename,
     onArchive,
     onSelect,
@@ -55,55 +57,59 @@ export function PageTreeItem({
                     {page.title}
                 </button>
 
-                <button
-                    type="button"
-                    aria-label={`Unterseite zu ${page.title} erstellen`}
-                    title="Unterseite erstellen"
-                    onClick={() => onAddChild(page.id)}
-                    className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
-                >
-                    +
-                </button>
+                {!readOnly && (
+                    <>
+                        <button
+                            type="button"
+                            aria-label={`Unterseite zu ${page.title} erstellen`}
+                            title="Unterseite erstellen"
+                            onClick={() => onAddChild(page.id)}
+                            className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
+                        >
+                            +
+                        </button>
 
 
-                <div className="relative shrink-0">
-                    <button
-                        type="button"
-                        title="Seitenaktionen"
-                        aria-label={`Aktionen für ${page.title}`}
-                        aria-expanded={menuOpen}
-                        onClick={() => setMenuOpen((value) => !value)}
-                        className="flex size-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
-                    >
-                        …
-                    </button>
-
-                    {menuOpen && (
-                        <div className="absolute right-0 top-full z-20 min-w-36 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                        <div className="relative shrink-0">
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    onRename(page);
-                                }}
-                                className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+                                title="Seitenaktionen"
+                                aria-label={`Aktionen für ${page.title}`}
+                                aria-expanded={menuOpen}
+                                onClick={() => setMenuOpen((value) => !value)}
+                                className="flex size-7 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100 focus:opacity-100 pointer-coarse:size-9 pointer-coarse:opacity-100"
                             >
-                                Umbenennen
+                                …
                             </button>
 
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setMenuOpen(false);
-                                    onArchive(page);
-                                }}
-                                className="block w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-accent"
-                            >
-                                Archivieren
-                            </button>
+                            {menuOpen && (
+                                <div className="absolute right-0 top-full z-20 min-w-36 rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onRename(page);
+                                        }}
+                                        className="block w-full rounded px-3 py-2 text-left text-sm hover:bg-accent"
+                                    >
+                                        Umbenennen
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            onArchive(page);
+                                        }}
+                                        className="block w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-accent"
+                                    >
+                                        Archivieren
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    </>
+                )}
 
             </div>
 
@@ -114,6 +120,7 @@ export function PageTreeItem({
                             page={child}
                             pages={pages}
                             selectedPageId={selectedPageId}
+                            readOnly={readOnly}
                             onSelect={onSelect}
                             onAddChild={onAddChild}
                             onRename={onRename}

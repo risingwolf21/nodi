@@ -5,6 +5,8 @@ import type { Page } from "./types";
 type PageTreeProps = {
     pages: Page[];
     selectedPageId: string;
+    /** Offline: no actions that need the server. */
+    readOnly: boolean;
     onSelect: (pageId: string) => void;
     onAddChild: (parentId: string) => void;
     onRename: (page: Page) => void;
@@ -14,6 +16,7 @@ type PageTreeProps = {
 export function PageTree({
     pages,
     selectedPageId,
+    readOnly,
     onSelect,
     onAddChild,
     onRename,
@@ -37,6 +40,7 @@ export function PageTree({
                     page={page}
                     pages={pages}
                     selectedPageId={selectedPageId}
+                    readOnly={readOnly}
                     onSelect={onSelect}
                     onAddChild={onAddChild}
                     onRename={onRename}
