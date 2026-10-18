@@ -4,12 +4,18 @@ import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
 import { pageTreeCacheFor } from "../services/page-tree-cache";
-import type { Page, StoredPage } from "../types";
+import type { Page, PageSettings, StoredPage } from "../types";
 
 export const OFFLINE_READ_ONLY_MESSAGE =
     "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
 
-const toPage = ({ id, title, parent_id }: StoredPage): Page => ({ id, title, parent_id });
+const toPage = ({ id, title, parent_id, icon, full_width }: StoredPage): Page => ({
+    id,
+    title,
+    parent_id,
+    icon,
+    full_width,
+});
 
 type UsePagesResult = {
     pages: Page[];
@@ -20,6 +26,7 @@ type UsePagesResult = {
     fromCache: boolean;
     createPage: (title: string, parentId: string | null) => Promise<Page>;
     renamePage: (pageId: string, title: string) => Promise<void>;
+    updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
     restorePage: (pageId: string) => Promise<string[]>;
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
@@ -79,7 +86,7 @@ export function usePages(
 
                 const response = await supabase
                     .from("pages")
-                    .select("id,title,parent_id,is_archived")
+                    .select("id,title,parent_id,is_archived,icon,full_width")
                     .eq("workspace_id", workspaceId)
                     .order("created_at", { ascending: true });
                 serverAnswered = true;
@@ -157,6 +164,8 @@ export function usePages(
                 id: crypto.randomUUID(),
                 title: normalizedTitle,
                 parent_id: parentId,
+                icon: null,
+                full_width: false,
             };
 
             setError("");
@@ -208,6 +217,26 @@ export function usePages(
                         ? { ...page, title: normalizedTitle }
                         : page,
                 ),
+            );
+        },
+        [workspaceId, requireOnline],
+    );
+
+    const updatePage = useCallback(
+        async (pageId: string, settings: PageSettings) => {
+            requireOnline();
+            setError("");
+
+            const { error: updateError } = await supabase
+                .from("pages")
+                .update(settings)
+                .eq("id", pageId)
+                .eq("workspace_id", workspaceId);
+
+            if (updateError) throw updateError;
+
+            setPages((current) =>
+                current.map((page) => (page.id === pageId ? { ...page, ...settings } : page)),
             );
         },
         [workspaceId, requireOnline],
@@ -331,6 +360,7 @@ export function usePages(
         fromCache,
         createPage,
         renamePage,
+        updatePage,
         archivePage,
         restorePage,
         permanentlyDeletePage,

@@ -219,15 +219,25 @@ createRoot(document.getElementById('root')!).render(
     `shadcn/tailwind.css` und `@fontsource-variable/geist`.
 -   Es gibt Light- und Dark-Theme-CSS-Variablen.
 -   Die ungenutzte Vite-Vorlage `src/App.css` wurde in Paket 1 entfernt.
--   Mobiles Layout (Paket 5): Unter `md` (768 px) ist die Seitenleiste
-    eine Schublade unterhalb der Kopfzeile (Menü-Button, Abdunkelung,
-    Escape, schließt nach Seitenauswahl). Ab `md` unverändert statisch.
-    Touch-Geräte (`pointer-coarse:`) zeigen die Seitenaktionen immer und
-    mit größeren Tap-Flächen. Keine globale CSS-Neustrukturierung.
+-   Optik (Paket 10): neutrale Palette, nodi-Indigo nur als Akzent
+    (Token `--brand`: Fokus, Auswahl, Links, Logo). Dark Mode folgt
+    `prefers-color-scheme` (Variante `dark:` ebenso, keine `.dark`-Klasse).
+    `--page-gutter` hält Titel und Editortext bündig. Textspalte max.
+    860 px; je Seite umschaltbar auf „Volle Breite“ (Seitenmenü, Spalte
+    `pages.full_width`, Migration `20261018090000_page_full_width.sql`,
+    über Geräte synchronisiert, nur mit Schreibrecht und online).
+-   Layout (Paket 10, ersetzt die Schublade aus Paket 5): ab `md`
+    Seitenleiste + Seite nebeneinander. Unter `md` wie die Notion-App:
+    Startbildschirm ist die Seitenliste, eine Seite öffnet sich im
+    Vollbild mit Zurück-Pfeil. Offene Seiten sind History-Einträge ohne
+    URL-Änderung (`history.pushState`), daher funktionieren Browser- und
+    Android-Zurück, und Neuladen bleibt auf GitHub Pages sicher.
+    Touch-Geräte (`pointer-coarse:`) zeigen Aktionen immer und mit
+    größeren Tap-Flächen.
 
 ### Bekannte Dateien
 
-Stand nach Paket 9:
+Stand nach Paket 10:
 
 ``` text
 .env.example
@@ -243,10 +253,13 @@ src/
   vite-env.d.ts
   components/
     auth/AuthForm.tsx
-    editor/BlockEditor.tsx
+    editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
+    editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
-    ui/                     # shadcn: button, card, input, label, separator
-    workspace/WorkspaceHome.tsx   # lädt BlockEditor per lazy()
+    ui/                     # shadcn: button, card, input, label, separator;
+                            # menu.tsx (schließt bei Klick außerhalb)
+    workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
+    workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor
   features/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
@@ -263,10 +276,11 @@ src/
         account-sync.ts              # eine Sync-Engine je Konto und Tab
         document-changes.ts          # BroadcastChannel zwischen Tabs
     pages/
-      CreatePageForm.tsx
       PageTree.tsx
-      PageTreeItem.tsx
+      PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
       types.ts
+      components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
+      components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -292,7 +306,8 @@ supabase/
   config.toml
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
-                            # nur noch per RPC schreibbar (P8)
+                            # nur noch per RPC schreibbar (P8),
+                            # pages.full_width (P10)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
 ```
 
@@ -982,8 +997,10 @@ Noch nicht abschließend geprüft:
     bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 -   Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
     und 5 nur in Chromium mit Geräte-Emulation geprüft).
--   Das Aktionsmenü im Seitenbaum schließt sich nicht bei Tipp
-    außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
+-   Paket 10 nicht umgesetzt (bewusst): Titelbilder, Verschieben per
+    Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
+    Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
+    (Workspace-Menü) erreichbar.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
 -   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`

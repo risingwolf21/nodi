@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
     collectDescendantIds,
     collectRestoreIds,
+    findAncestors,
     findArchivedAncestors,
 } from "./page-hierarchy";
 import type { Page } from "./types";
 
 // Projekt > Kapitel > Abschnitt > Notiz, daneben Kapitel 2 unter Projekt
-const project: Page = { id: "project", title: "Projekt", parent_id: null };
-const chapter: Page = { id: "chapter", title: "Kapitel", parent_id: "project" };
-const chapterTwo: Page = { id: "chapter-2", title: "Kapitel 2", parent_id: "project" };
-const section: Page = { id: "section", title: "Abschnitt", parent_id: "chapter" };
-const note: Page = { id: "note", title: "Notiz", parent_id: "section" };
+const project: Page = { id: "project", title: "Projekt", parent_id: null, icon: null, full_width: false };
+const chapter: Page = { id: "chapter", title: "Kapitel", parent_id: "project", icon: null, full_width: false };
+const chapterTwo: Page = { id: "chapter-2", title: "Kapitel 2", parent_id: "project", icon: null, full_width: false };
+const section: Page = { id: "section", title: "Abschnitt", parent_id: "chapter", icon: null, full_width: false };
+const note: Page = { id: "note", title: "Notiz", parent_id: "section", icon: null, full_width: false };
 
 const allArchived = [project, chapter, chapterTwo, section, note];
 
@@ -23,8 +24,8 @@ describe("collectDescendantIds", () => {
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b" };
-        const second: Page = { id: "b", title: "B", parent_id: "a" };
+        const first: Page = { id: "a", title: "A", parent_id: "b", icon: null, full_width: false };
+        const second: Page = { id: "b", title: "B", parent_id: "a", icon: null, full_width: false };
 
         expect(collectDescendantIds("a", [first, second]).sort()).toEqual(["a", "b"]);
     });
@@ -45,8 +46,8 @@ describe("findArchivedAncestors", () => {
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b" };
-        const second: Page = { id: "b", title: "B", parent_id: "a" };
+        const first: Page = { id: "a", title: "A", parent_id: "b", icon: null, full_width: false };
+        const second: Page = { id: "b", title: "B", parent_id: "a", icon: null, full_width: false };
 
         expect(findArchivedAncestors("a", [first, second])).toEqual([second]);
     });
@@ -67,5 +68,19 @@ describe("collectRestoreIds", () => {
         expect(collectRestoreIds("section", [section, note]).sort()).toEqual(
             ["note", "section"],
         );
+    });
+});
+
+describe("findAncestors", () => {
+    it("returns the path to the root, nearest first", () => {
+        expect(findAncestors("note", allArchived).map((page) => page.id)).toEqual([
+            "section",
+            "chapter",
+            "project",
+        ]);
+    });
+
+    it("returns nothing for a root page", () => {
+        expect(findAncestors("project", allArchived)).toEqual([]);
     });
 });

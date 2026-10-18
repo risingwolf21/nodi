@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
     useCreateBlockNote,
     useEditorChange,
 } from "@blocknote/react";
-import { BlockNoteView } from "@blocknote/mantine";
+import { BlockNoteView, type Theme } from "@blocknote/mantine";
+import { de } from "@blocknote/core/locales";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
 import { RemoteRequestError } from "@/lib/request-errors";
+import { EditorFrame } from "@/components/editor/EditorFrame";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import {
@@ -23,13 +25,30 @@ import {
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
 import type { DocumentContent } from "@/features/editor/types";
 
-type BlockEditorProps = {
+type FrameProps = {
+    topBarStart: ReactNode;
+    topBarEnd?: ReactNode;
+    fullWidth: boolean;
+    /** Title and icon above the content; editable only with edit rights. */
+    renderHeader: (canEdit: boolean) => ReactNode;
+};
+
+type BlockEditorProps = FrameProps & {
     pageId: string;
 };
 
 type LoadResult =
     | { pageId: string; initial: InitialDocument }
     | { pageId: string; error: string };
+
+// The app's tokens switch with the system color scheme, so one theme
+// serves light and dark; BlockNote keeps its own colors for the rest.
+const editorTheme: Theme = {
+    colors: {
+        editor: { text: "var(--foreground)", background: "var(--background)" },
+    },
+    fontFamily: "var(--font-sans)",
+};
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
@@ -75,7 +94,11 @@ function EditorContent({
     pageId,
     initial,
     store,
-}: {
+    topBarStart,
+    topBarEnd,
+    fullWidth,
+    renderHeader,
+}: FrameProps & {
     userId: string;
     pageId: string;
     initial: InitialDocument;
@@ -92,6 +115,7 @@ function EditorContent({
     const applyingRemoteContent = useRef(false);
 
     const editor = useCreateBlockNote({
+        dictionary: de,
         initialContent:
             initial.document.content.length > 0
                 ? initial.document.content
@@ -171,71 +195,66 @@ function EditorContent({
     const canRetry = status.kind === "error" || status.kind === "unsynced";
 
     return (
-        <div className="flex h-full min-h-0 flex-col">
-            <div className="flex justify-end gap-3 border-b px-6 py-2">
-                {canEdit === false && (
-                    <span className="text-xs text-muted-foreground">
-                        Nur Lesezugriff
+        <EditorFrame
+            topBarStart={topBarStart}
+            topBarEnd={topBarEnd}
+            fullWidth={fullWidth}
+            status={
+                <span className="flex items-center gap-3">
+                    {canEdit === false && <span>Nur Lesezugriff</span>}
+                    <span role="status" aria-live="polite">
+                        {statusText(status)}
                     </span>
-                )}
-                <span
-                    className="text-xs text-muted-foreground"
-                    role="status"
-                    aria-live="polite"
-                >
-                    {statusText(status)}
                 </span>
-            </div>
+            }
+            notices={
+                <>
+                    {showSupersededNotice && (
+                        <p className="px-4 pb-2 text-sm text-muted-foreground" role="status">
+                            {SUPERSEDED_NOTICE}
+                        </p>
+                    )}
 
-            {showSupersededNotice && (
-                <p
-                    className="px-6 pt-3 text-sm text-muted-foreground"
-                    role="status"
-                >
-                    {SUPERSEDED_NOTICE}
-                </p>
-            )}
+                    {canRetry && (
+                        <div className="flex items-center justify-between gap-4 px-4 pb-2">
+                            <p
+                                className={
+                                    status.kind === "error"
+                                        ? "text-sm text-destructive"
+                                        : "text-sm text-muted-foreground"
+                                }
+                                role={status.kind === "error" ? "alert" : undefined}
+                            >
+                                {status.kind === "error"
+                                    ? `Speichern fehlgeschlagen: ${status.message}. Die Änderung bleibt auf diesem Gerät gespeichert.`
+                                    : "Die Änderungen sind auf diesem Gerät gespeichert und werden übertragen, sobald der Server erreichbar ist."}
+                            </p>
 
-            {canRetry && (
-                <div className="flex items-center justify-between gap-4 px-6 pt-3">
-                    <p
-                        className={
-                            status.kind === "error"
-                                ? "text-sm text-destructive"
-                                : "text-sm text-muted-foreground"
-                        }
-                        role={status.kind === "error" ? "alert" : undefined}
-                    >
-                        {status.kind === "error"
-                            ? `Speichern fehlgeschlagen: ${status.message}. Die Änderung bleibt auf diesem Gerät gespeichert.`
-                            : "Die Änderungen sind auf diesem Gerät gespeichert und werden übertragen, sobald der Server erreichbar ist."}
-                    </p>
-
-                    <button
-                        type="button"
-                        className="shrink-0 text-sm underline"
-                        onClick={() => {
-                            void session.current?.retry();
-                        }}
-                    >
-                        Erneut versuchen
-                    </button>
-                </div>
-            )}
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4 sm:px-6 sm:py-8">
-                <div className="mx-auto max-w-3xl">
-                    <BlockNoteView
-                        editor={editor}
-                        editable={canEdit !== false}
-                    />
-                </div>
-            </div>
-        </div>
+                            <button
+                                type="button"
+                                className="shrink-0 text-sm underline"
+                                onClick={() => {
+                                    void session.current?.retry();
+                                }}
+                            >
+                                Erneut versuchen
+                            </button>
+                        </div>
+                    )}
+                </>
+            }
+        >
+            {renderHeader(canEdit !== false)}
+            <BlockNoteView
+                editor={editor}
+                theme={{ light: editorTheme, dark: editorTheme }}
+                editable={canEdit !== false}
+            />
+        </EditorFrame>
     );
 }
 
-export default function BlockEditor({ pageId }: BlockEditorProps) {
+export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
     const { user } = useAuth();
     const store = user ? localDocumentStoreFor(user.id) : null;
 
@@ -268,17 +287,31 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
     // Dadurch muss der Effect keinen synchronen Reset ausführen.
     if (!user || !store || !loadResult || loadResult.pageId !== pageId) {
         return (
-            <p className="p-6 text-sm text-muted-foreground">
-                Dokument wird geladen …
-            </p>
+            <EditorFrame
+                topBarStart={frame.topBarStart}
+                topBarEnd={frame.topBarEnd}
+                fullWidth={frame.fullWidth}
+            >
+                {frame.renderHeader(false)}
+                <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                    Dokument wird geladen …
+                </p>
+            </EditorFrame>
         );
     }
 
     if ("error" in loadResult) {
         return (
-            <p className="p-6 text-sm text-destructive" role="alert">
-                {loadResult.error}
-            </p>
+            <EditorFrame
+                topBarStart={frame.topBarStart}
+                topBarEnd={frame.topBarEnd}
+                fullWidth={frame.fullWidth}
+            >
+                {frame.renderHeader(false)}
+                <p className="px-[var(--page-gutter)] text-sm text-destructive" role="alert">
+                    {loadResult.error}
+                </p>
+            </EditorFrame>
         );
     }
 
@@ -289,6 +322,7 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
             pageId={pageId}
             initial={loadResult.initial}
             store={store}
+            {...frame}
         />
     );
 }
