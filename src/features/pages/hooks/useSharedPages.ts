@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { pageTreeCacheFor } from "../services/page-tree-cache";
 import type { Page, PageSettings, StoredPage } from "../types";
-import { OFFLINE_READ_ONLY_MESSAGE, PAGE_COLUMNS, toPage } from "./usePages";
+import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
+import { OFFLINE_READ_ONLY_MESSAGE, PAGE_COLUMNS, pageChangeError, parseServerPages, toPage } from "./usePages";
 
 type UseSharedPagesResult = {
     /** Shared pages; a page whose parent is not shared is a root here. */
@@ -40,76 +41,74 @@ export function useSharedPages(
     const [storedPages, setStoredPages] = useState<StoredPage[]>([]);
     const [error, setError] = useState("");
     const [fromCache, setFromCache] = useState(false);
-    const [reloadCount, setReloadCount] = useState(0);
+    // Server data shown since the last load; only then is the cache written.
+    const [confirmedByServer, setConfirmedByServer] = useState(false);
+    const reloadCount = useServerReload(fromCache || error !== "");
+    // Server data shown for this list: a reload does not show the cache first.
+    const shownFromServerFor = useRef<string | null>(null);
 
     // A stable dependency for the effect below.
     const workspaceKey = workspaceIds?.join(",");
 
     useEffect(() => {
-        const reload = () => setReloadCount((count) => count + 1);
-        window.addEventListener("online", reload);
-        return () => window.removeEventListener("online", reload);
-    }, []);
-
-    useEffect(() => {
         if (!userId || workspaceKey === undefined) return;
-        const cache = pageTreeCacheFor(userId);
+        const currentUserId = userId;
+        const memberOf = workspaceKey;
         let active = true;
-        let serverAnswered = false;
 
-        async function load(memberOf: string) {
-            const cachedRead = cache.getSharedPages().catch((cacheError: unknown) => {
-                console.warn("Lokale Liste geteilter Seiten ist nicht lesbar:", cacheError);
-                return null;
-            });
-            void cachedRead.then((cached) => {
-                if (cached && active && !serverAnswered) {
-                    setStoredPages(cached);
-                    setFromCache(true);
-                }
-            });
+        async function load() {
+            try {
+                await loadCacheThenServer({
+                    userId: currentUserId,
+                    readCache: () => pageTreeCacheFor(currentUserId).getSharedPages(),
+                    fetchServer: async () => {
+                        let query = supabase
+                            .from("pages")
+                            .select(PAGE_COLUMNS)
+                            .eq("is_archived", false)
+                            .order("created_at", { ascending: true });
+                        if (memberOf) query = query.not("workspace_id", "in", `(${memberOf})`);
 
-            let query = supabase
-                .from("pages")
-                .select(PAGE_COLUMNS)
-                .eq("is_archived", false)
-                .order("created_at", { ascending: true });
-            if (memberOf) query = query.not("workspace_id", "in", `(${memberOf})`);
-
-            const response = await query;
-            serverAnswered = true;
-            if (!active) return;
-
-            const failure = toRequestError(response);
-            if (failure) {
+                        const response = await query;
+                        const failure = toRequestError(response);
+                        if (failure) throw failure;
+                        return parseServerPages(response.data);
+                    },
+                    cacheFirst: shownFromServerFor.current !== memberOf,
+                    isActive: () => active,
+                    show: (loaded, cached) => {
+                        setStoredPages(loaded);
+                        setFromCache(cached);
+                        setConfirmedByServer(!cached);
+                        if (!cached) shownFromServerFor.current = memberOf;
+                    },
+                });
                 // Offline the cached list (or none) stays; it is optional.
-                if (failure.reason !== "offline") {
-                    console.error("Geteilte Seiten konnten nicht geladen werden:", failure.message);
-                    setError("Die mit dir geteilten Seiten konnten nicht geladen werden.");
-                }
-                const cached = await cachedRead;
-                if (active && cached) {
-                    setStoredPages(cached);
-                    setFromCache(true);
-                }
-                return;
+                if (active) setError("");
+            } catch (err) {
+                if (!active) return;
+                console.error("Geteilte Seiten konnten nicht geladen werden:", err);
+                setError("Die mit dir geteilten Seiten konnten nicht geladen werden.");
             }
-
-            const loaded = (response.data ?? []) as StoredPage[];
-            setStoredPages(loaded);
-            setFromCache(false);
-            setError("");
-            cache.putSharedPages(loaded).catch((cacheError: unknown) => {
-                console.warn("Geteilte Seiten konnten nicht lokal gespeichert werden:", cacheError);
-            });
         }
 
-        void load(workspaceKey);
+        void load();
 
         return () => {
             active = false;
         };
     }, [userId, workspaceKey, reloadCount]);
+
+    // Keeps the cache in step with what the server confirmed, including
+    // the changes below. A cached list is never written back.
+    useEffect(() => {
+        if (!userId || !confirmedByServer) return;
+        pageTreeCacheFor(userId)
+            .putSharedPages(storedPages)
+            .catch((cacheError: unknown) => {
+                console.warn("Geteilte Seiten konnten nicht lokal gespeichert werden:", cacheError);
+            });
+    }, [userId, confirmedByServer, storedPages]);
 
     const pages = useMemo(() => sharedPageTree(storedPages), [storedPages]);
 
@@ -120,29 +119,25 @@ export function useSharedPages(
             // Not filtered by workspace: the page belongs to someone else's.
             // RLS filters an update without edit rights without an error,
             // so the returned rows tell.
-            const { data, error: updateError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .update(changes)
                 .eq("id", pageId)
                 .eq("is_archived", false)
                 .select("id");
 
-            if (updateError) throw updateError;
-            if (data.length === 0) {
+            const failure = pageChangeError(response, "Die Seite konnte nicht geändert werden.");
+            if (failure) throw failure;
+            if ((response.data ?? []).length === 0) {
                 throw new Error("Du darfst diese Seite nicht bearbeiten.");
             }
 
-            const next = storedPages.map((page) => (page.id === pageId ? { ...page, ...changes } : page));
-            setStoredPages(next);
-            if (userId) {
-                pageTreeCacheFor(userId)
-                    .putSharedPages(next)
-                    .catch((cacheError: unknown) => {
-                        console.warn("Geteilte Seiten konnten nicht lokal gespeichert werden:", cacheError);
-                    });
-            }
+            // Functional, so two quick changes do not undo each other.
+            setStoredPages((current) =>
+                current.map((page) => (page.id === pageId ? { ...page, ...changes } : page)),
+            );
         },
-        [fromCache, storedPages, userId],
+        [fromCache],
     );
 
     const renamePage = useCallback(

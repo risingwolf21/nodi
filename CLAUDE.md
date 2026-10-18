@@ -259,7 +259,9 @@ src/
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
-                            # menu.tsx (schließt bei Klick außerhalb)
+                            # menu.tsx (schließt bei Klick außerhalb);
+                            # dialog.tsx (natives <dialog>: Escape, Fokus
+                            # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
     workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor
   features/
@@ -397,6 +399,17 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
     nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
     lehnen Änderungen zusätzlich ab). `online` lädt neu.
+    Seit 13c gemeinsam in `hooks/load-cache-then-server.ts`: Ohne
+    Sitzung dieses Kontos wird der Server nicht gefragt (eine anonyme
+    Antwort wäre eine leere Liste und überschriebe den Cache). Zeigt die
+    Liste schon Serverdaten, kommt beim Neuladen nicht erst der Cache
+    (kein Flackern zu „nur lesbar“). Solange Cache oder Fehler angezeigt
+    werden, laden auch „App wieder sichtbar“ und eine erneuerte Sitzung
+    neu. Serverdaten werden wie der Cache validiert. Änderungen prüfen
+    die zurückgegebenen Zeilen (RLS filtert ohne Fehler) und verwerfen
+    ihr Ergebnis nach einem Workspace-Wechsel; während der nächste
+    Workspace lädt, ist der alte Baum ausgeblendet und die offene Seite
+    geschlossen.
 -   **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
     Netz da, liefert `getSession()` keine Sitzung, obwohl sie
     gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
