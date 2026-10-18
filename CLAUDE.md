@@ -324,7 +324,8 @@ supabase/
                             # Mitglieder und Bereiche (P12a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
-                            # Reparatur, Mitglieder und Bereiche (P12a)
+                            # Reparatur, Titel/Icon geteilter Seiten,
+                            # Mitglieder und Bereiche (P12a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1014,8 +1015,11 @@ Arbeitspakete, je ein Pull Request:
             (`workspace_id not in (…)`, RLS entscheidet). Seiten, deren
             Elternseite nicht sichtbar ist, sind Wurzeln. Cache zuerst
             (Schlüssel `shared-pages` in `nodi-<userId>-tree`), offline
-            nur lesend. Titel, Icon und Breite geteilter Seiten sind
-            nicht änderbar; der Inhalt folgt `can_edit_page`.
+            nur lesend. Mit Bearbeitungsrecht (`can_edit_page`) und
+            online sind Titel und Icon änderbar (Update nur per `id`,
+            die zurückgegebenen Zeilen zeigen, ob RLS es erlaubt hat);
+            Breite, Papierkorb und Teilen (Seitenmenü) bleiben dem
+            eigenen Workspace vorbehalten.
         -   Entzug: `deleteRevokedLocalCopies` fragt beim Start und bei
             `online` alle lesbaren Seiten-IDs ab und löscht lokal nur
             **synchronisierte** Kopien anderer Seiten (in einer
@@ -1173,8 +1177,8 @@ Noch nicht abschließend geprüft:
     Mehr als 1000 lesbare Seiten (`max_rows`) → keine Bereinigung.
     Ungesyncte Änderungen an einer entzogenen Seite bleiben mit Fehler
     stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
-    Editoren aus anderen Workspaces können Titel und Icon geteilter
-    Seiten nicht ändern (nur Inhalt).
+    (Behoben) Editoren aus anderen Workspaces können Titel und Icon
+    geteilter Seiten ändern; Breite, Papierkorb und Teilen nicht.
 -   Paket 12a: Freigaben und öffentliche Links, die eine ausgetretene
     Person auf ihren privaten Seiten vergeben hat, bleiben gültig (die
     Seiten bleiben ja unangetastet). Zwischen Deploy von 12a und 12b
