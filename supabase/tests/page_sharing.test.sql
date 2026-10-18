@@ -11,6 +11,9 @@ values
   ('22222222-2222-4222-8222-222222222222', 'Outsider@Nodi.test'),
   ('33333333-3333-4333-8333-333333333333', 'member@nodi.test');
 
+-- share_page and add_workspace_member only find confirmed accounts (13a).
+update auth.users set email_confirmed_at = now();
+
 insert into public.workspaces (id, name, owner_id)
 values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Workspace', '11111111-1111-4111-8111-111111111111');
 
@@ -170,10 +173,13 @@ select throws_ok(
 );
 
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
-insert into public.page_public_links (page_id, token, created_by)
-values ('a0000000-0000-4000-8000-000000000001', 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-        '11111111-1111-4111-8111-111111111111');
+insert into public.page_public_links (page_id, created_by)
+values ('a0000000-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111');
 
+-- The server picks the token (13a); the test pins it to a known value.
+set local role postgres;
+update public.page_public_links set token = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+where page_id = 'a0000000-0000-4000-8000-000000000001';
 set local role anon;
 
 select results_eq(
