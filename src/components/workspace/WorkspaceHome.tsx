@@ -7,9 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PageActionsDialog, type PageActionMode } from "@/features/pages/components/PageActionsDialog";
 import { ShareDialog } from "@/features/pages/components/ShareDialog";
+import { MembersDialog } from "@/features/pages/components/MembersDialog";
+import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
-import type { Page } from "@/features/pages/types";
+import type { Page, PageSection } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
@@ -44,6 +46,7 @@ export default function WorkspaceHome() {
         error: workspacesError,
         fromCache: workspacesFromCache,
         createWorkspace: createNewWorkspace,
+        reload: reloadWorkspaces,
     } = useWorkspaces(user?.id);
     const [pageId, setPageId] = useState("");
     // A page created just now: its title gets the focus.
@@ -62,6 +65,7 @@ export default function WorkspaceHome() {
         error: pagesError,
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
+        setPageSection,
         renamePage,
         updatePage,
         archivePage,
@@ -85,6 +89,8 @@ export default function WorkspaceHome() {
         mode: PageActionMode;
     } | null>(null);
     const [sharingPage, setSharingPage] = useState<Page | null>(null);
+    const [movingPage, setMovingPage] = useState<{ page: Page; target: PageSection } | null>(null);
+    const [membersOpen, setMembersOpen] = useState(false);
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
     const readOnly = workspacesFromCache || pagesFromCache;
@@ -145,11 +151,11 @@ export default function WorkspaceHome() {
         }
     }
 
-    async function createPage(parentId: string | null) {
+    async function createPage(parentId: string | null, section: PageSection) {
         setError("");
 
         try {
-            const createdPage = await createWorkspacePage(NEW_PAGE_TITLE, parentId);
+            const createdPage = await createWorkspacePage(NEW_PAGE_TITLE, parentId, section);
             openPage(createdPage.id, { isNew: true });
         } catch (err) {
             console.error("Page creation failed:", err);
@@ -254,7 +260,8 @@ export default function WorkspaceHome() {
                             signingOut={signOutStep.kind !== "idle"}
                             onSignOut={() => void handleSignOut()}
                             onSelect={(id) => openPage(id)}
-                            onCreatePage={(parentId) => void createPage(parentId)}
+                            onCreatePage={(parentId, section) => void createPage(parentId, section)}
+                            onOpenMembers={() => setMembersOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
@@ -277,6 +284,11 @@ export default function WorkspaceHome() {
                                 onUpdate={sharedPage ? updateSharedPage : updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
+                                onMoveSection={
+                                    !sharedPage && page.parent_id === null && page.owner_id === user?.id
+                                        ? (item, target) => setMovingPage({ page: item, target })
+                                        : undefined
+                                }
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
@@ -288,7 +300,7 @@ export default function WorkspaceHome() {
                                         <Button
                                             variant="outline"
                                             className="mt-4"
-                                            onClick={() => void createPage(null)}
+                                            onClick={() => void createPage(null, "private")}
                                         >
                                             <Plus />
                                             Neue Seite
@@ -315,6 +327,34 @@ export default function WorkspaceHome() {
                     unsyncedPages={signOutStep.unsyncedPages}
                     onCancel={() => setSignOutStep({ kind: "idle" })}
                     onDiscardAndSignOut={() => signOutAndDeleteLocalData(user.id, signOut)}
+                />
+            )}
+
+            {movingPage && (
+                <MoveSectionDialog
+                    key={movingPage.page.id}
+                    page={movingPage.page}
+                    target={movingPage.target}
+                    onClose={() => setMovingPage(null)}
+                    onMove={setPageSection}
+                />
+            )}
+
+            {membersOpen && user && workspaceId && (
+                <MembersDialog
+                    workspaceId={workspaceId}
+                    workspaceName={workspaces.find((item) => item.id === workspaceId)?.name ?? ""}
+                    userId={user.id}
+                    onClose={() => setMembersOpen(false)}
+                    onLeft={() => {
+                        setMembersOpen(false);
+                        closePage();
+                        reloadWorkspaces();
+                        // The workspace's pages are no longer readable.
+                        deleteRevokedLocalCopies(user.id, localDocumentStoreFor(user.id)).catch((err: unknown) => {
+                            console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
+                        });
+                    }}
                 />
             )}
 

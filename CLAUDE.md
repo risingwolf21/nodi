@@ -285,6 +285,8 @@ src/
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
+      components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
+      components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -292,6 +294,7 @@ src/
       hooks/useWorkspaces.ts
       services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
       services/page-sharing.ts      # RPCs share_page/list_page_shares, Entziehen, Links
+      services/workspace-members.ts # RPCs für Mitglieder (Paket 12a)
     public/
       public-page.ts        # Token aus `?p=`, Link-URL, RPC get_public_page
       PublicPage.tsx        # öffentliche Ansicht ohne Login (in main.tsx gewählt)
@@ -1092,6 +1095,20 @@ Arbeitspakete, je ein Pull Request:
             die Freigaben an die Person in diesem Workspace. Die
             Delete-Policy auf `workspace_members` ist entfernt, damit die
             Übertragung nicht umgangen werden kann.
+    -   **Umsetzung 12b** (nur Frontend, keine Migration):
+        -   `Page.visibility` (`PageSection`) wird mitgeladen; alte
+            Caches ohne Bereich gelten als privat.
+        -   Seitenleiste: Bereiche „Workspace“ und „Privat“
+            (`pagesInSection`: jede Wurzel mit ihren Unterseiten), je
+            mit „+“; „Neue Seite“ unten legt eine private Seite an.
+            Unterseiten übernehmen den Bereich der Elternseite.
+        -   Seitenmenü: „In den Workspace verschieben“ / „In Privat
+            verschieben“ (nur oberste eigene Seiten, mit Rückfrage,
+            `set_page_section`).
+        -   Workspace-Menü → „Mitglieder“: Liste mit Rolle, für den
+            Owner Hinzufügen per E-Mail und Entfernen (mit Rückfrage),
+            für Mitglieder „Workspace verlassen“ (mit Warnung; danach
+            Workspace-Liste neu laden und lokale Kopien bereinigen).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
