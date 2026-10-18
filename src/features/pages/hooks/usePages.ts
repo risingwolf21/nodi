@@ -2,9 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
-import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
+import { collectDescendantIds, collectRestoreIds, isDatabaseEntry, nextPosition } from "../page-hierarchy";
 import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
-import type { Page, PageSection, PageSettings, StoredPage } from "../types";
+import type { Page, PageKind, PageSection, PageSettings, StoredPage } from "../types";
 import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
 
 export const OFFLINE_READ_ONLY_MESSAGE =
@@ -41,9 +41,10 @@ export function parseServerPages(data: unknown): StoredPage[] {
 }
 
 // Columns of a page in the tree (StoredPage).
-export const PAGE_COLUMNS = "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width";
+export const PAGE_COLUMNS =
+    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at";
 
-export const toPage = ({ id, title, parent_id, owner_id, visibility, icon, full_width }: StoredPage): Page => ({
+export const toPage = ({
     id,
     title,
     parent_id,
@@ -51,6 +52,20 @@ export const toPage = ({ id, title, parent_id, owner_id, visibility, icon, full_
     visibility,
     icon,
     full_width,
+    kind,
+    position,
+    created_at,
+}: StoredPage): Page => ({
+    id,
+    title,
+    parent_id,
+    owner_id,
+    visibility,
+    icon,
+    full_width,
+    kind,
+    position,
+    created_at,
 });
 
 type UsePagesResult = {
@@ -61,7 +76,8 @@ type UsePagesResult = {
     /** The tree comes from the local cache because the server is unreachable. */
     fromCache: boolean;
     /** A subpage takes the section of its parent; `section` is for root pages. */
-    createPage: (title: string, parentId: string | null, section: PageSection) => Promise<Page>;
+    /** Below a database the page is an entry; it may have an empty title. */
+    createPage: (title: string, parentId: string | null, section: PageSection, kind?: PageKind) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     renamePage: (pageId: string, title: string) => Promise<void>;
@@ -187,22 +203,25 @@ export function usePages(
     );
 
     const createPage = useCallback(
-        async (title: string, parentId: string | null, section: PageSection): Promise<Page> => {
+        async (title: string, parentId: string | null, section: PageSection, kind: PageKind = "page"): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
             requireOnline();
 
             const normalizedTitle = title.trim();
-
-            if (!normalizedTitle) {
-                throw new Error("Der Seitentitel darf nicht leer sein.");
-            }
-
             // The server enforces it for private parents; a shared parent's
             // subpage is shared as well.
             const parent = parentId ? pages.find((page) => page.id === parentId) : undefined;
+            const isEntry = parent?.kind === "database";
+
+            if (!normalizedTitle && !isEntry) {
+                throw new Error("Der Seitentitel darf nicht leer sein.");
+            }
+
             const visibility = parent ? parent.visibility : section;
+            // A new entry goes to the end of its database.
+            const position = isEntry ? nextPosition(pages.filter((page) => page.parent_id === parentId)) : null;
 
             const createdPage: Page = {
                 id: crypto.randomUUID(),
@@ -212,6 +231,9 @@ export function usePages(
                 visibility,
                 icon: null,
                 full_width: false,
+                kind,
+                position,
+                created_at: new Date().toISOString(),
             };
 
             setError("");
@@ -226,6 +248,8 @@ export function usePages(
                     title: normalizedTitle,
                     visibility,
                     parent_id: parentId,
+                    kind,
+                    position,
                 });
 
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
@@ -282,7 +306,7 @@ export function usePages(
             requireOnline();
             const normalizedTitle = title.trim();
 
-            if (!normalizedTitle) {
+            if (!normalizedTitle && !isDatabaseEntry(pageId, pages)) {
                 throw new Error("Der Seitentitel darf nicht leer sein.");
             }
 
@@ -309,7 +333,7 @@ export function usePages(
                 ),
             );
         },
-        [workspaceId, requireOnline, switchedSince],
+        [workspaceId, pages, requireOnline, switchedSince],
     );
 
     const updatePage = useCallback(

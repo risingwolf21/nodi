@@ -259,7 +259,9 @@ src/
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
-                            # menu.tsx (schließt bei Klick außerhalb);
+                            # menu.tsx (schließt bei Klick außerhalb;
+                            # `detached`: fest positioniert, für Menüs
+                            # in Scroll-Containern wie Tabellen);
                             # dialog.tsx (natives <dialog>: Escape, Fokus
                             # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
@@ -268,6 +270,15 @@ src/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
       SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
+    databases/              # Paket 14b
+      types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
+      database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
+      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property
+      hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch
+      components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
+      components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
+      components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
+      components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
       types.ts              # Dokument-, Versions- und Sync-Typen
@@ -284,7 +295,8 @@ src/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
       types.ts
-      components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
+      page-display.ts       # „Ohne Titel“ für leere Namen (Einträge)
+      components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite/Datenbank, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
@@ -1218,6 +1230,36 @@ Arbeitspakete, je ein Pull Request:
             ungültiger Wert, `22004` Argument fehlt. Direkte Schreibrechte
             sind entzogen.
         -   pgTAP: `databases.test.sql`.
+    -   **Umsetzung 14b** (nur Frontend, keine Migration):
+        -   `Page` lädt `kind`, `position`, `created_at` mit (alte Caches:
+            `page`, `null`, leer). Seitenleiste: „Neue Datenbank“ (privat,
+            Titel „Unbenannte Datenbank“); Einträge erscheinen nicht im
+            Baum, Datenbanken haben kein „+“ für Unterseiten.
+        -   Eine Datenbank-Seite zeigt statt des Editors Ansichts-Tabs
+            (umbenennen, löschen außer der letzten, „+“ = neue Tabelle),
+            Filter (alle Regeln müssen passen), Sortierung (leere Werte
+            zuletzt, Auswahl/Status nach Reihenfolge der Optionen),
+            ein-/ausblendbare Eigenschaften und die Tabelle. Einstellungen
+            gehören zur Ansicht und gelten für alle.
+        -   Tabelle: Name direkt bearbeitbar, „Öffnen“, Werte je Typ direkt
+            bearbeitbar, Spaltenkopf (umbenennen, Typ ändern mit Rückfrage,
+            ausblenden, löschen mit Rückfrage), „+“ legt eine Eigenschaft
+            an, „Neu“ einen Eintrag (Name hat sofort den Fokus; Einträge
+            dürfen ohne Namen sein, „Ohne Titel“). Neue Einträge hängen
+            hinten an (`position`).
+        -   Ein Eintrag zeigt unter dem Titel die Eigenschaftsleiste
+            (gleiche Wert-Editoren, „Eigenschaft hinzufügen“), darunter den
+            Editor wie bei jeder Seite.
+        -   `useDatabase`: Cache zuerst (`database:<id>` in
+            `nodi-<userId>-tree`, nur vom Server bestätigte Daten), dann
+            Server. Aus dem Cache und ohne `can_edit_page` ist alles nur
+            lesbar. Werte erscheinen sofort; lehnt der Server ab, wird der
+            alte Wert wiederhergestellt (nur wenn kein neuerer Schreibvorgang
+            für das Feld läuft); verdrängt (LWW) → neu laden.
+            „Zuletzt bearbeitet“ = jüngste Änderung an Text oder Werten.
+        -   Noch nicht: Einträge in geteilten Datenbanken anderer Workspaces
+            anlegen (nur ansehen und Werte ändern), manuelle Reihenfolge per
+            Ziehen, Optionen umbenennen/einfärben/löschen.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -1,9 +1,12 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, MoreHorizontal } from "lucide-react";
+import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { DatabaseView } from "@/features/databases/components/DatabaseView";
+import { PropertyBar } from "@/features/databases/components/PropertyBar";
 import { PageHeader } from "@/features/pages/components/PageHeader";
+import { displayTitle } from "@/features/pages/page-display";
 import type { Page, PageSection, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
@@ -27,15 +30,25 @@ type PageViewProps = {
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
     onMoveSection?: (page: Page, target: PageSection) => void;
+    userId: string | undefined;
+    /** For a database: its entries (subpages). */
+    entries: Page[];
+    /** For a database: adds an entry; undefined where that is not possible. */
+    onCreateEntry?: (databaseId: string) => Promise<string>;
 };
 
 function PageLabel({ page }: { page: Page }) {
     return (
         <>
             <span aria-hidden="true">
-                {page.icon ?? <FileText className="inline size-3.5 align-[-2px] text-muted-foreground" />}
+                {page.icon ??
+                    (page.kind === "database" ? (
+                        <Table2 className="inline size-3.5 align-[-2px] text-muted-foreground" />
+                    ) : (
+                        <FileText className="inline size-3.5 align-[-2px] text-muted-foreground" />
+                    ))}
             </span>{" "}
-            {page.title}
+            {displayTitle(page)}
         </>
     );
 }
@@ -53,7 +66,12 @@ export function PageView({
     onArchive,
     onShare,
     onMoveSection,
+    userId,
+    entries,
+    onCreateEntry,
 }: PageViewProps) {
+    // The nearest ancestor is the parent: below a database the page is an entry.
+    const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
 
@@ -161,8 +179,29 @@ export function PageView({
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
             />
+            {database && (
+                <PropertyBar entry={page} databaseId={database.id} userId={userId} readOnly={readOnly || !canEdit} />
+            )}
         </>
     );
+
+    if (page.kind === "database") {
+        // A database shows its views instead of a text (no editor chunk needed).
+        return (
+            <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+                {renderHeader(!readOnly)}
+                <DatabaseView
+                    database={page}
+                    entries={entries}
+                    userId={userId}
+                    readOnly={readOnly}
+                    onOpenEntry={onSelect}
+                    onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
+                    onRenameEntry={onRename}
+                />
+            </EditorFrame>
+        );
+    }
 
     return (
         <LoadErrorBoundary

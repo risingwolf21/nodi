@@ -1,5 +1,26 @@
 import type { Page } from "./types";
 
+/** Position after the last of `siblings`, for the manual order. */
+export function nextPosition(siblings: Page[]): number {
+    const positions = siblings.flatMap((page) => (page.position === null ? [] : [page.position]));
+    return positions.length === 0 ? siblings.length : Math.max(...positions) + 1;
+}
+
+/** An entry of a database; unlike other pages it may have an empty title. */
+export function isDatabaseEntry(pageId: string, pages: Page[]): boolean {
+    const parentId = pages.find((page) => page.id === pageId)?.parent_id;
+    return parentId !== undefined && parentId !== null && pages.some((page) => page.id === parentId && page.kind === "database");
+}
+
+/**
+ * Entries of databases are shown in the database, not in the page tree;
+ * the database itself stays (its entries are not its tree children).
+ */
+export function withoutDatabaseEntries(pages: Page[]): Page[] {
+    const databaseIds = new Set(pages.filter((page) => page.kind === "database").map((page) => page.id));
+    return pages.filter((page) => !page.parent_id || !databaseIds.has(page.parent_id));
+}
+
 export function collectDescendantIds(pageId: string, pages: Page[]): string[] {
     const ids = new Set<string>();
 

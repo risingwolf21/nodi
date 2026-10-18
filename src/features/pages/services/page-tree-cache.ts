@@ -11,6 +11,7 @@ export function pageTreeDatabaseName(userId: string): string {
 }
 
 const pagesKey = (workspaceId: string) => `pages:${workspaceId}`;
+const databaseKey = (databaseId: string) => `database:${databaseId}`;
 const SHARED_PAGES_KEY = "shared-pages";
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -41,17 +42,35 @@ export function parseStoredPages(value: unknown): StoredPage[] | null {
     // owner or section; they stay valid (no owner: not shareable until
     // reloaded).
     return valid
-        ? value.map(({ id, title, parent_id, owner_id, visibility, is_archived, icon, full_width }: StoredPage) => ({
-              id,
-              title,
-              parent_id,
-              owner_id: typeof owner_id === "string" ? owner_id : "",
-              // Before package 12b; since 12a all existing pages are private.
-              visibility: visibility === "workspace" ? "workspace" : "private",
-              is_archived,
-              icon: typeof icon === "string" ? icon : null,
-              full_width: full_width === true,
-          }))
+        ? value.map(
+              ({
+                  id,
+                  title,
+                  parent_id,
+                  owner_id,
+                  visibility,
+                  is_archived,
+                  icon,
+                  full_width,
+                  kind,
+                  position,
+                  created_at,
+              }: StoredPage) => ({
+                  id,
+                  title,
+                  parent_id,
+                  owner_id: typeof owner_id === "string" ? owner_id : "",
+                  // Before package 12b; since 12a all existing pages are private.
+                  visibility: visibility === "workspace" ? "workspace" : "private",
+                  is_archived,
+                  icon: typeof icon === "string" ? icon : null,
+                  full_width: full_width === true,
+                  // Before package 14b there were no databases.
+                  kind: kind === "database" ? "database" : "page",
+                  position: typeof position === "number" ? position : null,
+                  created_at: typeof created_at === "string" ? created_at : "",
+              }),
+          )
         : null;
 }
 
@@ -94,6 +113,15 @@ export class PageTreeCache {
 
     putSharedPages(pages: StoredPage[]): Promise<void> {
         return this.write(SHARED_PAGES_KEY, pages);
+    }
+
+    /** Properties, views and values of a database; parsed by the databases feature. */
+    getDatabase(databaseId: string): Promise<unknown> {
+        return this.read(databaseKey(databaseId));
+    }
+
+    putDatabase(databaseId: string, data: unknown): Promise<void> {
+        return this.write(databaseKey(databaseId), data);
     }
 
     close(): Promise<void> {

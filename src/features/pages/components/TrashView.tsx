@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { displayTitle } from "../page-display";
 import type { Page } from "../types";
 import { findArchivedAncestors } from "../page-hierarchy";
 import { Undo2, Trash2 } from "lucide-react";
@@ -111,8 +112,8 @@ export function TrashView({
             <li key={page.id} className="min-w-0">
                 <div className="flex min-w-0 items-center gap-1 py-1">
                     {/* Restoring is the button's job, not a click on the title. */}
-                    <span title={page.title} className="min-w-0 flex-1 truncate text-sm">
-                        {page.title}
+                    <span title={displayTitle(page)} className="min-w-0 flex-1 truncate text-sm">
+                        {displayTitle(page)}
                     </span>
 
                     <div className="flex shrink-0 items-center gap-1">
