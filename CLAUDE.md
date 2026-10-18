@@ -358,6 +358,10 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
     erst nach Serverbestätigung und nur, wenn die lokale Version noch
     dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+    Lokales Schreiben wartet nie auf das Netz (Paket 13b): Der Anstoß an
+    die Sync-Engine und die Abfrage einer neueren Version laufen außerhalb
+    der Warteschlange der Sitzung. Bis eine Änderung im Store liegt, gilt
+    sie als „Tippen gewinnt“ (auch gegen andere Tabs).
 -   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
     bilden die Warteschlange; sie übersteht Neustarts, weil sie in
     IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
@@ -379,7 +383,9 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     kurzer Hinweis.
 -   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
     „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
-    Änderung bleibt lokal erhalten.
+    Änderung bleibt lokal erhalten. Scheitert nur das Laden einer
+    neueren Version, steht dort „Aktualisieren fehlgeschlagen“ (kein
+    Speicherfehler). Ein ungültiges Dokument vom Server ist dauerhaft.
 -   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
     schreiben ausstehende Änderungen sofort lokal und senden sie.
 -   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
@@ -1159,7 +1165,9 @@ Noch nicht abschließend geprüft:
 -   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
     lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
 -   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
-    dauern (kein eigener Timeout).
+    dauern (kein eigener Timeout). Scheitert `signOut()`, läuft die
+    Sync-Engine weiter (13b). Was während des Abmeldens noch getippt
+    wird, kann verloren gehen (Editor ist dabei nicht gesperrt).
 -   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
     ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
     bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
