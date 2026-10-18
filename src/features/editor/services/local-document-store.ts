@@ -1,3 +1,4 @@
+import { completion, DatabaseConnection, promisify } from "@/lib/indexed-db";
 import { compareVersions, NEVER_EDITED, parseLocalDocument } from "../document-sync";
 import type { LocalDocument, RemoteDocument } from "../types";
 
@@ -7,31 +8,6 @@ const DOCUMENTS = "documents";
 /** One database per account, so documents never mix between users. */
 export function localDatabaseName(userId: string): string {
     return `nodi-${userId}`;
-}
-
-function promisify<T>(request: IDBRequest<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-    });
-}
-
-function completion(transaction: IDBTransaction): Promise<void> {
-    return new Promise((resolve, reject) => {
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
-    });
-}
-
-function openDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
-    const request = factory.open(name, DATABASE_VERSION);
-
-    request.onupgradeneeded = () => {
-        request.result.createObjectStore(DOCUMENTS, { keyPath: "pageId" });
-    };
-
-    return promisify(request);
 }
 
 const storesByUser = new Map<string, LocalDocumentStore>();
@@ -44,6 +20,13 @@ export function localDocumentStoreFor(userId: string): LocalDocumentStore {
         storesByUser.set(userId, store);
     }
     return store;
+}
+
+/** Closes the shared store before the account's data is deleted. */
+export async function closeLocalDocumentStore(userId: string): Promise<void> {
+    const store = storesByUser.get(userId);
+    storesByUser.delete(userId);
+    await store?.close();
 }
 
 export type ApplyRemoteResult = {
@@ -59,18 +42,23 @@ export type ApplyRemoteResult = {
  * other unnoticed.
  */
 export class LocalDocumentStore {
-    private database: Promise<IDBDatabase> | null = null;
-    private readonly userId: string;
-    private readonly factory: IDBFactory;
+    private readonly connection: DatabaseConnection;
 
     constructor(userId: string, factory: IDBFactory = indexedDB) {
-        this.userId = userId;
-        this.factory = factory;
+        this.connection = new DatabaseConnection(
+            factory,
+            localDatabaseName(userId),
+            DATABASE_VERSION,
+            (database) => database.createObjectStore(DOCUMENTS, { keyPath: "pageId" }),
+        );
     }
 
     private open(): Promise<IDBDatabase> {
-        this.database ??= openDatabase(this.factory, localDatabaseName(this.userId));
-        return this.database;
+        return this.connection.open();
+    }
+
+    close(): Promise<void> {
+        return this.connection.close();
     }
 
     async get(pageId: string): Promise<LocalDocument | null> {
