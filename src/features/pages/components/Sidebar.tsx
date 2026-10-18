@@ -18,6 +18,7 @@ type SidebarProps = {
     /** Offline: the tree is a cached copy and cannot be changed. */
     readOnly: boolean;
     status: ReactNode;
+    userId: string | undefined;
     accountEmail: string | null;
     signingOut: boolean;
     onSignOut: () => void;
@@ -42,6 +43,7 @@ export function Sidebar({
     selectedPageId,
     readOnly,
     status,
+    userId,
     accountEmail,
     signingOut,
     onSignOut,
@@ -127,7 +129,7 @@ export function Sidebar({
 
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Seiten">
                 {trashOpen ? (
-                    <TrashView pages={archivedPages} onRestore={onRestore} onDelete={onDelete} />
+                    <TrashView pages={archivedPages} userId={userId} onRestore={onRestore} onDelete={onDelete} />
                 ) : (
                     <>
                         <PageTree

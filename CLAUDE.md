@@ -318,9 +318,10 @@ supabase/
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
                             # pages.full_width (P10), Teilen und
-                            # öffentliche Links (P11a)
+                            # öffentliche Links (P11a), endgültig
+                            # löschen nur Owner
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
-                            # Seiteneinstellungen, Teilen
+                            # Seiteneinstellungen, Teilen, Löschrecht
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1065,8 +1066,14 @@ Noch nicht abschließend geprüft:
 -   Bestandsdaten: Aktive Seiten, deren Elternseite archiviert ist
     (durch den alten Bug entstanden), sind unsichtbar und würden beim
     endgültigen Löschen der Elternseite mitgelöscht.
--   Löschen: Jedes Workspace-Mitglied kann workspace-sichtbare Seiten
-    endgültig löschen (`can_edit_page`). Ob das gewollt ist, ist offen.
+-   (Entschieden und umgesetzt, Nutzer 2026-10-18,
+    `20261018150000_owner_only_permanent_delete.sql`) Endgültig löschen
+    darf nur der Owner der Seite (Delete-Policy `owner_id = auth.uid()`).
+    Papierkorb und Wiederherstellen bleiben für alle mit Schreibrecht.
+    Unterseiten fremder Owner werden weiterhin mit der Elternseite
+    gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
+    löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
+    filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
 -   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
     Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
     Verschieben derzeit nicht an.
