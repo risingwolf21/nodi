@@ -1,206 +1,214 @@
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     useCreateBlockNote,
     useEditorChange,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
-import type { PartialBlock } from "@blocknote/core";
 import "@blocknote/mantine/style.css";
 
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/use-auth";
+import { RemoteRequestError } from "@/features/editor/document-sync";
+import {
+    localDocumentStoreFor,
+    type LocalDocumentStore,
+} from "@/features/editor/services/local-document-store";
+import {
+    loadInitialDocument,
+    PageDocumentSession,
+    type InitialDocument,
+    type SessionStatus,
+} from "@/features/editor/services/page-document-session";
+import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
+import type { DocumentContent } from "@/features/editor/types";
 
 type BlockEditorProps = {
     pageId: string;
 };
 
-type PageDocument = {
-    document: PartialBlock[];
-};
+type LoadResult =
+    | { pageId: string; initial: InitialDocument }
+    | { pageId: string; error: string };
 
-type LoadResult = {
-    pageId: string;
-    content?: PartialBlock[];
-    error?: string;
-};
+// Long enough to read, short enough not to get in the way (Option A).
+const SUPERSEDED_NOTICE_MS = 8000;
+
+const SUPERSEDED_NOTICE =
+    "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
+
+function statusText(status: SessionStatus): string {
+    switch (status.kind) {
+        case "synced":
+            return "Gespeichert";
+        case "pending":
+            return "Änderungen ausstehend";
+        case "saving":
+            return "Speichert …";
+        case "unsynced":
+            if (status.reason === "offline") return "Offline – lokal gespeichert";
+            if (status.reason === "auth") return "Lokal gespeichert – bitte neu anmelden";
+            return "Lokal gespeichert – Server nicht erreichbar";
+        case "offline":
+            return "Offline";
+        case "error":
+            return "Speichern fehlgeschlagen";
+    }
+}
+
+function loadErrorMessage(error: unknown): string {
+    if (error instanceof RemoteRequestError && error.reason === "offline") {
+        return "Diese Seite ist offline noch nicht verfügbar. Öffne sie einmal mit Internetverbindung, dann ist sie auch offline lesbar.";
+    }
+    return `Das Dokument konnte nicht geladen werden: ${
+        error instanceof Error ? error.message : "Unbekannter Fehler"
+    }`;
+}
+
+// BlockNote needs at least one block; an empty document is one paragraph.
+function toEditorBlocks(content: DocumentContent): DocumentContent {
+    return content.length > 0 ? content : [{ type: "paragraph" }];
+}
 
 function EditorContent({
     pageId,
-    initialContent,
+    initial,
+    store,
 }: {
     pageId: string;
-    initialContent: PartialBlock[];
+    initial: InitialDocument;
+    store: LocalDocumentStore;
 }) {
-    const { user } = useAuth();
+    const [status, setStatus] = useState<SessionStatus>(
+        initial.document.synced ? { kind: "synced" } : { kind: "saving" },
+    );
+    const [canEdit, setCanEdit] = useState(initial.document.canEdit);
+    const [showSupersededNotice, setShowSupersededNotice] = useState(false);
 
-    const [saveStatus, setSaveStatus] = useState("Gespeichert");
-    const [saveError, setSaveError] = useState("");
-
-    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const saveVersion = useRef(0);
-    const dirty = useRef(false);
-    const mounted = useRef(false);
-
-    const latestDocument = useRef<PartialBlock[]>(initialContent);
-
-    // Alle Schreibvorgänge werden nacheinander ausgeführt.
-    // So kann ein älterer Schreibvorgang keinen neueren überschreiben.
-    const saveQueue = useRef<Promise<void>>(Promise.resolve());
+    const session = useRef<PageDocumentSession | null>(null);
+    // Content set by sync is not a user edit and must not be saved again.
+    const applyingRemoteContent = useRef(false);
 
     const editor = useCreateBlockNote({
         initialContent:
-            initialContent.length > 0 ? initialContent : undefined,
+            initial.document.content.length > 0
+                ? initial.document.content
+                : undefined,
     });
 
-    const saveDocument = useCallback(
-        async (document: PartialBlock[], version: number) => {
-            if (!user) return;
-
-            // Momentaufnahme erstellen, damit spätere Editor-Änderungen
-            // den bereits geplanten Schreibvorgang nicht beeinflussen.
-            const snapshot = JSON.parse(
-                JSON.stringify(document),
-            ) as PartialBlock[];
-
-            if (mounted.current) {
-                setSaveStatus("Speichert …");
-            }
-
-            const write = saveQueue.current.then(async () => {
-                const { error } = await supabase
-                    .from("page_documents")
-                    .upsert(
-                        {
-                            page_id: pageId,
-                            document: snapshot,
-                            updated_at: new Date().toISOString(),
-                            updated_by: user.id,
-                        },
-                        { onConflict: "page_id" },
-                    );
-
-                if (error) throw error;
-            });
-
-            // Die Warteschlange bleibt auch nach einem fehlgeschlagenen
-            // Schreibvorgang für weitere Speicherungen verwendbar.
-            saveQueue.current = write.catch(() => undefined);
-
-            try {
-                await write;
-
-                // Nur den neuesten Stand als gespeichert markieren.
-                if (
-                    !mounted.current ||
-                    version !== saveVersion.current
-                ) {
-                    return;
-                }
-
-                dirty.current = false;
-                setSaveError("");
-                setSaveStatus("Gespeichert");
-            } catch (error) {
-                console.error("Fehler beim Speichern:", error);
-
-                if (
-                    !mounted.current ||
-                    version !== saveVersion.current
-                ) {
-                    return;
-                }
-
-                setSaveError(
-                    error instanceof Error
-                        ? error.message
-                        : "Unbekannter Speicherfehler",
-                );
-                setSaveStatus("Speichern fehlgeschlagen");
-            }
-        },
-        [pageId, user],
-    );
-
-    const flushSave = useCallback(async () => {
-        if (!user || !dirty.current) return;
-
-        await saveDocument(
-            latestDocument.current,
-            saveVersion.current,
-        );
-    }, [saveDocument, user]);
-
     useEffect(() => {
-        mounted.current = true;
+        // Pending writes finish after unmount, but must not touch this UI.
+        let disposed = false;
+
+        const current = new PageDocumentSession({
+            pageId,
+            store,
+            remote: remoteDocumentRepository,
+            onStatus: (next) => {
+                if (!disposed) setStatus(next);
+            },
+            onPermission: (next) => {
+                if (!disposed) setCanEdit(next);
+            },
+            onRemoteContent: (content, supersededLocalEdit) => {
+                if (disposed) return;
+                applyingRemoteContent.current = true;
+                try {
+                    editor.replaceBlocks(editor.document, toEditorBlocks(content));
+                } finally {
+                    applyingRemoteContent.current = false;
+                }
+                if (supersededLocalEdit) setShowSupersededNotice(true);
+            },
+        });
+        session.current = current;
+        void current.start(initial.document, {
+            freshFromServer: initial.freshFromServer,
+        });
+
+        // Unmount alone is not reliable when the app is closed (CLAUDE.md §4).
+        const flushWhenHidden = () => {
+            if (document.visibilityState === "hidden") void current.flush();
+        };
+        const flush = () => void current.flush();
+        // A hint only; the request itself shows whether the server answers.
+        const retryWhenOnline = () => void current.retry();
+
+        document.addEventListener("visibilitychange", flushWhenHidden);
+        window.addEventListener("pagehide", flush);
+        window.addEventListener("online", retryWhenOnline);
 
         return () => {
-            mounted.current = false;
-
-            if (timer.current) {
-                clearTimeout(timer.current);
-                timer.current = null;
-            }
-
-            // Ausstehende Änderungen beim Verlassen des Editors
-            // sofort an Supabase übergeben, statt sie zu verwerfen.
-            if (dirty.current) {
-                void flushSave();
-            }
+            document.removeEventListener("visibilitychange", flushWhenHidden);
+            window.removeEventListener("pagehide", flush);
+            window.removeEventListener("online", retryWhenOnline);
+            disposed = true;
+            session.current = null;
+            void current.dispose();
         };
-    }, [flushSave]);
+    }, [editor, initial, pageId, store]);
+
+    useEffect(() => {
+        if (!showSupersededNotice) return;
+
+        const timer = setTimeout(
+            () => setShowSupersededNotice(false),
+            SUPERSEDED_NOTICE_MS,
+        );
+        return () => clearTimeout(timer);
+    }, [showSupersededNotice]);
 
     useEditorChange(() => {
-        if (!user) return;
-
-        latestDocument.current = editor.document;
-        dirty.current = true;
-
-        const version = ++saveVersion.current;
-
-        setSaveStatus("Änderungen ausstehend");
-        setSaveError("");
-
-        if (timer.current) {
-            clearTimeout(timer.current);
-        }
-
-        timer.current = setTimeout(() => {
-            timer.current = null;
-
-            void saveDocument(
-                latestDocument.current,
-                version,
-            );
-        }, 800);
+        if (applyingRemoteContent.current) return;
+        session.current?.recordEdit(editor.document);
     }, editor);
+
+    const canRetry = status.kind === "error" || status.kind === "unsynced";
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <div className="flex justify-end border-b px-6 py-2">
+            <div className="flex justify-end gap-3 border-b px-6 py-2">
+                {canEdit === false && (
+                    <span className="text-xs text-muted-foreground">
+                        Nur Lesezugriff
+                    </span>
+                )}
                 <span
                     className="text-xs text-muted-foreground"
                     role="status"
                     aria-live="polite"
                 >
-                    {saveStatus}
+                    {statusText(status)}
                 </span>
             </div>
 
-            {saveError && (
+            {showSupersededNotice && (
+                <p
+                    className="px-6 pt-3 text-sm text-muted-foreground"
+                    role="status"
+                >
+                    {SUPERSEDED_NOTICE}
+                </p>
+            )}
+
+            {canRetry && (
                 <div className="flex items-center justify-between gap-4 px-6 pt-3">
                     <p
-                        className="text-sm text-destructive"
-                        role="alert"
+                        className={
+                            status.kind === "error"
+                                ? "text-sm text-destructive"
+                                : "text-sm text-muted-foreground"
+                        }
+                        role={status.kind === "error" ? "alert" : undefined}
                     >
-                        Speichern fehlgeschlagen: {saveError}
+                        {status.kind === "error"
+                            ? `Speichern fehlgeschlagen: ${status.message}. Die Änderung bleibt auf diesem Gerät gespeichert.`
+                            : "Die Änderungen sind auf diesem Gerät gespeichert und werden übertragen, sobald der Server erreichbar ist."}
                     </p>
 
                     <button
                         type="button"
                         className="shrink-0 text-sm underline"
                         onClick={() => {
-                            void flushSave();
+                            void session.current?.retry();
                         }}
                     >
                         Erneut versuchen
@@ -210,7 +218,10 @@ function EditorContent({
 
             <div className="min-h-0 flex-1 overflow-y-auto px-2 py-4 sm:px-6 sm:py-8">
                 <div className="mx-auto max-w-3xl">
-                    <BlockNoteView editor={editor} />
+                    <BlockNoteView
+                        editor={editor}
+                        editable={canEdit !== false}
+                    />
                 </div>
             </div>
         </div>
@@ -218,48 +229,37 @@ function EditorContent({
 }
 
 export default function BlockEditor({ pageId }: BlockEditorProps) {
+    const { user } = useAuth();
+    const store = user ? localDocumentStoreFor(user.id) : null;
+
     const [loadResult, setLoadResult] = useState<LoadResult | null>(
         null,
     );
 
     useEffect(() => {
+        if (!store) return;
         let active = true;
 
-        async function loadDocument() {
-            const { data, error } = await supabase
-                .from("page_documents")
-                .select("document")
-                .eq("page_id", pageId)
-                .maybeSingle();
-
-            if (!active) return;
-
-            if (error) {
-                setLoadResult({
-                    pageId,
-                    error: error.message,
-                });
-                return;
-            }
-
-            const document = (data as PageDocument | null)?.document;
-
-            setLoadResult({
-                pageId,
-                content: Array.isArray(document) ? document : [],
-            });
-        }
-
-        void loadDocument();
+        loadInitialDocument(pageId, store, remoteDocumentRepository).then(
+            (initial) => {
+                if (active) setLoadResult({ pageId, initial });
+            },
+            (error: unknown) => {
+                console.error("Dokument konnte nicht geladen werden:", error);
+                if (active) {
+                    setLoadResult({ pageId, error: loadErrorMessage(error) });
+                }
+            },
+        );
 
         return () => {
             active = false;
         };
-    }, [pageId]);
+    }, [pageId, store]);
 
     // Das Ergebnis der vorherigen Seite während des Ladens ignorieren.
     // Dadurch muss der Effect keinen synchronen Reset ausführen.
-    if (!loadResult || loadResult.pageId !== pageId) {
+    if (!store || !loadResult || loadResult.pageId !== pageId) {
         return (
             <p className="p-6 text-sm text-muted-foreground">
                 Dokument wird geladen …
@@ -267,10 +267,9 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
         );
     }
 
-    if (loadResult.error) {
+    if ("error" in loadResult) {
         return (
             <p className="p-6 text-sm text-destructive" role="alert">
-                Das Dokument konnte nicht geladen werden:{" "}
                 {loadResult.error}
             </p>
         );
@@ -280,7 +279,8 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
         <EditorContent
             key={pageId}
             pageId={pageId}
-            initialContent={loadResult.content ?? []}
+            initial={loadResult.initial}
+            store={store}
         />
     );
 }

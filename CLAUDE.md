@@ -149,6 +149,7 @@ haben kann.
     -   shadcn-Ökosystem, `lucide-react`, Geist Variable Font
 -   Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
     (devDependencies), `workbox-window` (dependency).
+-   Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -226,7 +227,7 @@ createRoot(document.getElementById('root')!).render(
 
 ### Bekannte Dateien
 
-Stand nach Paket 4:
+Stand nach Paket 7:
 
 ``` text
 .env.example
@@ -247,6 +248,13 @@ src/
     ui/                     # shadcn: button, card, input, label, separator
     workspace/WorkspaceHome.tsx   # lädt BlockEditor per lazy()
   features/
+    editor/
+      types.ts              # Dokument-, Versions- und Sync-Typen
+      document-sync.ts      # Validierung, LWW-Vergleich, Fehlerklassen
+      services/
+        local-document-store.ts      # IndexedDB `nodi-<userId>`
+        remote-document-repository.ts # Supabase: laden, RPC speichern
+        page-document-session.ts     # Speichern/Sync einer offenen Seite
     pages/
       CreatePageForm.tsx
       PageTree.tsx
@@ -284,46 +292,46 @@ ist `strict` aber Standard (geprüft mit TS 6.0.3).
 
 ## 4. Bekannter Editor-Ablauf und wichtige Risiken
 
-Datei: `src/components/editor/BlockEditor.tsx`
+Datei: `src/components/editor/BlockEditor.tsx` (seit Paket 7 nur noch
+Darstellung; Ablauf in `src/features/editor/services/`).
 
-Der bisher geprüfte Editor:
+-   **Laden:** zuerst aus dem lokalen Store (IndexedDB, eine Datenbank
+    `nodi-<userId>` je Konto, Store `documents`, Schlüssel `pageId`).
+    Nur eine hier noch nie geöffnete Seite wird von Supabase geladen
+    und sofort lokal abgelegt. Ohne Server und ohne lokale Kopie
+    erscheint ein Hinweis statt eines leeren Editors.
+-   **Abgleich:** Eine lokale Kopie wird nach dem Öffnen einmal mit dem
+    Server verglichen. Eine ungesyncte lokale Änderung wird gesendet;
+    eine neuere Serverversion ersetzt eine synchronisierte Kopie. Was
+    der Nutzer währenddessen tippt, wird nicht überschrieben.
+-   **Speichern:** Bearbeitungszeit = Zeitpunkt der Eingabe; nach
+    800 ms Debounce wird ein Snapshot mit neuer Mutation-ID zuerst
+    lokal geschrieben (`synced: false`), dann per RPC
+    `save_page_document` gesendet. „Gespeichert" erst nach
+    Serverbestätigung und nur, wenn die lokale Version noch dieselbe
+    ist (Compare-and-set in einer IndexedDB-Transaktion).
+-   **Verdrängt (Option A):** Serverstand laden, lokale Kopie ersetzen,
+    kurzer Hinweis.
+-   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
+    „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
+    Änderung bleibt lokal erhalten. Das `online`-Ereignis löst einen
+    Versuch aus (nur als Hinweis).
+-   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
+    schreiben ausstehende Änderungen sofort lokal und senden sie.
+-   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
+    ohne Schreibrecht ist der Editor schreibgeschützt.
 
--   nutzt `useCreateBlockNote`, `useEditorChange` und `BlockNoteView`;
--   erhält `pageId` als Prop;
--   lädt `document` aus Supabase-Tabelle `page_documents`, gefiltert
-    nach `page_id`;
--   verwendet `maybeSingle()` und behandelt einen nicht vorhandenen
-    Datensatz als leeres Dokument;
--   speichert Änderungen nach etwa **800 ms Debounce** per `upsert`;
--   schreibt Felder `page_id`, `document`, `updated_at`, `updated_by`;
--   serialisiert das Dokument vor dem Speichern als Snapshot;
--   führt Schreibvorgänge über eine Promise-Warteschlange nacheinander
-    aus;
--   hält Statusmeldungen wie „Gespeichert", „Speichert ..." und
-    „Speichern fehlgeschlagen" vor;
--   versucht beim Verlassen des Editors, ausstehende Änderungen an
-    Supabase zu übergeben.
+### Noch offene Einschränkungen (Pakete 8 und 9)
 
-### Einschränkungen des bisherigen Ansatzes
-
-1.  Der Editor lädt ausschließlich von Supabase. Offline ist der
-    Ladevorgang nicht möglich.
-2.  Der Debounce und die Promise-Warteschlange liegen nur im
-    Arbeitsspeicher.
-3.  Bei einem Netzwerkfehler bleibt keine dauerhafte lokale
-    Synchronisierungswarteschlange bestehen.
-4.  Ein Aufruf beim Unmount garantiert nicht, dass ein asynchroner
-    Schreibvorgang abgeschlossen wird, bevor die Seite geschlossen oder
-    die App beendet wird.
-5.  `updated_at: new Date().toISOString()` stammt aus der Client-Uhr.
-    Diese kann falsch oder gegenüber anderen Geräten abweichend sein.
-6.  Ein `upsert` mit clientseitigem Zeitstempel setzt keine
-    serverseitige Konfliktregel um. Zwei Geräte können sich gegenseitig
-    Änderungen überschreiben, ohne dass eine echte LWW-Entscheidung nach
-    einer verlässlichen Ordnung getroffen wird.
-7.  `saveQueue` verhindert nur innerhalb dieser Editor-Instanz das
-    Überholen eigener Schreibvorgänge; sie synchronisiert nicht mehrere
-    Geräte oder Tabs.
+1.  Kein automatisches Wiederholen mit Backoff im Hintergrund: Eine
+    ungesyncte Änderung wird erst beim nächsten Öffnen der Seite, bei
+    der nächsten Eingabe, beim `online`-Ereignis oder per Knopf
+    erneut gesendet.
+2.  Mehrere Tabs desselben Kontos stimmen sich nicht ab; der Server
+    ordnet ihre Schreibvorgänge per LWW.
+3.  Seitenbaum und Workspaces werden noch nicht gecacht; ein
+    Offline-Start zeigt daher keine Seiten.
+4.  Logout löscht die lokale Datenbank noch nicht (Policy §2, Paket 9).
 
 **Wichtig:** Die PWA-Cache-Funktion löst diese Probleme nicht.
 Offline-Dokumentbearbeitung braucht zusätzlich eine lokale Datenbank und
@@ -841,10 +849,10 @@ Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
 Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   `BlockEditor` lädt nur von Supabase und speichert nur im Speicher;
-    kein Speichern bei `pagehide`/`visibilitychange`.
--   Read-only geteilte Seiten sind im Editor bearbeitbar; Speichern
-    scheitert dann an RLS.
+-   (Behoben in Paket 7) `BlockEditor` lud nur von Supabase und
+    speicherte nur im Speicher.
+-   (Behoben in Paket 7) Read-only geteilte Seiten waren im Editor
+    bearbeitbar.
 
 Behoben in Paket 2 (`20261016175500_protect_page_columns.sql`):
 Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
@@ -873,17 +881,20 @@ Noch nicht abschließend geprüft:
     außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
--   `BlockEditor` schreibt noch per direktem `upsert` (bis Paket 7).
-    Dieser Weg aktualisiert `client_updated_at` nicht. Sobald der
-    Editor die RPC nutzt, direkte `insert`/`update`-Rechte auf
-    `page_documents` entziehen, damit die LWW-Regel nicht umgangen
-    werden kann.
+-   Seit Paket 7 schreibt der Editor nur noch über die RPC. Direkte
+    `insert`/`update`-Rechte auf `page_documents` bestehen aber noch,
+    weil ältere, noch installierte PWA-Versionen per `upsert`
+    schreiben. Entzug als eigene Contract-Migration, sobald alte
+    Clients aktualisiert sind (frühestens Paket 8).
+-   Der Client vergleicht Versionen mit Millisekunden, der Server mit
+    Mikrosekunden (nur bei gekappten Zeitstempeln relevant). Das
+    betrifft nur die lokale Entscheidung, ob eine synchronisierte Kopie
+    ersetzt wird; maßgeblich bleibt die Serverordnung.
 -   Grenzfall der Kappung: Wird eine Mutation mit Zeitstempel aus der
     Zukunft nach einem verlorenen Response wiederholt und wurde sie
     inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
     und kann gewinnen.
--   UI für verdrängte Schreibvorgänge: entschieden (Option A, §2),
-    Umsetzung in Paket 7/8.
+-   UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
