@@ -320,10 +320,11 @@ supabase/
                             # pages.full_width (P10), Teilen und
                             # öffentliche Links (P11a), endgültig
                             # löschen nur Owner, Reparatur
-                            # unsichtbarer Seiten (Bestandsdaten)
+                            # unsichtbarer Seiten (Bestandsdaten),
+                            # Mitglieder und Bereiche (P12a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
-                            # Reparatur
+                            # Reparatur, Mitglieder und Bereiche (P12a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1037,6 +1038,56 @@ Arbeitspakete, je ein Pull Request:
             mit `editable={false}`. Fehler: ungültig/deaktiviert/
             archiviert („Dieser Link ist ungültig oder wurde
             deaktiviert.“), offline, sonstige.
+12. **Workspace-Mitglieder und Bereiche** (Nutzerwunsch 2026-10-18), wie
+    Notion: je Workspace ein geteilter Bereich „Workspace“ (alle
+    Mitglieder lesen und bearbeiten) und ein Bereich „Privat“ (nur der
+    Owner der Seite, plus einzelne Freigaben aus Paket 11).
+    -   **Entschieden (Nutzer, 2026-10-18):** (1) Bestehende Seiten werden
+        privat; geteilt wird gezielt. (2) Verschieben zwischen den
+        Bereichen in beide Richtungen, für oberste Seiten, nur durch
+        deren Owner, Unterseiten wandern mit. (3) Nur der Workspace-Owner
+        lädt ein und entfernt. (4) Bei Austritt/Entfernen gehen geteilte
+        Seiten der Person an den Workspace-Owner, private bleiben
+        unangetastet, aber unsichtbar, bis sie wieder beitritt.
+    -   **Annahmen:** Alle Mitglieder bearbeiten alle geteilten Seiten
+        (keine Rechte je Seite im Workspace). Eingeladen werden nur
+        bestehende Konten per exakter E-Mail, sofort Mitglied (keine
+        Einladung zum Annehmen). Endgültig löschen bleibt beim Owner der
+        Seite.
+    -   **Aufteilung:** 12a Datenbank, 12b Oberfläche (Bereiche in der
+        Seitenleiste, Verschieben im Seitenmenü, Mitglieder-Dialog).
+        Beide zusammen releasen: Nach 12a sehen bestehende Mitglieder
+        nichts mehr, bis Seiten in den Workspace verschoben werden.
+    -   **Umsetzung 12a** (`20261018160000_workspace_members_and_sections.sql`):
+        -   Alle Seiten mit `visibility = 'workspace'` werden einmalig
+            `private`.
+        -   Bereichsregel (Trigger `require_page_section`, läuft nach
+            `protect_page_columns`): Eine Unterseite einer privaten
+            Seite ist privat. Beim Anlegen wird das gesetzt (auch für
+            ältere App-Versionen), Änderungen, die es verletzen, werden
+            mit `22023` abgelehnt. Eine private Unterseite einer
+            geteilten Seite bleibt möglich (11a: Freigaben erreichen sie
+            nicht).
+        -   `has_page_share` geht nur noch an der Grenze geteilt → privat
+            nicht weiter nach oben; innerhalb eines privaten Baums wirkt
+            eine Freigabe auf alle Unterseiten.
+        -   Owner-Zugriff (`can_read_page`, `can_edit_page`, Löschen) nur
+            als Mitglied des Workspace.
+        -   `protect_page_columns` lässt vertrauenswürdige
+            Server-Funktionen (`security definer`, `current_user` ist
+            nicht `authenticated`/`anon`) Owner und Sichtbarkeit ändern;
+            direkte API-Updates bleiben eingeschränkt.
+        -   RPCs: `add_workspace_member(workspace, email)` (nur Owner;
+            `42501`, `P0002`, `22023`), `list_workspace_members(workspace)`
+            mit E-Mail (nur Mitglieder), `remove_workspace_member` (nur
+            Owner, nicht den Owner), `leave_workspace` (nicht der Owner),
+            `set_page_section(page, 'workspace'|'private')` (nur oberste
+            Seiten, nur deren Owner; nach privat werden auch fremde
+            Unterseiten dem Aufrufer übertragen). Austritt und Entfernen
+            übertragen geteilte Seiten an den Workspace-Owner und löschen
+            die Freigaben an die Person in diesem Workspace. Die
+            Delete-Policy auf `workspace_members` ist entfernt, damit die
+            Übertragung nicht umgangen werden kann.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -1124,6 +1175,10 @@ Noch nicht abschließend geprüft:
     stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
     Editoren aus anderen Workspaces können Titel und Icon geteilter
     Seiten nicht ändern (nur Inhalt).
+-   Paket 12a: Freigaben und öffentliche Links, die eine ausgetretene
+    Person auf ihren privaten Seiten vergeben hat, bleiben gültig (die
+    Seiten bleiben ja unangetastet). Zwischen Deploy von 12a und 12b
+    legt die alte Oberfläche oberste Seiten weiter als geteilt an.
 -   Öffentliche Links (11c): Seiten haben kein `noindex`; wer den Link
     öffentlich postet, macht die Seite für Suchmaschinen auffindbar.
     Öffentliche Seiten sind offline nicht verfügbar (bewusst nicht
