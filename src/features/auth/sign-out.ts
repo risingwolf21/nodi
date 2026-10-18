@@ -26,8 +26,15 @@ export async function signOutAndDeleteLocalData(
     userId: string,
     signOut: () => Promise<void>,
 ): Promise<void> {
-    syncEngineFor(userId).stop();
-    await signOut();
+    const engine = syncEngineFor(userId);
+    engine.stop();
+    try {
+        await signOut();
+    } catch (error) {
+        // Still signed in: keep syncing as before.
+        engine.start();
+        throw error;
+    }
 
     forgetSyncEngine(userId);
     await Promise.all([closeLocalDocumentStore(userId), closePageTreeCache(userId)]);

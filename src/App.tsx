@@ -15,7 +15,8 @@ export default function App() {
   }
 
   if (user) {
-    return <WorkspaceHome />;
+    // A new account starts from scratch, without state of the previous one.
+    return <WorkspaceHome key={user.id} />;
   }
 
   return (

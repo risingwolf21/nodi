@@ -11,6 +11,9 @@ values
   ('22222222-2222-4222-8222-222222222222', 'Member@Nodi.test'),
   ('33333333-3333-4333-8333-333333333333', 'outsider@nodi.test');
 
+-- share_page and add_workspace_member only find confirmed accounts (13a).
+update auth.users set email_confirmed_at = now();
+
 insert into public.workspaces (id, name, owner_id)
 values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Team', '11111111-1111-4111-8111-111111111111');
 
