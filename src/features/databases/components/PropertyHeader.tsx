@@ -59,6 +59,7 @@ export function PropertyHeader({
             </button>
 
             <Menu
+                detached
                 open={menuOpen}
                 onClose={() => {
                     rename();

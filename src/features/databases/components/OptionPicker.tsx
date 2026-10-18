@@ -51,7 +51,7 @@ export function OptionPicker({
     }
 
     return (
-        <Menu open={open} onClose={onClose} align="start" role="dialog" label={label} className="w-60">
+        <Menu detached open={open} onClose={onClose} align="start" role="dialog" label={label} className="w-60">
             <form onSubmit={(event) => void submit(event)} className="p-1">
                 <input
                     autoFocus
