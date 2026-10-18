@@ -26,7 +26,7 @@ export type PageDocumentSessionOptions = {
     store: LocalDocumentStore;
     remote: RemoteDocumentApi;
     changes: DocumentChanges;
-    sync: Pick<SyncEngine, "requestSync" | "retryNow" | "onFailure">;
+    sync: Pick<SyncEngine, "requestSync" | "retryNow" | "onFailure" | "addFlusher">;
     onStatus: (status: SessionStatus) => void;
     /** Stored content replaced what the editor shows (other device or tab). */
     onRemoteContent: (content: DocumentContent, supersededLocalEdit: boolean) => void;
@@ -101,6 +101,7 @@ export class PageDocumentSession {
                 if (changedPageId === pageId) void this.enqueue(() => this.adoptStoredVersion());
             }),
             sync.onFailure((failure) => this.showFailure(failure)),
+            sync.addFlusher(() => this.flush()),
         );
 
         if (!initial.synced) return sync.requestSync();

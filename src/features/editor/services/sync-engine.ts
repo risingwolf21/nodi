@@ -15,6 +15,13 @@ export type SyncFailure = {
     message: string;
 };
 
+export type SyncOverview = {
+    /** Pages with local edits the server has not confirmed. */
+    unsyncedPages: number;
+    /** Why the last pass could not send everything; null if it could. */
+    failure: RequestFailureReason | null;
+};
+
 type Lock = (name: string, task: () => Promise<void>) => Promise<void>;
 
 export type SyncEngineOptions = {
@@ -63,6 +70,10 @@ export class SyncEngine {
     private stopListening: (() => void) | null = null;
     /** After stop() (logout), no timed retries; explicit requests still run. */
     private stopped = false;
+    private overview: SyncOverview = { unsyncedPages: 0, failure: null };
+    private readonly overviewListeners = new Set<() => void>();
+    /** Open editors, so a logout can store their pending edits first. */
+    private readonly flushers = new Set<() => Promise<void>>();
 
     constructor(options: SyncEngineOptions) {
         this.options = options;
@@ -84,9 +95,14 @@ export class SyncEngine {
         // `online` is only a hint; the request shows whether Supabase answers.
         window.addEventListener("online", syncAgain);
         document.addEventListener("visibilitychange", syncWhenVisible);
+        // Edits and syncs, also in other tabs, change the number of pages.
+        const stopCounting = this.options.changes.subscribe(() => {
+            void this.updateOverview(this.overview.failure);
+        });
         this.stopListening = () => {
             window.removeEventListener("online", syncAgain);
             document.removeEventListener("visibilitychange", syncWhenVisible);
+            stopCounting();
         };
 
         void this.requestSync();
@@ -102,6 +118,29 @@ export class SyncEngine {
     onFailure(listener: (failure: SyncFailure) => void): () => void {
         this.failureListeners.add(listener);
         return () => this.failureListeners.delete(listener);
+    }
+
+    /** For useSyncExternalStore: same object until something changed. */
+    readonly getOverview = (): SyncOverview => this.overview;
+
+    readonly subscribeOverview = (listener: () => void): (() => void) => {
+        this.overviewListeners.add(listener);
+        return () => this.overviewListeners.delete(listener);
+    };
+
+    addFlusher(flush: () => Promise<void>): () => void {
+        this.flushers.add(flush);
+        return () => this.flushers.delete(flush);
+    }
+
+    /**
+     * Before a logout: stores the pending edits of open editors, sends
+     * everything once more and returns how many pages are still unsynced.
+     */
+    async syncAll(): Promise<number> {
+        await Promise.all([...this.flushers].map((flush) => flush()));
+        await this.retryNow();
+        return (await this.options.store.listUnsynced()).length;
     }
 
     /** Runs a pass; a request during a pass runs one more pass after it. */
@@ -126,13 +165,16 @@ export class SyncEngine {
     }
 
     private async drain(): Promise<void> {
-        let complete: boolean;
+        let failure: RequestFailureReason | null;
         do {
             this.rerunRequested = false;
-            complete = await this.runPass();
+            failure = await this.runPass();
         } while (this.rerunRequested);
 
-        if (complete) {
+        await this.updateOverview(failure);
+
+        // Permanent failures are not retried on a timer.
+        if (failure === null || failure === "permanent") {
             this.failedPasses = 0;
         } else {
             this.failedPasses += 1;
@@ -140,24 +182,25 @@ export class SyncEngine {
         }
     }
 
-    private runPass(): Promise<boolean> {
-        let complete = false;
+    private runPass(): Promise<RequestFailureReason | null> {
+        let failure: RequestFailureReason | null = null;
         const lock = this.options.lock ?? webLock;
 
         return lock(`nodi-sync-${this.options.userId}`, async () => {
-            complete = await this.sendPending();
+            failure = await this.sendPending();
         }).then(
-            () => complete,
-            (error: unknown) => {
-                describeError(error);
-                return false;
-            },
+            () => failure,
+            (error: unknown) => describeError(error).reason,
         );
     }
 
-    /** Returns false if a temporary failure stopped the pass. */
-    private async sendPending(): Promise<boolean> {
+    /**
+     * Returns the reason a temporary failure stopped the pass, "permanent"
+     * if some edits were rejected for good, or null if all were sent.
+     */
+    private async sendPending(): Promise<RequestFailureReason | null> {
         const pending = await this.options.store.listUnsynced();
+        let rejectedSome = false;
 
         for (const [index, record] of pending.entries()) {
             const { mutationId } = record;
@@ -165,6 +208,7 @@ export class SyncEngine {
 
             const rejectedMessage = this.rejected.get(mutationId);
             if (rejectedMessage !== undefined) {
+                rejectedSome = true;
                 this.reportFailure(record, mutationId, "permanent", rejectedMessage);
                 continue;
             }
@@ -178,6 +222,7 @@ export class SyncEngine {
             if (!failure) continue;
 
             if (failure.reason === "permanent") {
+                rejectedSome = true;
                 this.rejected.set(mutationId, failure.message);
                 this.reportFailure(record, mutationId, failure.reason, failure.message);
                 continue;
@@ -189,10 +234,10 @@ export class SyncEngine {
                     this.reportFailure(waiting, waiting.mutationId, failure.reason, failure.message);
                 }
             }
-            return false;
+            return failure.reason;
         }
 
-        return true;
+        return rejectedSome ? "permanent" : null;
     }
 
     private async send(
@@ -229,6 +274,27 @@ export class SyncEngine {
     ): void {
         const failure = { pageId: record.pageId, mutationId, reason, message };
         for (const listener of this.failureListeners) listener(failure);
+    }
+
+    private async updateOverview(failure: RequestFailureReason | null): Promise<void> {
+        let unsyncedPages: number;
+        try {
+            unsyncedPages = (await this.options.store.listUnsynced()).length;
+        } catch (error) {
+            console.warn("Ungesyncte Seiten konnten nicht gezählt werden:", error);
+            return;
+        }
+
+        const next = { unsyncedPages, failure: unsyncedPages > 0 ? failure : null };
+        if (
+            next.unsyncedPages === this.overview.unsyncedPages &&
+            next.failure === this.overview.failure
+        ) {
+            return;
+        }
+
+        this.overview = next;
+        for (const listener of this.overviewListeners) listener();
     }
 
     private scheduleRetry(): void {

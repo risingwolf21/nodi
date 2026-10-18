@@ -15,12 +15,13 @@ import { usePages } from "@/features/pages/hooks/usePages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { TrashView } from "@/features/pages/components/TrashView";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
+import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
 
 export default function WorkspaceHome() {
-    const { user, signOut } = useAuth();
+    const { user, offline: authOffline, signOut } = useAuth();
 
     const {
         workspaces,
@@ -151,6 +152,12 @@ export default function WorkspaceHome() {
                     <span className="text-lg font-semibold">Nodi</span>
                 </div>
                 <div className="flex items-center gap-3">
+                    {user && (
+                        <SyncStatusIndicator
+                            engine={syncEngineFor(user.id)}
+                            offline={authOffline || readOnly}
+                        />
+                    )}
                     <span className="hidden text-sm text-muted-foreground sm:inline">
                         {user?.email}
                     </span>

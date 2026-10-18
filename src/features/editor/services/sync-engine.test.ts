@@ -213,4 +213,43 @@ describe("SyncEngine", () => {
 
         expect(remote.save).toHaveBeenCalledTimes(1);
     });
+
+    it("counts unsynced pages and keeps the failure reason for the overview", async () => {
+        const remote = createRemote();
+        remote.save.mockResolvedValue(offline);
+        await store.putLocalEdit(unsynced("page-1", "00000000-0000-4000-8000-000000000001"));
+        await store.putLocalEdit(unsynced("page-2", "00000000-0000-4000-8000-000000000002"));
+        const engine = createEngine(remote);
+        const overviews: unknown[] = [];
+        engine.subscribeOverview(() => overviews.push(engine.getOverview()));
+
+        await engine.requestSync();
+        expect(engine.getOverview()).toEqual({ unsyncedPages: 2, failure: "offline" });
+
+        remote.save.mockResolvedValue({ kind: "saved" });
+        await engine.requestSync();
+        expect(engine.getOverview()).toEqual({ unsyncedPages: 0, failure: null });
+        expect(overviews).toHaveLength(2);
+    });
+
+    it("stores pending edits of open editors before syncing everything", async () => {
+        const remote = createRemote();
+        const engine = createEngine(remote);
+        engine.addFlusher(() =>
+            store.putLocalEdit(unsynced("page-1", "00000000-0000-4000-8000-000000000001")),
+        );
+
+        const remaining = await engine.syncAll();
+
+        expect(remote.save).toHaveBeenCalledTimes(1);
+        expect(remaining).toBe(0);
+    });
+
+    it("reports how many pages stay unsynced when syncing before a logout fails", async () => {
+        const remote = createRemote();
+        remote.save.mockResolvedValue(offline);
+        await store.putLocalEdit(unsynced("page-1", "00000000-0000-4000-8000-000000000001"));
+
+        expect(await createEngine(remote).syncAll()).toBe(1);
+    });
 });
