@@ -13,7 +13,10 @@ type PageViewProps = {
     page: Page;
     /** Root first. */
     ancestors: Page[];
+    /** Offline: nothing about the page can be changed. */
     readOnly: boolean;
+    /** Width, trash and sharing; not for pages shared from other workspaces. */
+    showPageMenu: boolean;
     focusTitle: boolean;
     onBack: () => void;
     onSelect: (pageId: string) => void;
@@ -39,6 +42,7 @@ export function PageView({
     page,
     ancestors,
     readOnly,
+    showPageMenu,
     focusTitle,
     onBack,
     onSelect,
@@ -90,7 +94,7 @@ export function PageView({
         </>
     );
 
-    const topBarEnd = readOnly ? null : (
+    const topBarEnd = readOnly || !showPageMenu ? null : (
         <div className="relative shrink-0">
             <button
                 type="button"
