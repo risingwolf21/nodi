@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, LogOut, Plus, Trash2, Users } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree } from "../PageTree";
-import { pagesInSection } from "../page-hierarchy";
-import type { Page, PageSection, Workspace } from "../types";
+import { pagesInSection, withoutDatabaseEntries } from "../page-hierarchy";
+import type { Page, PageKind, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
 
 type SidebarProps = {
@@ -25,7 +25,7 @@ type SidebarProps = {
     onSignOut: () => void;
     onSelect: (pageId: string) => void;
     /** `section` is used for root pages; subpages take their parent's. */
-    onCreatePage: (parentId: string | null, section: PageSection) => void;
+    onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
     onOpenMembers: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
@@ -72,6 +72,8 @@ export function Sidebar({
     const [showTrash, setShowTrash] = useState(false);
     const workspace = workspaces.find((item) => item.id === workspaceId);
     const trashOpen = showTrash && !readOnly;
+    const treePages = withoutDatabaseEntries(pages);
+    const sharedTreePages = withoutDatabaseEntries(sharedPages);
 
     return (
         <div className="flex h-full flex-col bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-sidebar-foreground">
@@ -178,7 +180,7 @@ export function Sidebar({
                                     )}
                                 </div>
                                 <PageTree
-                                    pages={pagesInSection(pages, section)}
+                                    pages={pagesInSection(treePages, section)}
                                     selectedPageId={selectedPageId}
                                     readOnly={readOnly}
                                     emptyText={emptyText}
@@ -189,7 +191,7 @@ export function Sidebar({
                                 />
                             </section>
                         ))}
-                        {sharedPages.length > 0 && (
+                        {sharedTreePages.length > 0 && (
                             <section aria-labelledby="shared-pages-title" className="mt-4">
                                 <h2
                                     id="shared-pages-title"
@@ -198,7 +200,7 @@ export function Sidebar({
                                     Mit mir geteilt
                                 </h2>
                                 <PageTree
-                                    pages={sharedPages}
+                                    pages={sharedTreePages}
                                     selectedPageId={selectedPageId}
                                     readOnly
                                     onSelect={onSelect}
@@ -224,6 +226,17 @@ export function Sidebar({
                     >
                         <Plus className="size-4 text-muted-foreground" />
                         Neue Seite
+                    </button>
+                    <button
+                        type="button"
+                        className={footerButton}
+                        onClick={() => {
+                            setShowTrash(false);
+                            onCreatePage(null, "private", "database");
+                        }}
+                    >
+                        <Table2 className="size-4 text-muted-foreground" />
+                        Neue Datenbank
                     </button>
                     <button
                         type="button"

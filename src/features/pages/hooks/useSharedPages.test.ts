@@ -13,6 +13,9 @@ const stored = (id: string, parent_id: string | null, is_archived = false): Stor
     is_archived,
     icon: null,
     full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
 });
 
 describe("sharedPageTree", () => {

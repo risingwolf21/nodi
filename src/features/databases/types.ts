@@ -1,0 +1,104 @@
+/** Property types of the server (package 14a); the last two are computed. */
+export type PropertyType =
+    | "text"
+    | "number"
+    | "checkbox"
+    | "select"
+    | "multi_select"
+    | "status"
+    | "date"
+    | "url"
+    | "email"
+    | "created_time"
+    | "last_edited_time";
+
+export type OptionColor = "gray" | "brown" | "orange" | "yellow" | "green" | "blue" | "purple" | "pink" | "red";
+
+/** A choice of a select, multi-select or status property. */
+export type PropertyOption = {
+    id: string;
+    name: string;
+    color: OptionColor;
+};
+
+export type DatabaseProperty = {
+    id: string;
+    databaseId: string;
+    name: string;
+    type: PropertyType;
+    /** Choices; empty for types without any. */
+    options: PropertyOption[];
+    position: number;
+};
+
+/** Dates are "YYYY-MM-DD" (or ISO timestamps); `end` makes a range. */
+export type DateValue = {
+    start: string;
+    end: string | null;
+};
+
+/** A value as the editor shows it; null means empty. */
+export type PropertyValue = string | number | boolean | string[] | DateValue | null;
+
+/** A stored value, as JSON from the server; read with `readValue`. */
+export type StoredPropertyValue = {
+    pageId: string;
+    propertyId: string;
+    value: unknown;
+    updatedAt: string;
+};
+
+export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar";
+
+/** Sorting and filtering by the title uses this id instead of a property id. */
+export const TITLE_FIELD = "title";
+
+export type SortRule = {
+    propertyId: string;
+    direction: "asc" | "desc";
+};
+
+export type FilterOperator =
+    | "contains"
+    | "equals"
+    | "notEquals"
+    | "isEmpty"
+    | "isNotEmpty"
+    | "greaterThan"
+    | "lessThan"
+    | "before"
+    | "after"
+    | "checked"
+    | "unchecked";
+
+/** All rules of a view must match (AND). `value` is the text the user entered. */
+export type FilterRule = {
+    propertyId: string;
+    operator: FilterOperator;
+    value: string;
+};
+
+export type ViewConfig = {
+    sort: SortRule[];
+    filter: FilterRule[];
+    hiddenPropertyIds: string[];
+};
+
+export type DatabaseView = {
+    id: string;
+    databaseId: string;
+    name: string;
+    type: ViewType;
+    config: ViewConfig;
+    position: number;
+};
+
+/** Everything of a database except its entries (those are pages). */
+export type DatabaseData = {
+    properties: DatabaseProperty[];
+    views: DatabaseView[];
+    values: StoredPropertyValue[];
+    /** Last change of an entry's text, per entry id ("Geändert am"). */
+    documentEditedAt: Record<string, string>;
+    canEdit: boolean;
+};

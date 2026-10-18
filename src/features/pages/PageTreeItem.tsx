@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronRight, FileText, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronRight, FileText, MoreHorizontal, Plus, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
+import { displayTitle } from "./page-display";
 import type { Page } from "./types";
 
 type PageTreeItemProps = {
@@ -70,9 +71,14 @@ export function PageTreeItem({
                     className="flex min-w-0 flex-1 items-center gap-1.5 self-stretch text-left"
                 >
                     <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
-                        {page.icon ?? <FileText className="size-4 text-muted-foreground" />}
+                        {page.icon ??
+                            (page.kind === "database" ? (
+                                <Table2 className="size-4 text-muted-foreground" />
+                            ) : (
+                                <FileText className="size-4 text-muted-foreground" />
+                            ))}
                     </span>
-                    <span className="truncate">{page.title}</span>
+                    <span className="truncate">{displayTitle(page)}</span>
                 </button>
 
                 {!readOnly && (
@@ -110,18 +116,21 @@ export function PageTreeItem({
                             </Menu>
                         </div>
 
-                        <button
-                            type="button"
-                            title="Unterseite hinzufügen"
-                            aria-label={`Unterseite zu ${page.title} erstellen`}
-                            onClick={() => {
-                                setExpanded(true);
-                                onAddChild(page.id);
-                            }}
-                            className={actionButton}
-                        >
-                            <Plus className="size-4" />
-                        </button>
+                        {/* Entries of a database are added in the database itself. */}
+                        {page.kind !== "database" && (
+                            <button
+                                type="button"
+                                title="Unterseite hinzufügen"
+                                aria-label={`Unterseite zu ${page.title} erstellen`}
+                                onClick={() => {
+                                    setExpanded(true);
+                                    onAddChild(page.id);
+                                }}
+                                className={actionButton}
+                            >
+                                <Plus className="size-4" />
+                            </button>
+                        )}
                     </>
                 )}
             </div>

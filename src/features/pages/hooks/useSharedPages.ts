@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
+import { isDatabaseEntry } from "../page-hierarchy";
 import { pageTreeCacheFor } from "../services/page-tree-cache";
 import type { Page, PageSettings, StoredPage } from "../types";
 import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
@@ -143,10 +144,12 @@ export function useSharedPages(
     const renamePage = useCallback(
         async (pageId: string, title: string) => {
             const normalizedTitle = title.trim();
-            if (!normalizedTitle) throw new Error("Der Seitentitel darf nicht leer sein.");
+            if (!normalizedTitle && !isDatabaseEntry(pageId, storedPages)) {
+                throw new Error("Der Seitentitel darf nicht leer sein.");
+            }
             await update(pageId, { title: normalizedTitle });
         },
-        [update],
+        [update, storedPages],
     );
 
     const updatePage = useCallback(

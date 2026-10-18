@@ -6,6 +6,9 @@ type MenuProps = {
     onClose: () => void;
     /** Which edge of the trigger the panel lines up with. */
     align?: "start" | "end";
+    /** "dialog" for a panel with inputs (e.g. picking or creating an option). */
+    role?: "menu" | "dialog";
+    label?: string;
     className?: string;
     children: ReactNode;
 };
@@ -14,7 +17,7 @@ type MenuProps = {
  * Dropdown panel for a trigger inside a `relative` wrapper. Closes on
  * Escape and on a click or tap outside, also on touch screens.
  */
-export function Menu({ open, onClose, align = "end", className, children }: MenuProps) {
+export function Menu({ open, onClose, align = "end", role = "menu", label, className, children }: MenuProps) {
     useEffect(() => {
         if (!open) return;
 
@@ -32,7 +35,8 @@ export function Menu({ open, onClose, align = "end", className, children }: Menu
         <>
             <div className="fixed inset-0 z-40" aria-hidden="true" onClick={onClose} />
             <div
-                role="menu"
+                role={role}
+                aria-label={label}
                 className={cn(
                     "absolute top-full z-50 mt-1 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
                     align === "end" ? "right-0" : "left-0",

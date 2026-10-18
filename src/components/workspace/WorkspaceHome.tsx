@@ -11,7 +11,7 @@ import { MembersDialog } from "@/features/pages/components/MembersDialog";
 import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
-import type { Page, PageSection } from "@/features/pages/types";
+import type { Page, PageKind, PageSection } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
@@ -24,6 +24,7 @@ import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/si
 import { PageView } from "./PageView";
 
 const NEW_PAGE_TITLE = "Unbenannte Seite";
+const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
 
 // Open pages are history entries (without URL change), so the browser and
 // Android back button return to the previous page or the page list.
@@ -163,13 +164,14 @@ export default function WorkspaceHome() {
         setWorkspaceId(nextWorkspaceId);
     }
 
-    async function createPage(parentId: string | null, section: PageSection) {
+    async function createPage(parentId: string | null, section: PageSection, kind: PageKind = "page") {
         if (creatingPage.current) return;
         creatingPage.current = true;
         setError("");
 
         try {
-            const createdPage = await createWorkspacePage(NEW_PAGE_TITLE, parentId, section);
+            const title = kind === "database" ? NEW_DATABASE_TITLE : NEW_PAGE_TITLE;
+            const createdPage = await createWorkspacePage(title, parentId, section, kind);
             openPage(createdPage.id, { isNew: true });
         } catch (err) {
             console.error("Page creation failed:", err);
@@ -177,6 +179,13 @@ export default function WorkspaceHome() {
         } finally {
             creatingPage.current = false;
         }
+    }
+
+    // A new entry stays in the table (its name gets the focus there).
+    async function createEntry(databaseId: string): Promise<string> {
+        const database = pages.find((item) => item.id === databaseId);
+        const entry = await createWorkspacePage("", databaseId, database?.visibility ?? "private");
+        return entry.id;
     }
 
     async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -282,7 +291,7 @@ export default function WorkspaceHome() {
                             signingOut={signOutStep.kind !== "idle"}
                             onSignOut={() => void handleSignOut()}
                             onSelect={(id) => openPage(id)}
-                            onCreatePage={(parentId, section) => void createPage(parentId, section)}
+                            onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
@@ -312,6 +321,10 @@ export default function WorkspaceHome() {
                                         ? (item, target) => setMovingPage({ page: item, target })
                                         : undefined
                                 }
+                                userId={user?.id}
+                                entries={(sharedPage ? sharedPages : pages).filter((item) => item.parent_id === page.id)}
+                                // Entries are created in the database's own workspace only (for now).
+                                onCreateEntry={sharedPage ? undefined : createEntry}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
