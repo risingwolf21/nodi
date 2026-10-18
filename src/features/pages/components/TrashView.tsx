@@ -7,6 +7,8 @@ import { Undo2, Trash2 } from "lucide-react";
 
 type TrashViewProps = {
     pages: Page[];
+    /** Only the owner of a page may delete it for good. */
+    userId: string | undefined;
     loading?: boolean;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
@@ -14,6 +16,7 @@ type TrashViewProps = {
 
 export function TrashView({
     pages,
+    userId,
     loading = false,
     onRestore,
     onDelete,
@@ -128,15 +131,17 @@ export function TrashView({
                             <Undo2 className="h-4 w-4" />
                         </Button>
 
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Endgültig löschen"
-                            aria-label={`„${page.title}“ endgültig löschen`}
-                            onClick={() => setPageToDelete(page)}
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {page.owner_id === userId && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Endgültig löschen"
+                                aria-label={`„${page.title}“ endgültig löschen`}
+                                onClick={() => setPageToDelete(page)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -158,7 +163,8 @@ export function TrashView({
             <div>
                 <h2 className="text-sm font-semibold">Papierkorb</h2>
                 <p className="text-xs text-muted-foreground">
-                    Archivierte Seiten und ihre Unterseiten
+                    Archivierte Seiten und ihre Unterseiten. Endgültig
+                    löschen kann nur, wem die Seite gehört.
                 </p>
             </div>
 

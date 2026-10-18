@@ -243,6 +243,7 @@ export default function WorkspaceHome() {
                                     />
                                 )
                             }
+                            userId={user?.id}
                             accountEmail={user?.email ?? null}
                             signingOut={signOutStep.kind !== "idle"}
                             onSignOut={() => void handleSignOut()}
