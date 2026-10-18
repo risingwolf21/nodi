@@ -108,12 +108,18 @@ Diese Entscheidungen sind verbindlich:
 -   **Merge Requests:** Jedes Arbeitspaket bekommt einen eigenen Pull
     Request mit nachvollziehbarer Beschreibung. Die CI-Pipeline
     (`.github/workflows/ci.yml`) muss grün sein.
+-   **Verdrängte Schreibvorgänge (Nutzer, 2026-10-17, Option A):**
+    Lehnt der Server eine lokale Änderung ab, weil ein anderes Gerät
+    eine neuere Version hat, lädt die App automatisch den Serverstand
+    und zeigt einen kurzen, nicht blockierenden Hinweis: „Diese Seite
+    wurde auf einem anderen Gerät geändert. Die neuere Version wurde
+    geladen.“ Kein Dialog, keine Rückfrage. Nie „Gespeichert“ anzeigen,
+    wenn die eigene Änderung verdrängt wurde.
 
 ### Noch nicht festgelegt
 
--   Ob Konfliktinformationen für den Nutzer sichtbar sein sollen, obwohl
-    die fachliche Strategie LWW ist.
--   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen.
+-   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen
+    (vorerst nein; später nachrüstbar).
 
 ## 3. Bekannter technischer Ist-Zustand
 
@@ -143,6 +149,7 @@ haben kann.
     -   shadcn-Ökosystem, `lucide-react`, Geist Variable Font
 -   Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
     (devDependencies), `workbox-window` (dependency).
+-   Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -220,7 +227,7 @@ createRoot(document.getElementById('root')!).render(
 
 ### Bekannte Dateien
 
-Stand nach Paket 4:
+Stand nach Paket 9:
 
 ``` text
 .env.example
@@ -241,6 +248,20 @@ src/
     ui/                     # shadcn: button, card, input, label, separator
     workspace/WorkspaceHome.tsx   # lädt BlockEditor per lazy()
   features/
+    auth/
+      sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
+      SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
+    editor/
+      components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
+      types.ts              # Dokument-, Versions- und Sync-Typen
+      document-sync.ts      # Validierung, LWW-Vergleich, Fehlerklassen
+      services/
+        local-document-store.ts      # IndexedDB `nodi-<userId>`
+        remote-document-repository.ts # Supabase: laden, RPC speichern
+        page-document-session.ts     # Bearbeiten einer offenen Seite
+        sync-engine.ts               # sendet alle ungesyncten Änderungen
+        account-sync.ts              # eine Sync-Engine je Konto und Tab
+        document-changes.ts          # BroadcastChannel zwischen Tabs
     pages/
       CreatePageForm.tsx
       PageTree.tsx
@@ -248,12 +269,17 @@ src/
       types.ts
       components/PageActionsDialog.tsx
       components/TrashView.tsx
-      hooks/usePages.ts
+      hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
+      hooks/useWorkspaces.ts
+      services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
-    auth-provider.tsx
-    supabase.ts
+    auth-provider.tsx       # inkl. Offline-Modus und Offline-Abmelden
+    remembered-account.ts   # id/E-Mail des Kontos (keine Tokens)
+    indexed-db.ts           # Verbindung, die ein Logout schließen kann
+    request-errors.ts       # Fehlerklassen offline/auth/temporär/dauerhaft
+    supabase.ts             # setzt `authStorageKey` ausdrücklich
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
 public/
@@ -264,8 +290,10 @@ design/
   README.md                 # wie die PNGs erzeugt werden
 supabase/
   config.toml
-  migrations/               # profiles, workspaces, pages, page_shares
-  tests/page_permissions.test.sql   # pgTAP
+  migrations/               # profiles, workspaces, pages, page_shares,
+                            # Spaltenschutz (P2), save_page_document (P6),
+                            # nur noch per RPC schreibbar (P8)
+  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -277,46 +305,83 @@ ist `strict` aber Standard (geprüft mit TS 6.0.3).
 
 ## 4. Bekannter Editor-Ablauf und wichtige Risiken
 
-Datei: `src/components/editor/BlockEditor.tsx`
+Datei: `src/components/editor/BlockEditor.tsx` (seit Paket 7 nur noch
+Darstellung; Ablauf in `src/features/editor/services/`).
 
-Der bisher geprüfte Editor:
+-   **Laden:** zuerst aus dem lokalen Store (IndexedDB, eine Datenbank
+    `nodi-<userId>` je Konto, Store `documents`, Schlüssel `pageId`).
+    Nur eine hier noch nie geöffnete Seite wird von Supabase geladen
+    und sofort lokal abgelegt. Ohne Server und ohne lokale Kopie
+    erscheint ein Hinweis statt eines leeren Editors.
+-   **Abgleich:** Eine lokale Kopie wird nach dem Öffnen einmal mit dem
+    Server verglichen. Eine ungesyncte lokale Änderung wird gesendet;
+    eine neuere Serverversion ersetzt eine synchronisierte Kopie. Was
+    der Nutzer währenddessen tippt, wird nicht überschrieben.
+-   **Speichern:** Bearbeitungszeit = Zeitpunkt der Eingabe; nach
+    800 ms Debounce wird ein Snapshot mit neuer Mutation-ID lokal
+    geschrieben (`synced: false`). Je Seite gibt es nur den letzten
+    Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
+    erst nach Serverbestätigung und nur, wenn die lokale Version noch
+    dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+-   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
+    bilden die Warteschlange; sie übersteht Neustarts, weil sie in
+    IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
+    in `WorkspaceHome`) sendet sie per RPC `save_page_document`, auch
+    für Seiten, die gerade nicht offen sind. Auslöser: Start, neue
+    Änderung, `online`, App wieder sichtbar, „Erneut versuchen".
+-   **Wiederholung:** offline/temporär/Auth → Backoff 2 s, 4 s, 8 s …
+    bis höchstens 5 min, nach 10 erfolglosen Durchläufen keine
+    zeitgesteuerten Versuche mehr (die Auslöser oben gelten weiter).
+    Dauerhafte Fehler werden nicht wiederholt, bis der Nutzer „Erneut
+    versuchen" wählt oder die App neu startet; die Änderung bleibt
+    lokal.
+-   **Mehrere Tabs:** Durchläufe sind per Web Locks
+    (`nodi-sync-<userId>`) über Tabs serialisiert. Jede Änderung am
+    lokalen Store wird per `BroadcastChannel` gemeldet; offene Editoren
+    lesen dann den Store und zeigen den neuen Stand, sofern dort
+    gerade nicht getippt wird.
+-   **Verdrängt (Option A):** Serverstand laden, lokale Kopie ersetzen,
+    kurzer Hinweis.
+-   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
+    „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
+    Änderung bleibt lokal erhalten.
+-   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
+    schreiben ausstehende Änderungen sofort lokal und senden sie.
+-   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
+    ohne Schreibrecht ist der Editor schreibgeschützt.
 
--   nutzt `useCreateBlockNote`, `useEditorChange` und `BlockNoteView`;
--   erhält `pageId` als Prop;
--   lädt `document` aus Supabase-Tabelle `page_documents`, gefiltert
-    nach `page_id`;
--   verwendet `maybeSingle()` und behandelt einen nicht vorhandenen
-    Datensatz als leeres Dokument;
--   speichert Änderungen nach etwa **800 ms Debounce** per `upsert`;
--   schreibt Felder `page_id`, `document`, `updated_at`, `updated_by`;
--   serialisiert das Dokument vor dem Speichern als Snapshot;
--   führt Schreibvorgänge über eine Promise-Warteschlange nacheinander
-    aus;
--   hält Statusmeldungen wie „Gespeichert", „Speichert ..." und
-    „Speichern fehlgeschlagen" vor;
--   versucht beim Verlassen des Editors, ausstehende Änderungen an
-    Supabase zu übergeben.
+### Offline-Start, Status und Logout (Paket 9)
 
-### Einschränkungen des bisherigen Ansatzes
-
-1.  Der Editor lädt ausschließlich von Supabase. Offline ist der
-    Ladevorgang nicht möglich.
-2.  Der Debounce und die Promise-Warteschlange liegen nur im
-    Arbeitsspeicher.
-3.  Bei einem Netzwerkfehler bleibt keine dauerhafte lokale
-    Synchronisierungswarteschlange bestehen.
-4.  Ein Aufruf beim Unmount garantiert nicht, dass ein asynchroner
-    Schreibvorgang abgeschlossen wird, bevor die Seite geschlossen oder
-    die App beendet wird.
-5.  `updated_at: new Date().toISOString()` stammt aus der Client-Uhr.
-    Diese kann falsch oder gegenüber anderen Geräten abweichend sein.
-6.  Ein `upsert` mit clientseitigem Zeitstempel setzt keine
-    serverseitige Konfliktregel um. Zwei Geräte können sich gegenseitig
-    Änderungen überschreiben, ohne dass eine echte LWW-Entscheidung nach
-    einer verlässlichen Ordnung getroffen wird.
-7.  `saveQueue` verhindert nur innerhalb dieser Editor-Instanz das
-    Überholen eigener Schreibvorgänge; sie synchronisiert nicht mehrere
-    Geräte oder Tabs.
+-   **Seitenbaum und Workspaces:** je Konto in IndexedDB
+    `nodi-<userId>-tree` (eigene DB, damit die Dokument-DB kein
+    Schema-Upgrade braucht, das offene alte Tabs blockieren würden).
+    Der Cache antwortet zuerst, der Server ersetzt ihn. Ist der Server
+    nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
+    nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
+    lehnen Änderungen zusätzlich ab). `online` lädt neu.
+-   **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
+    Netz da, liefert `getSession()` keine Sitzung, obwohl sie
+    gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
+    ~30 s. Der `AuthProvider` merkt sich daher id und E-Mail des Kontos
+    (`nodi-account` in `localStorage`, keine Tokens) und startet damit
+    im Offline-Modus (`offline: true`): sofort, wenn der Browser
+    offline meldet, sonst nach 3 s. Eine spätere Antwort von Supabase
+    entscheidet (neue Sitzung oder Login). Bei `online` wird die
+    Erneuerung angestoßen.
+-   **Gesamtstatus:** Die Engine führt eine Übersicht (ungesyncte
+    Seiten, Grund des letzten Abbruchs), die Kopfzeile zeigt sie per
+    `useSyncExternalStore`, ab `sm` mit Grund und „Erneut versuchen“.
+    Ohne ausstehende Änderungen steht dort „Offline“, wenn Sitzung oder
+    Seitenbaum aus lokalen Daten stammen.
+-   **Logout (Policy §2):** offene Editoren speichern lokal, dann
+    `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
+    „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
+    `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
+    Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
+    Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
+    nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
+    Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
+    schließt sich bei `versionchange` endgültig).
 
 **Wichtig:** Die PWA-Cache-Funktion löst diese Probleme nicht.
 Offline-Dokumentbearbeitung braucht zusätzlich eine lokale Datenbank und
@@ -593,6 +658,34 @@ gewöhnliches `upsert` mit Client-Zeitstempel genügt dafür nicht. Keine
 Datenbankfunktion oder Migration erfinden, bevor die tatsächlichen
 Spalten, Constraints und RLS-Regeln geprüft sind.
 
+**Umsetzung (Paket 6, `20261017180000_save_page_document_lww.sql`):**
+
+-   Neue Spalten `page_documents.client_updated_at` (Bearbeitungszeit,
+    `not null`, Default `now()`; Bestand mit `updated_at` befüllt) und
+    `last_mutation_id`.
+-   RPC `save_page_document(p_page_id, p_document, p_edited_at,
+    p_mutation_id)` → `(applied, stored_edited_at, stored_mutation_id)`.
+    Seit Paket 8 (`20261018070000_save_page_document_only.sql`)
+    `security definer` mit ausdrücklicher Prüfung
+    `can_edit_page(p_page_id)`; `insert`/`update` auf `page_documents`
+    sind für `anon`/`authenticated` entzogen, die LWW-Regel ist also
+    nicht mehr umgehbar. `execute` nur für `authenticated`.
+    `updated_by` bleibt der Aufrufer (`auth.uid()` aus dem JWT).
+-   Ordnung: `(client_updated_at, last_mutation_id)`. Übernommen wird
+    nur ein streng größeres Paar, atomar per
+    `insert … on conflict do update … where`. `p_edited_at` wird auf
+    `now()` gekappt.
+-   Auswertung im Client: `applied = true` → synchronisiert.
+    `applied = false` und `stored_mutation_id` = eigene ID → schon
+    früher übernommen (Wiederholung). Sonst → von einem neueren Stand
+    verdrängt; Serverstand neu laden.
+-   Fehlercodes: `42501` keine Schreibrechte oder Seite existiert
+    nicht (RLS greift vor dem Fremdschlüssel), `22023` Dokument ist
+    kein JSON-Array, `22004` Argument fehlt. Alle dauerhaft, nicht
+    wiederholen.
+-   `updated_at`/`updated_by` bleiben Serverzeit und Autor des letzten
+    übernommenen Schreibvorgangs.
+
 LWW kann Änderungen eines anderen Geräts bewusst überschreiben. Falls
 die App später wertvolle Inhalte schützt, sollte geprüft werden, ob
 überschriebenen Inhalt als Konfliktkopie aufbewahrt werden soll; das ist
@@ -611,6 +704,7 @@ eine fachliche Entscheidung und nicht automatisch einzuführen.
 -   Supabase RLS bleibt maßgeblich für den Serverzugriff.
 -   Keine Auth-Tokens in eigenen IndexedDB-Tabellen duplizieren, sofern
     es keinen zwingenden Grund gibt.
+-   Umsetzung siehe §4 „Offline-Start, Status und Logout“.
 
 ## 9. GitHub Pages und Build
 
@@ -629,6 +723,21 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 -   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
     **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
     `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
+-   Ablauf des Deploys: **`migrate` → `build` → `deploy`**. Der Job
+    `migrate` verknüpft das Supabase-Projekt und führt
+    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt er
+    fehl, wird nicht gebaut und nicht deployt. Benötigte Secrets:
+    `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
+    `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
+    (`cancel-in-progress: false`).
+-   **Regel für Migrationen:** Zwischen `migrate` und `deploy` läuft noch
+    das alte Frontend gegen das neue Schema. Migrationen müssen daher
+    rückwärtskompatibel sein (erst erweitern, alte Wege später in einer
+    eigenen Migration entfernen).
+-   Passt die Remote-Historie nicht zu `supabase/migrations` (z. B. eine
+    Migration wurde von Hand im SQL-Editor eingespielt), bricht
+    `db push` ab. Abhilfe lokal:
+    `supabase migration repair --status applied <version>`.
 -   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
     Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
     auf frischer DB, `supabase db lint`, `supabase test db`.
@@ -763,6 +872,71 @@ Arbeitspakete, je ein Pull Request:
     Backoff, Fehlerklassen, Mehrfach-Tabs.
 9.  **Offline-Start, Status, Logout:** Seitenbaum lesend cachen,
     Sync-Status, Logout-Policy gemäß §2.
+10. **Notion-Look-and-Feel** (Nutzerwunsch 2026-10-17, nach 7–9).
+    Muster und Anmutung wie Notion, aber keine Logos, Icons oder Grafiken
+    von Notion übernehmen. Entscheidungen des Nutzers:
+    -   **Seitenleiste:** heller grauer Hintergrund, kompakte Zeilen,
+        Aufklapp-Pfeile, Emoji je Seite, Workspace oben, „Neue Seite“ und
+        Papierkorb unten, Aktionen beim Überfahren (Touch: sichtbar).
+    -   **Seitenkopf:** großer, direkt im Inhalt bearbeitbarer Titel,
+        wählbares Emoji-Icon (Spalte `pages.icon` existiert bereits, keine
+        Migration nötig), schmale Leiste oben mit Pfad, Speicherstatus und
+        „…“-Menü.
+    -   **Optik:** ruhige, neutrale Palette und Abstände, schmale
+        zentrierte Textspalte, Dark Mode automatisch nach
+        Systemeinstellung. **Branding:** neutral, nodi-Indigo `#6366F1`
+        nur als Akzent (Logo, Auswahl, Fokus, Links).
+    -   **Editor auf Deutsch:** BlockNote-Übersetzung aktivieren.
+    -   **Mobil (PWA):** wie die Notion-App. Startansicht ist die
+        Seitenliste als ganzer Bildschirm, eine Seite öffnet sich mit
+        Zurück-Pfeil oben links. Ersetzt die Schublade aus Paket 5 auf
+        kleinen Bildschirmen.
+    -   Nicht im ersten Wurf: Titelbilder (Storage), Verschieben per
+        Drag & Drop (braucht Zyklenprüfung), Suche, Favoriten.
+11. **Teilen und Berechtigungen nach dem Notion-Modell**
+    (Nutzerwunsch 2026-10-18).
+    -   **Verschlüsselung:** keine Ende-zu-Ende-Verschlüsselung; der
+        Server darf Inhalte lesen (Suche, Teilen, Server-Funktionen).
+        Encryption at rest übernimmt die Plattform (Supabase/AWS,
+        AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
+        nur HTTPS-Endpunkte.
+    -   **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
+        ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
+    -   **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
+        abgesichert: Zugriff nur für Owner, Workspace-Mitglieder oder
+        geteilte Nutzer, inklusive Vererbung über `parent_id`.
+        Berechtigungen nie nur im Frontend prüfen. Der Service-Role-Key
+        nur in Edge Functions, nie im Client.
+    -   **Abgleich mit dem Ist-Stand (2026-10-18):**
+        -   `page_shares` (`read`/`edit`) entspricht dem vorgeschlagenen
+            `page_permissions` (`viewer`/`editor`); der Owner ist
+            `pages.owner_id`. Vorschlag: Tabelle behalten statt umbenennen;
+            eine eigene Rolle `owner` wäre eine zweite Quelle der Wahrheit.
+        -   Der Inhalt liegt in `page_documents` (LWW-RPC, Pakete 6–8),
+            nicht in `pages.content`; so bleibt es.
+        -   RLS gibt es bereits über `can_read_page`/`can_edit_page`.
+            **Neu nötig:** Vererbung: ein Share auf eine Seite gilt für
+            alle Unterseiten (rekursiv über `parent_id`, mit begrenzter
+            Tiefe, solange Verschieben keine Zyklenprüfung hat, §13).
+        -   **Neu nötig:** Oberfläche zum Teilen (Nutzer per E-Mail
+            einladen, Rolle ändern, Zugriff entziehen; nur der Owner).
+        -   **Neu nötig:** Wird der Zugriff entzogen, löscht der Client
+            beim nächsten Kontakt mit dem Server die lokale Kopie und den
+            Eintrag im Seitenbaum-Cache. Offline bleibt eine bereits
+            geladene Kopie bis dahin auf dem Gerät; „sofort“ gilt für den
+            Server.
+        -   Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
+            CI-Check auf `dist/`).
+    -   **Vor der Umsetzung zu entscheiden:** Vererbung auch für
+        `private` Unterseiten? Öffentliche Links (`pages.is_public` oder
+        Share-Token, Zugriff dann nur über eine RPC, nicht über
+        anon-RLS) jetzt oder später? Wie findet der Owner einen Nutzer
+        (E-Mail, ohne alle Profile offenzulegen)?
+    -   **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
+        Zeilen (`pages`, `page_documents`), auch für Unterseiten.
+        Viewer kann lesen, aber nicht schreiben (`save_page_document` →
+        `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
+        Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -774,10 +948,10 @@ Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
 Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   `BlockEditor` lädt nur von Supabase und speichert nur im Speicher;
-    kein Speichern bei `pagehide`/`visibilitychange`.
--   Read-only geteilte Seiten sind im Editor bearbeitbar; Speichern
-    scheitert dann an RLS.
+-   (Behoben in Paket 7) `BlockEditor` lud nur von Supabase und
+    speicherte nur im Speicher.
+-   (Behoben in Paket 7) Read-only geteilte Seiten waren im Editor
+    bearbeitbar.
 
 Behoben in Paket 2 (`20261016175500_protect_page_columns.sql`):
 Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
@@ -799,13 +973,34 @@ Noch nicht abschließend geprüft:
 -   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
     Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
     Verschieben derzeit nicht an.
--   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
+-   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
+    lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
+-   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
+    dauern (kein eigener Timeout).
+-   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
+    ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
+    bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 -   Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
     und 5 nur in Chromium mit Geräte-Emulation geprüft).
 -   Das Aktionsmenü im Seitenbaum schließt sich nicht bei Tipp
     außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
+-   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
+    entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
+    Apps älter als Paket 7 können erst nach Bestätigung des
+    Update-Hinweises wieder speichern.
+-   Der Hinweis „auf einem anderen Gerät geändert" erscheint auch, wenn
+    eine neuere Änderung aus einem anderen Tab desselben Geräts gewinnt.
+-   Der Client vergleicht Versionen mit Millisekunden, der Server mit
+    Mikrosekunden (nur bei gekappten Zeitstempeln relevant). Das
+    betrifft nur die lokale Entscheidung, ob eine synchronisierte Kopie
+    ersetzt wird; maßgeblich bleibt die Serverordnung.
+-   Grenzfall der Kappung: Wird eine Mutation mit Zeitstempel aus der
+    Zukunft nach einem verlorenen Response wiederholt und wurde sie
+    inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
+    und kann gewinnen.
+-   UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.

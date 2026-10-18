@@ -63,9 +63,18 @@ einem pgTAP-Test absichern.
   Push auf `master`: Lint, Build, Prüfung des Base-Pfads `/nodi/`, alle
   Migrationen auf einer frischen Datenbank, `supabase db lint` und
   `supabase test db`.
-- **Deployment** (`.github/workflows/deploy.yml`) auf GitHub Pages bei Push auf
-  den Branch `production`. Benötigt die Repository-Secrets
-  `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY`.
+- **Deployment** (`.github/workflows/deploy.yml`) bei Push auf den Branch
+  `production`: zuerst werden ausstehende Datenbank-Migrationen auf das
+  Supabase-Projekt angewendet (`supabase db push`), danach wird gebaut und auf
+  GitHub Pages veröffentlicht. Schlägt die Migration fehl, wird nicht deployt.
+  Benötigte Repository-Secrets:
+
+  | Secret | Wofür |
+  |---|---|
+  | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Build des Frontends |
+  | `SUPABASE_ACCESS_TOKEN` | Supabase-CLI (persönlicher Access Token) |
+  | `SUPABASE_DB_PASSWORD` | Passwort der Produktiv-Datenbank |
+  | `SUPABASE_PROJECT_ID` | Project Ref des Supabase-Projekts |
 
 ## PWA
 

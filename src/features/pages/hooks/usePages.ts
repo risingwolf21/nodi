@@ -1,18 +1,23 @@
 
 import { useCallback, useEffect, useState } from "react";
+import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
-import type { Page } from "../types";
+import { pageTreeCacheFor } from "../services/page-tree-cache";
+import type { Page, StoredPage } from "../types";
 
-type StoredPage = Page & {
-    is_archived: boolean;
-};
+export const OFFLINE_READ_ONLY_MESSAGE =
+    "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
+
+const toPage = ({ id, title, parent_id }: StoredPage): Page => ({ id, title, parent_id });
 
 type UsePagesResult = {
     pages: Page[];
     archivedPages: Page[];
     loading: boolean;
     error: string;
+    /** The tree comes from the local cache because the server is unreachable. */
+    fromCache: boolean;
     createPage: (title: string, parentId: string | null) => Promise<Page>;
     renamePage: (pageId: string, title: string) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
@@ -28,53 +33,73 @@ export function usePages(
     const [archivedPages, setArchivedPages] = useState<Page[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [fromCache, setFromCache] = useState(false);
+    // Workspace the shown pages belong to; guards the cache write below.
+    const [shownWorkspaceId, setShownWorkspaceId] = useState("");
+    const [reloadCount, setReloadCount] = useState(0);
+
+    // A hint only: back online, ask the server again.
+    useEffect(() => {
+        const reload = () => setReloadCount((count) => count + 1);
+        window.addEventListener("online", reload);
+        return () => window.removeEventListener("online", reload);
+    }, []);
 
     useEffect(() => {
         let active = true;
+        let serverAnswered = false;
+
+        function show(storedPages: StoredPage[], cached: boolean) {
+            setPages(storedPages.filter((page) => !page.is_archived).map(toPage));
+            setArchivedPages(storedPages.filter((page) => page.is_archived).map(toPage));
+            setShownWorkspaceId(workspaceId);
+            setFromCache(cached);
+        }
 
         async function load() {
             setLoading(true);
             setError("");
 
             try {
-                if (!workspaceId) {
-                    if (active) {
-                        setPages([]);
-                        setArchivedPages([]);
-                    }
+                if (!workspaceId || !userId) {
+                    if (active) show([], false);
                     return;
                 }
 
-                const { data, error: loadError } = await supabase
+                // The cache answers first; the server replaces it when it answers.
+                const cachedRead = pageTreeCacheFor(userId)
+                    .getPages(workspaceId)
+                    .catch((cacheError: unknown) => {
+                        console.warn("Lokaler Seitenbaum ist nicht lesbar:", cacheError);
+                        return null;
+                    });
+                void cachedRead.then((cached) => {
+                    if (cached && active && !serverAnswered) show(cached, true);
+                });
+
+                const response = await supabase
                     .from("pages")
                     .select("id,title,parent_id,is_archived")
                     .eq("workspace_id", workspaceId)
                     .order("created_at", { ascending: true });
-
-                if (loadError) throw loadError;
+                serverAnswered = true;
                 if (!active) return;
 
-                const storedPages = (data ?? []) as StoredPage[];
+                const failure = toRequestError(response);
+                if (failure?.reason === "offline") {
+                    const cached = await cachedRead;
+                    if (!active) return;
+                    if (cached) {
+                        show(cached, true);
+                        return;
+                    }
+                    throw new Error(
+                        "Die Seiten sind offline noch nicht verfügbar. Öffne Nodi einmal mit Internetverbindung.",
+                    );
+                }
+                if (failure) throw failure;
 
-                setPages(
-                    storedPages
-                        .filter((page) => !page.is_archived)
-                        .map(({ id, title, parent_id }) => ({
-                            id,
-                            title,
-                            parent_id,
-                        })),
-                );
-
-                setArchivedPages(
-                    storedPages
-                        .filter((page) => page.is_archived)
-                        .map(({ id, title, parent_id }) => ({
-                            id,
-                            title,
-                            parent_id,
-                        })),
-                );
+                show((response.data ?? []) as StoredPage[], false);
             } catch (err) {
                 if (active) {
                     setError(
@@ -93,13 +118,34 @@ export function usePages(
         return () => {
             active = false;
         };
-    }, [workspaceId]);
+    }, [workspaceId, userId, reloadCount]);
+
+    // Keeps the cache in step with what the server confirmed, including
+    // the changes below. A cached tree is never written back.
+    useEffect(() => {
+        if (!userId || !shownWorkspaceId || fromCache) return;
+
+        const storedPages: StoredPage[] = [
+            ...pages.map((page) => ({ ...page, is_archived: false })),
+            ...archivedPages.map((page) => ({ ...page, is_archived: true })),
+        ];
+        pageTreeCacheFor(userId)
+            .putPages(shownWorkspaceId, storedPages)
+            .catch((cacheError: unknown) => {
+                console.warn("Seitenbaum konnte nicht lokal gespeichert werden:", cacheError);
+            });
+    }, [userId, shownWorkspaceId, fromCache, pages, archivedPages]);
+
+    const requireOnline = useCallback(() => {
+        if (fromCache) throw new Error(OFFLINE_READ_ONLY_MESSAGE);
+    }, [fromCache]);
 
     const createPage = useCallback(
         async (title: string, parentId: string | null): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
+            requireOnline();
 
             const normalizedTitle = title.trim();
 
@@ -133,11 +179,12 @@ export function usePages(
 
             return createdPage;
         },
-        [userId, workspaceId],
+        [userId, workspaceId, requireOnline],
     );
 
     const renamePage = useCallback(
         async (pageId: string, title: string) => {
+            requireOnline();
             const normalizedTitle = title.trim();
 
             if (!normalizedTitle) {
@@ -163,11 +210,12 @@ export function usePages(
                 ),
             );
         },
-        [workspaceId],
+        [workspaceId, requireOnline],
     );
 
     const archivePage = useCallback(
         async (pageId: string): Promise<string[]> => {
+            requireOnline();
             setError("");
 
             const allPages = [...pages, ...archivedPages];
@@ -199,11 +247,12 @@ export function usePages(
 
             return ids;
         },
-        [pages, archivedPages, workspaceId],
+        [pages, archivedPages, workspaceId, requireOnline],
     );
 
     const restorePage = useCallback(
         async (pageId: string): Promise<string[]> => {
+            requireOnline();
             setError("");
 
             const ids = collectRestoreIds(pageId, archivedPages);
@@ -236,12 +285,13 @@ export function usePages(
 
             return ids;
         },
-        [archivedPages, workspaceId],
+        [archivedPages, workspaceId, requireOnline],
     );
 
 
     const permanentlyDeletePage = useCallback(
         async (pageId: string): Promise<string[]> => {
+            requireOnline();
             setError("");
 
             const ids = collectDescendantIds(pageId, archivedPages);
@@ -269,7 +319,7 @@ export function usePages(
 
             return ids;
         },
-        [archivedPages, workspaceId],
+        [archivedPages, workspaceId, requireOnline],
     );
 
 
@@ -278,6 +328,7 @@ export function usePages(
         archivedPages,
         loading,
         error,
+        fromCache,
         createPage,
         renamePage,
         archivePage,

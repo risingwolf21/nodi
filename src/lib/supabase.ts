@@ -10,7 +10,12 @@ if (!supabaseUrl || !supabasePublishableKey) {
   );
 }
 
+// The supabase-js default, set explicitly so existing sessions stay valid
+// and an offline sign-out can remove the stored session (auth-provider).
+export const authStorageKey = `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`;
+
 export const supabase = createClient(
   supabaseUrl,
   supabasePublishableKey,
+  { auth: { storageKey: authStorageKey } },
 );
