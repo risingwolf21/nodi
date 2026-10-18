@@ -102,4 +102,54 @@ export const pageSharing = {
         );
         if (error) throw error;
     },
+
+    /** Token of the page's public link, null if the page is not published. */
+    async getPublicLink(pageId: string): Promise<string | null> {
+        const response = await supabase
+            .from("page_public_links")
+            .select("token")
+            .eq("page_id", pageId)
+            .maybeSingle();
+        const error = failure(response, (offline) =>
+            offline
+                ? "Der öffentliche Link kann nur mit Internetverbindung geladen werden."
+                : "Der öffentliche Link konnte nicht geladen werden.",
+        );
+        if (error) throw error;
+        return parseToken(response.data);
+    },
+
+    /** Publishes the page; anyone with the link can read it (this page only). */
+    async createPublicLink(pageId: string, userId: string): Promise<string> {
+        const response = await supabase
+            .from("page_public_links")
+            .insert({ page_id: pageId, created_by: userId })
+            .select("token")
+            .single();
+        const error = failure(response, (offline) =>
+            offline
+                ? "Ein öffentlicher Link geht nur mit Internetverbindung."
+                : "Der öffentliche Link konnte nicht erstellt werden.",
+        );
+        if (error) throw error;
+
+        const token = parseToken(response.data);
+        if (!token) throw new Error("Der öffentliche Link konnte nicht erstellt werden.");
+        return token;
+    },
+
+    /** Revokes the link at once; a new link gets a new token. */
+    async deletePublicLink(pageId: string): Promise<void> {
+        const response = await supabase.from("page_public_links").delete().eq("page_id", pageId);
+        const error = failure(response, (offline) =>
+            offline
+                ? "Der Link kann nur mit Internetverbindung deaktiviert werden."
+                : "Der Link konnte nicht deaktiviert werden.",
+        );
+        if (error) throw error;
+    },
 };
+
+function parseToken(row: unknown): string | null {
+    return isObject(row) && typeof row.token === "string" ? row.token : null;
+}

@@ -252,9 +252,11 @@ src/
   index.css
   vite-env.d.ts
   components/
+    LoadErrorBoundary.tsx   # Fehler beim Nachladen: Hinweis + „Neu laden“
     auth/AuthForm.tsx
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
+    editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb)
@@ -283,13 +285,17 @@ src/
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
-      components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen (nur Owner)
+      components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
       hooks/useSharedPages.ts       # „Mit mir geteilt“, Cache zuerst, nur lesend
       hooks/useWorkspaces.ts
       services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
-      services/page-sharing.ts      # RPCs share_page/list_page_shares, Entziehen
+      services/page-sharing.ts      # RPCs share_page/list_page_shares, Entziehen, Links
+    public/
+      public-page.ts        # Token aus `?p=`, Link-URL, RPC get_public_page
+      PublicPage.tsx        # öffentliche Ansicht ohne Login (in main.tsx gewählt)
+      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
@@ -1014,6 +1020,20 @@ Arbeitspakete, je ein Pull Request:
             vollständige Antwort (Fehler, offline, `count` ≠ Zeilen)
             wird nichts gelöscht. Seitenbaum- und Geteilt-Cache werden
             bei der nächsten Serverantwort ersetzt.
+    -   **Umsetzung 11c** (nur Frontend, keine Migration):
+        -   Link: `…/nodi/?p=<token>` (Query-Parameter, braucht auf
+            GitHub Pages keine eigene Route; URL relativ zu `BASE_URL`).
+        -   Teilen-Dialog: „Link erstellen“ (`insert` in
+            `page_public_links`, Token vom Server), „Kopieren“, „Link
+            deaktivieren“ (`delete`, wirkt sofort; ein neuer Link hat
+            einen neuen Token). Nur Owner, nur online.
+        -   `main.tsx` zeigt bei `?p=` die öffentliche Ansicht statt der
+            App, ohne `AuthProvider`: kein Login, keine Sync-Engine,
+            nichts in IndexedDB. Ein ungültiges Token wird nicht
+            angefragt. Inhalt per `get_public_page`, validiert, BlockNote
+            mit `editable={false}`. Fehler: ungültig/deaktiviert/
+            archiviert („Dieser Link ist ungültig oder wurde
+            deaktiviert.“), offline, sonstige.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -1063,8 +1083,11 @@ Noch nicht abschließend geprüft:
     Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
     Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
     (Workspace-Menü) erreichbar.
--   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
-    keine Error-Boundary.
+-   (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
+    der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt
+    `LoadErrorBoundary` ihn ab: Pfad und Zurück bleiben, Hinweis mit
+    „Neu laden“ (ein abgelehnter `import()` bleibt bis zum Neuladen
+    abgelehnt). Je Seite eine eigene Boundary (`key={page.id}`).
 -   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
     entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
     Apps älter als Paket 7 können erst nach Bestätigung des
@@ -1087,6 +1110,11 @@ Noch nicht abschließend geprüft:
     stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
     Editoren aus anderen Workspaces können Titel und Icon geteilter
     Seiten nicht ändern (nur Inhalt).
+-   Öffentliche Links (11c): Seiten haben kein `noindex`; wer den Link
+    öffentlich postet, macht die Seite für Suchmaschinen auffindbar.
+    Öffentliche Seiten sind offline nicht verfügbar (bewusst nicht
+    gespeichert). Auch angemeldete Nutzer sehen unter `?p=` nur die
+    öffentliche Ansicht.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
