@@ -278,6 +278,9 @@ src/
       components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
       components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
       components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
+      components/BoardView.tsx       # Board: Spalten je Option, Ziehen setzt den Wert (14c)
+      components/ListView.tsx        # Liste (14c)
+      components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -1260,6 +1263,25 @@ Arbeitspakete, je ein Pull Request:
         -   Noch nicht: Einträge in geteilten Datenbanken anderer Workspaces
             anlegen (nur ansehen und Werte ändern), manuelle Reihenfolge per
             Ziehen, Optionen umbenennen/einfärben/löschen.
+    -   **Umsetzung 14c** (nur Frontend, keine Migration):
+        -   Neue Ansichten Board, Liste, Galerie („+“ an den Tabs wählt den
+            Typ). Filter, Sortierung und sichtbare Eigenschaften gelten wie
+            in der Tabelle.
+        -   Board: eine Spalte je Option einer Auswahl- oder
+            Status-Eigenschaft, vorn „Ohne <Name>“ für Einträge ohne
+            (gültigen) Wert. Gruppiert wird nach `config.groupByPropertyId`,
+            sonst nach der ersten Status-, dann Auswahl-Eigenschaft
+            („Gruppieren“ in der Leiste). Ohne passende Eigenschaft bietet
+            das Board „Status-Eigenschaft anlegen“ an. Karten per Ziehen
+            (Maus) in eine andere Spalte = Wert setzen (`set_page_property`,
+            sofort sichtbar); auf Touch-Geräten ändert man den Wert im
+            Eintrag. Die Gruppen-Eigenschaft steht nicht auf den Karten.
+        -   Liste: eine Zeile je Eintrag, Werte rechts (ab `sm`). Galerie:
+            Karten im Raster, ohne Titelbilder.
+        -   „Neu“ in Board, Liste und Galerie legt einen Eintrag an und
+            öffnet ihn; in einer Board-Spalte bekommt er deren Wert.
+        -   Noch nicht: Reihenfolge innerhalb einer Spalte per Ziehen,
+            Spalten ausblenden, Titelbilder in der Galerie.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

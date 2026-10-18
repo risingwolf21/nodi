@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { Plus, Table2 } from "lucide-react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
+import { CalendarDays, Columns3, LayoutGrid, List, Plus, Rss, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import type { Page } from "@/features/pages/types";
 import { cn } from "@/lib/utils";
@@ -9,13 +9,26 @@ import {
     applyView,
     buildRows,
     defaultOptions,
+    groupProperty,
     visibleProperties,
 } from "../database-model";
 import { useDatabase } from "../hooks/useDatabase";
-import type { DatabaseView as DatabaseViewModel } from "../types";
+import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
+import { BoardView } from "./BoardView";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { GalleryView } from "./GalleryView";
+import { ListView } from "./ListView";
 import { TableView } from "./TableView";
-import { FilterPanel, PropertiesPanel, SortPanel } from "./ViewSettingsPanels";
+import { FilterPanel, GroupPanel, PropertiesPanel, SortPanel } from "./ViewSettingsPanels";
+
+const VIEW_ICONS = {
+    table: Table2,
+    board: Columns3,
+    list: List,
+    gallery: LayoutGrid,
+    feed: Rss,
+    calendar: CalendarDays,
+} satisfies Record<ViewType, unknown>;
 
 type DatabaseViewProps = {
     database: Page;
@@ -49,6 +62,7 @@ function ViewTab({
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [name, setName] = useState(view.name);
+    const Icon = VIEW_ICONS[view.type];
 
     function rename(event?: FormEvent<HTMLFormElement>) {
         event?.preventDefault();
@@ -76,7 +90,7 @@ function ViewTab({
                     active ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
             >
-                <Table2 className="size-3.5" aria-hidden="true" />
+                <Icon className="size-3.5" aria-hidden="true" />
                 {view.name}
             </button>
             <Menu open={menuOpen} onClose={() => rename()} align="start" className="w-56">
@@ -137,6 +151,7 @@ export function DatabaseView({
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
     const [addViewOpen, setAddViewOpen] = useState(false);
+    const creatingEntry = useRef(false);
 
     const views = useMemo(() => [...(data?.views ?? [])].sort((a, b) => a.position - b.position), [data]);
     const activeView = views.find((view) => view.id === activeViewId) ?? views[0];
@@ -159,10 +174,10 @@ export function DatabaseView({
     const run = (action: Promise<void>): Promise<void> =>
         action.catch((err: unknown) => report(err instanceof Error ? err.message : "Das hat nicht geklappt."));
 
-    async function addNewView() {
+    async function addNewView(type: ViewType) {
         setAddViewOpen(false);
         try {
-            const view = await addView("table");
+            const view = await addView(type);
             setActiveViewId(view.id);
         } catch (err) {
             report(err instanceof Error ? err.message : "Die Ansicht konnte nicht angelegt werden.");
@@ -170,6 +185,23 @@ export function DatabaseView({
     }
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
+    const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
+
+    // Board, list and gallery open a new entry at once (like Notion); a
+    // board column also sets its value.
+    async function createAndOpenEntry(groupValue?: { propertyId: string; optionId: string | null }) {
+        if (!onCreateEntry || creatingEntry.current) return;
+        creatingEntry.current = true;
+        try {
+            const pageId = await onCreateEntry();
+            if (groupValue?.optionId) await setValue(pageId, groupValue.propertyId, groupValue.optionId);
+            onOpenEntry(pageId);
+        } catch (err) {
+            report(err instanceof Error ? err.message : "Der Eintrag konnte nicht angelegt werden.");
+        } finally {
+            creatingEntry.current = false;
+        }
+    }
 
     return (
         <div className="space-y-2">
@@ -195,24 +227,36 @@ export function DatabaseView({
                             type="button"
                             aria-label="Ansicht hinzufügen"
                             aria-expanded={addViewOpen}
-                            onClick={() =>
-                                AVAILABLE_VIEW_TYPES.length === 1 ? void addNewView() : setAddViewOpen(true)
-                            }
+                            onClick={() => setAddViewOpen(true)}
                             className="flex size-8 items-center justify-center rounded text-muted-foreground hover:bg-accent/60"
                         >
                             <Plus className="size-4" />
                         </button>
                         <Menu open={addViewOpen} onClose={() => setAddViewOpen(false)} align="start">
-                            {AVAILABLE_VIEW_TYPES.map((type) => (
-                                <MenuItem key={type} onSelect={() => void addNewView()}>
-                                    {VIEW_TYPE_LABELS[type]}
-                                </MenuItem>
-                            ))}
+                            {AVAILABLE_VIEW_TYPES.map((type) => {
+                                const Icon = VIEW_ICONS[type];
+                                return (
+                                    <MenuItem key={type} onSelect={() => void addNewView(type)}>
+                                        <Icon className="size-4" aria-hidden="true" />
+                                        {VIEW_TYPE_LABELS[type]}
+                                    </MenuItem>
+                                );
+                            })}
                         </Menu>
                     </div>
                 )}
                 {activeView && (
                     <div className="ml-auto flex flex-wrap items-center gap-0.5">
+                        {activeView.type === "board" && (
+                            <GroupPanel
+                                config={activeView.config}
+                                properties={data.properties}
+                                editable={editable}
+                                current={boardGroup}
+                                onChange={(config) => updateView(activeView.id, { config })}
+                                onError={report}
+                            />
+                        )}
                         <FilterPanel
                             config={activeView.config}
                             properties={data.properties}
@@ -255,7 +299,44 @@ export function DatabaseView({
                 </p>
             )}
 
-            {activeView && (
+            {activeView?.type === "board" && (
+                <BoardView
+                    rows={rows}
+                    properties={columns}
+                    groupBy={boardGroup}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={
+                        onCreateEntry && boardGroup
+                            ? (optionId) => createAndOpenEntry({ propertyId: boardGroup.id, optionId })
+                            : undefined
+                    }
+                    onMoveEntry={(pageId, optionId) => setValue(pageId, boardGroup?.id ?? "", optionId)}
+                    onAddGroupProperty={async () => {
+                        await addProperty("status");
+                    }}
+                    onError={report}
+                />
+            )}
+            {activeView?.type === "list" && (
+                <ListView
+                    rows={rows}
+                    properties={columns}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                />
+            )}
+            {activeView?.type === "gallery" && (
+                <GalleryView
+                    rows={rows}
+                    properties={columns}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                />
+            )}
+            {activeView?.type === "table" && (
                 <TableView
                     rows={rows}
                     properties={columns}
