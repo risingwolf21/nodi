@@ -227,7 +227,7 @@ createRoot(document.getElementById('root')!).render(
 
 ### Bekannte Dateien
 
-Stand nach Paket 7:
+Stand nach Paket 8:
 
 ``` text
 .env.example
@@ -254,7 +254,10 @@ src/
       services/
         local-document-store.ts      # IndexedDB `nodi-<userId>`
         remote-document-repository.ts # Supabase: laden, RPC speichern
-        page-document-session.ts     # Speichern/Sync einer offenen Seite
+        page-document-session.ts     # Bearbeiten einer offenen Seite
+        sync-engine.ts               # sendet alle ungesyncten Änderungen
+        account-sync.ts              # eine Sync-Engine je Konto und Tab
+        document-changes.ts          # BroadcastChannel zwischen Tabs
     pages/
       CreatePageForm.tsx
       PageTree.tsx
@@ -279,7 +282,8 @@ design/
 supabase/
   config.toml
   migrations/               # profiles, workspaces, pages, page_shares,
-                            # Spaltenschutz (P2), save_page_document (P6)
+                            # Spaltenschutz (P2), save_page_document (P6),
+                            # nur noch per RPC schreibbar (P8)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
 ```
 
@@ -305,33 +309,47 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     eine neuere Serverversion ersetzt eine synchronisierte Kopie. Was
     der Nutzer währenddessen tippt, wird nicht überschrieben.
 -   **Speichern:** Bearbeitungszeit = Zeitpunkt der Eingabe; nach
-    800 ms Debounce wird ein Snapshot mit neuer Mutation-ID zuerst
-    lokal geschrieben (`synced: false`), dann per RPC
-    `save_page_document` gesendet. „Gespeichert" erst nach
-    Serverbestätigung und nur, wenn die lokale Version noch dieselbe
-    ist (Compare-and-set in einer IndexedDB-Transaktion).
+    800 ms Debounce wird ein Snapshot mit neuer Mutation-ID lokal
+    geschrieben (`synced: false`). Je Seite gibt es nur den letzten
+    Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
+    erst nach Serverbestätigung und nur, wenn die lokale Version noch
+    dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+-   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
+    bilden die Warteschlange; sie übersteht Neustarts, weil sie in
+    IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
+    in `WorkspaceHome`) sendet sie per RPC `save_page_document`, auch
+    für Seiten, die gerade nicht offen sind. Auslöser: Start, neue
+    Änderung, `online`, App wieder sichtbar, „Erneut versuchen".
+-   **Wiederholung:** offline/temporär/Auth → Backoff 2 s, 4 s, 8 s …
+    bis höchstens 5 min, nach 10 erfolglosen Durchläufen keine
+    zeitgesteuerten Versuche mehr (die Auslöser oben gelten weiter).
+    Dauerhafte Fehler werden nicht wiederholt, bis der Nutzer „Erneut
+    versuchen" wählt oder die App neu startet; die Änderung bleibt
+    lokal.
+-   **Mehrere Tabs:** Durchläufe sind per Web Locks
+    (`nodi-sync-<userId>`) über Tabs serialisiert. Jede Änderung am
+    lokalen Store wird per `BroadcastChannel` gemeldet; offene Editoren
+    lesen dann den Store und zeigen den neuen Stand, sofern dort
+    gerade nicht getippt wird.
 -   **Verdrängt (Option A):** Serverstand laden, lokale Kopie ersetzen,
     kurzer Hinweis.
 -   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
     „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
-    Änderung bleibt lokal erhalten. Das `online`-Ereignis löst einen
-    Versuch aus (nur als Hinweis).
+    Änderung bleibt lokal erhalten.
 -   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
     schreiben ausstehende Änderungen sofort lokal und senden sie.
 -   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
     ohne Schreibrecht ist der Editor schreibgeschützt.
 
-### Noch offene Einschränkungen (Pakete 8 und 9)
+### Noch offene Einschränkungen (Paket 9)
 
-1.  Kein automatisches Wiederholen mit Backoff im Hintergrund: Eine
-    ungesyncte Änderung wird erst beim nächsten Öffnen der Seite, bei
-    der nächsten Eingabe, beim `online`-Ereignis oder per Knopf
-    erneut gesendet.
-2.  Mehrere Tabs desselben Kontos stimmen sich nicht ab; der Server
-    ordnet ihre Schreibvorgänge per LWW.
-3.  Seitenbaum und Workspaces werden noch nicht gecacht; ein
+1.  Seitenbaum und Workspaces werden noch nicht gecacht; ein
     Offline-Start zeigt daher keine Seiten.
-4.  Logout löscht die lokale Datenbank noch nicht (Policy §2, Paket 9).
+2.  Logout löscht die lokale Datenbank noch nicht und synchronisiert
+    vorher nicht gezielt (Policy §2). Die Engine stoppt beim Logout
+    nur ihre zeitgesteuerten Wiederholungen.
+3.  Kein gesamter Sync-Status (z. B. „3 Seiten nicht synchronisiert");
+    nur der Editor zeigt den Status der offenen Seite.
 
 **Wichtig:** Die PWA-Cache-Funktion löst diese Probleme nicht.
 Offline-Dokumentbearbeitung braucht zusätzlich eine lokale Datenbank und
@@ -615,8 +633,12 @@ Spalten, Constraints und RLS-Regeln geprüft sind.
     `last_mutation_id`.
 -   RPC `save_page_document(p_page_id, p_document, p_edited_at,
     p_mutation_id)` → `(applied, stored_edited_at, stored_mutation_id)`.
-    `security invoker`, d. h. die RLS-Policies von `page_documents`
-    gelten; `execute` nur für `authenticated`.
+    Seit Paket 8 (`20261018070000_save_page_document_only.sql`)
+    `security definer` mit ausdrücklicher Prüfung
+    `can_edit_page(p_page_id)`; `insert`/`update` auf `page_documents`
+    sind für `anon`/`authenticated` entzogen, die LWW-Regel ist also
+    nicht mehr umgehbar. `execute` nur für `authenticated`.
+    `updated_by` bleibt der Aufrufer (`auth.uid()` aus dem JWT).
 -   Ordnung: `(client_updated_at, last_mutation_id)`. Übernommen wird
     nur ein streng größeres Paar, atomar per
     `insert … on conflict do update … where`. `p_edited_at` wird auf
@@ -881,11 +903,12 @@ Noch nicht abschließend geprüft:
     außerhalb. BlockNote-Texte (Platzhalter, Menüs) sind englisch.
 -   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
     keine Error-Boundary.
--   Seit Paket 7 schreibt der Editor nur noch über die RPC. Direkte
-    `insert`/`update`-Rechte auf `page_documents` bestehen aber noch,
-    weil ältere, noch installierte PWA-Versionen per `upsert`
-    schreiben. Entzug als eigene Contract-Migration, sobald alte
-    Clients aktualisiert sind (frühestens Paket 8).
+-   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
+    entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
+    Apps älter als Paket 7 können erst nach Bestätigung des
+    Update-Hinweises wieder speichern.
+-   Der Hinweis „auf einem anderen Gerät geändert" erscheint auch, wenn
+    eine neuere Änderung aus einem anderen Tab desselben Geräts gewinnt.
 -   Der Client vergleicht Versionen mit Millisekunden, der Server mit
     Mikrosekunden (nur bei gekappten Zeitstempeln relevant). Das
     betrifft nur die lokale Entscheidung, ob eine synchronisierte Kopie
