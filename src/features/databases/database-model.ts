@@ -9,6 +9,7 @@ import {
     type FilterOperator,
     type FilterRule,
     type OptionColor,
+    type PlaceValue,
     type PropertyOption,
     type PropertyType,
     type PropertyValue,
@@ -28,6 +29,7 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "date",
     "url",
     "email",
+    "place",
     "created_time",
     "last_edited_time",
 ];
@@ -42,12 +44,13 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     date: "Datum",
     url: "URL",
     email: "E-Mail",
+    place: "Ort",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
 
-/** All view types of the server (package 14a); the map comes later. */
-export const VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery", "feed", "calendar"];
+/** All view types of the server (packages 14a, 14e). */
+export const VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery", "feed", "calendar", "map"];
 
 export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     table: "Tabelle",
@@ -56,6 +59,7 @@ export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     gallery: "Galerie",
     feed: "Feed",
     calendar: "Kalender",
+    map: "Landkarte",
 };
 
 export const OPTION_COLORS: readonly OptionColor[] = [
@@ -131,26 +135,30 @@ function numberOrZero(value: unknown): number {
 // The parsers below take the app's field names: the repository renames the
 // columns in the query (PostgREST aliases), and the cache stores the same.
 
+// A type of a newer app version is left out instead of failing the whole
+// database (package 14e added "place" and "map").
+
 export function parseProperties(rows: unknown): DatabaseProperty[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
-    return rows.map((row: unknown) => {
+    return rows.flatMap((row: unknown): DatabaseProperty[] => {
         if (
             !isObject(row) ||
             typeof row.id !== "string" ||
             typeof row.databaseId !== "string" ||
             typeof row.name !== "string" ||
-            !isPropertyType(row.type)
+            typeof row.type !== "string"
         ) {
             throw new Error(INVALID_DATA);
         }
-        return {
+        if (!isPropertyType(row.type)) return [];
+        return [{
             id: row.id,
             databaseId: row.databaseId,
             name: row.name,
             type: row.type,
             options: parseOptions(row.options),
             position: numberOrZero(row.position),
-        };
+        }];
     });
 }
 
@@ -181,7 +189,8 @@ export function parseViewConfig(value: unknown): ViewConfig {
         : [];
     const groupByPropertyId = typeof config.groupByPropertyId === "string" ? config.groupByPropertyId : null;
     const datePropertyId = typeof config.datePropertyId === "string" ? config.datePropertyId : null;
-    return { sort, filter, hiddenPropertyIds, groupByPropertyId, datePropertyId };
+    const placePropertyId = typeof config.placePropertyId === "string" ? config.placePropertyId : null;
+    return { sort, filter, hiddenPropertyIds, groupByPropertyId, datePropertyId, placePropertyId };
 }
 
 export const EMPTY_VIEW_CONFIG: ViewConfig = {
@@ -190,6 +199,7 @@ export const EMPTY_VIEW_CONFIG: ViewConfig = {
     hiddenPropertyIds: [],
     groupByPropertyId: null,
     datePropertyId: null,
+    placePropertyId: null,
 };
 
 function stringRecord(value: unknown): Record<string, string> {
@@ -201,24 +211,25 @@ function stringRecord(value: unknown): Record<string, string> {
 
 export function parseViews(rows: unknown): DatabaseView[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
-    return rows.map((row: unknown) => {
+    return rows.flatMap((row: unknown): DatabaseView[] => {
         if (
             !isObject(row) ||
             typeof row.id !== "string" ||
             typeof row.databaseId !== "string" ||
             typeof row.name !== "string" ||
-            !isViewType(row.type)
+            typeof row.type !== "string"
         ) {
             throw new Error(INVALID_DATA);
         }
-        return {
+        if (!isViewType(row.type)) return [];
+        return [{
             id: row.id,
             databaseId: row.databaseId,
             name: row.name,
             type: row.type,
             config: parseViewConfig(row.config),
             position: numberOrZero(row.position),
-        };
+        }];
     });
 }
 
@@ -286,6 +297,23 @@ export function isDateValue(value: unknown): value is DateValue {
     );
 }
 
+export const LATITUDE_LIMIT = 90;
+export const LONGITUDE_LIMIT = 180;
+
+/** The same rule as the server (`is_valid_property_value`, package 14e). */
+export function isPlaceValue(value: unknown): value is PlaceValue {
+    return (
+        isObject(value) &&
+        typeof value.lat === "number" &&
+        typeof value.lng === "number" &&
+        Number.isFinite(value.lat) &&
+        Number.isFinite(value.lng) &&
+        Math.abs(value.lat) <= LATITUDE_LIMIT &&
+        Math.abs(value.lng) <= LONGITUDE_LIMIT &&
+        (value.label === undefined || value.label === null || typeof value.label === "string")
+    );
+}
+
 /** A stored value as the type expects it; anything else counts as empty. */
 export function readValue(property: DatabaseProperty, raw: unknown): PropertyValue {
     switch (property.type) {
@@ -310,6 +338,8 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
         }
         case "date":
             return isDateValue(raw) ? { start: raw.start, end: typeof raw.end === "string" ? raw.end : null } : null;
+        case "place":
+            return isPlaceValue(raw) ? { lat: raw.lat, lng: raw.lng, label: raw.label || null } : null;
         case "created_time":
         case "last_edited_time":
             return null;
@@ -370,6 +400,12 @@ const dateTimeFormat = new Intl.DateTimeFormat("de-DE", {
     minute: "2-digit",
 });
 const numberFormat = new Intl.NumberFormat("de-DE");
+const coordinateFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 5 });
+
+/** "48,13720; 11,57560"-style text for a point without an address. */
+function formatCoordinates(place: PlaceValue): string {
+    return `${coordinateFormat.format(place.lat)}; ${coordinateFormat.format(place.lng)}`;
+}
 
 /** "YYYY-MM-DD" is a calendar day, shown without a time zone shift. */
 function formatDay(value: string): string {
@@ -394,6 +430,8 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
                 : "";
         case "date":
             return isDateValue(value) ? [value.start, value.end].filter(Boolean).map((day) => formatDay(day ?? "")).join(" – ") : "";
+        case "place":
+            return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? dateTimeFormat.format(new Date(value)) : "";
@@ -430,6 +468,7 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
         case "status":
             return ["equals", "notEquals", "isEmpty", "isNotEmpty"];
         case "multi_select":
+        case "place":
             return ["contains", "isEmpty", "isNotEmpty"];
         case "date":
         case "created_time":
@@ -508,7 +547,9 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
         return rule.operator === "contains" ? Array.isArray(value) && value.includes(rule.value) : true;
     }
 
-    const text = (typeof value === "string" ? value : "").toLocaleLowerCase("de");
+    // A place is found by its address (or coordinates) like text.
+    const shown = type === "place" && property ? formatValue(property, value) : typeof value === "string" ? value : "";
+    const text = shown.toLocaleLowerCase("de");
     if (rule.operator === "contains") return text.includes(needle);
     if (rule.operator === "equals") return text === needle;
     if (rule.operator === "notEquals") return text !== needle;
@@ -523,6 +564,7 @@ function sortKey(property: DatabaseProperty | undefined, value: PropertyValue): 
     if (typeof value === "number") return value;
     if (typeof value === "boolean") return value ? 1 : 0;
     if (isDateValue(value)) return value.start;
+    if (property?.type === "place") return formatValue(property, value) || null;
     if (property && (property.type === "select" || property.type === "status")) {
         // Like Notion: by the order of the options.
         const index = property.options.findIndex((option) => option.id === value);
@@ -695,6 +737,15 @@ export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<
         }
     }
     return days;
+}
+
+// ---------------------------------------------------------------------------
+// Map.
+
+/** The chosen place property, otherwise the first one. */
+export function placeProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const places = [...properties].sort((a, b) => a.position - b.position).filter((property) => property.type === "place");
+    return places.find((property) => property.id === config.placePropertyId) ?? places[0];
 }
 
 /** A name for a new property or view that is not taken yet. */

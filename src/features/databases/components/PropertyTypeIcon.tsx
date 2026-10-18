@@ -8,6 +8,7 @@ import {
     History,
     Link,
     List,
+    MapPin,
     Tags,
     Type,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const ICONS = {
     date: Calendar,
     url: Link,
     email: AtSign,
+    place: MapPin,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

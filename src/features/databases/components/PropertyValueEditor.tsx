@@ -1,8 +1,11 @@
 import { useState, type KeyboardEvent } from "react";
-import { formatValue, hasOptions, isComputed, isDateValue } from "../database-model";
+import { formatValue, hasOptions, isComputed, isDateValue, isPlaceValue } from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
+import { PlacePicker } from "./PlacePicker";
+
+const OSM_ZOOM = 16;
 
 type PropertyValueEditorProps = {
     property: DatabaseProperty;
@@ -117,6 +120,42 @@ export function PropertyValueEditor({
                 onChange={(event) => save(event.target.value ? { start: event.target.value, end: date?.end ?? null } : null)}
                 className={`${fieldClass} bg-transparent disabled:opacity-100`}
             />
+        );
+    }
+
+    if (property.type === "place") {
+        const place = isPlaceValue(value) ? value : null;
+        return (
+            <div className="relative flex min-w-0 items-center">
+                <button
+                    type="button"
+                    disabled={!canChange}
+                    aria-label={`${property.name} wählen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} min-w-0 flex-1 hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent`}
+                >
+                    <span className="truncate">{formatValue(property, place)}</span>
+                </button>
+                {place && (
+                    <a
+                        href={`https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=${OSM_ZOOM}/${place.lat}/${place.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 px-1 text-xs text-brand underline-offset-2 hover:underline"
+                    >
+                        Karte
+                    </a>
+                )}
+                {pickerOpen && (
+                    <PlacePicker
+                        property={property}
+                        value={place}
+                        onClose={() => setPickerOpen(false)}
+                        onChange={save}
+                    />
+                )}
+            </div>
         );
     }
 

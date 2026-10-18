@@ -1,4 +1,4 @@
-/** Property types of the server (package 14a); the last two are computed. */
+/** Property types of the server (packages 14a, 14e); the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -9,6 +9,7 @@ export type PropertyType =
     | "date"
     | "url"
     | "email"
+    | "place"
     | "created_time"
     | "last_edited_time";
 
@@ -37,8 +38,15 @@ export type DateValue = {
     end: string | null;
 };
 
+/** A point on the map; `label` is the address found by the search, if any. */
+export type PlaceValue = {
+    lat: number;
+    lng: number;
+    label: string | null;
+};
+
 /** A value as the editor shows it; null means empty. */
-export type PropertyValue = string | number | boolean | string[] | DateValue | null;
+export type PropertyValue = string | number | boolean | string[] | DateValue | PlaceValue | null;
 
 /** A stored value, as JSON from the server; read with `readValue`. */
 export type StoredPropertyValue = {
@@ -48,7 +56,7 @@ export type StoredPropertyValue = {
     updatedAt: string;
 };
 
-export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar";
+export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar" | "map";
 
 /** Sorting and filtering by the title uses this id instead of a property id. */
 export const TITLE_FIELD = "title";
@@ -86,6 +94,8 @@ export type ViewConfig = {
     groupByPropertyId: string | null;
     /** Calendar: the date property that places entries on days. */
     datePropertyId: string | null;
+    /** Map: the place property that puts entries on the map. */
+    placePropertyId: string | null;
 };
 
 export type DatabaseView = {

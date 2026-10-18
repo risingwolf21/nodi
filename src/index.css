@@ -151,3 +151,9 @@
 .bn-container .bn-editor {
     padding-inline: var(--page-gutter);
 }
+
+/* Map markers (package 14e): SVG attributes cannot use var(), CSS can. */
+.nodi-map-marker {
+    stroke: var(--background);
+    fill: var(--brand);
+}
