@@ -318,9 +318,10 @@ supabase/
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
                             # pages.full_width (P10), Teilen und
-                            # öffentliche Links (P11a)
+                            # öffentliche Links (P11a), Reparatur
+                            # unsichtbarer Seiten (Bestandsdaten)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
-                            # Seiteneinstellungen, Teilen
+                            # Seiteneinstellungen, Teilen, Reparatur
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1062,9 +1063,14 @@ archivierten Elternseiten wieder her (Variante A, Nutzerentscheidung
 
 Noch nicht abschließend geprüft:
 
--   Bestandsdaten: Aktive Seiten, deren Elternseite archiviert ist
-    (durch den alten Bug entstanden), sind unsichtbar und würden beim
-    endgültigen Löschen der Elternseite mitgelöscht.
+-   (Behoben, `20261018140000_restore_archived_ancestors.sql`,
+    Nutzerentscheidung 2026-10-18) Aktive Seiten unter archivierten
+    Elternseiten (alter Papierkorb-Bug) waren unsichtbar und wären beim
+    endgültigen Löschen der Eltern mitgelöscht worden. Die Migration
+    stellt einmalig alle archivierten Vorfahren aktiver Seiten wieder
+    her, wie Variante A aus Paket 3. Die Funktion
+    `restore_archived_ancestors_of_active_pages()` bleibt für Wartung und
+    Tests (nicht per API aufrufbar).
 -   Löschen: Jedes Workspace-Mitglied kann workspace-sichtbare Seiten
     endgültig löschen (`can_edit_page`). Ob das gewollt ist, ist offen.
 -   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
