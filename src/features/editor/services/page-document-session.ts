@@ -19,7 +19,10 @@ export type SessionStatus =
     | { kind: "unsynced"; reason: Exclude<RequestFailureReason, "permanent"> }
     /** Nothing to sync, but the server is not reachable. */
     | { kind: "offline" }
-    | { kind: "error"; message: string };
+    /** Saving failed for good; the edit stays on this device. */
+    | { kind: "error"; message: string }
+    /** A newer version could not be loaded; nothing local is at risk. */
+    | { kind: "loadFailed"; message: string };
 
 export type PageDocumentSessionOptions = {
     pageId: string;
@@ -63,13 +66,17 @@ export async function loadInitialDocument(
  * Editing flow for one open page: every edit is written to the local
  * store first; the sync engine sends it. The session follows the stored
  * state, so results from the engine and from other tabs arrive the same
- * way. Operations run one after another.
+ * way. Operations on the local store run one after another; network
+ * requests stay outside that queue, so a hanging connection never delays
+ * storing an edit.
  */
 export class PageDocumentSession {
     private readonly options: PageDocumentSessionOptions;
     private current: LocalDocument | null = null;
     private pendingContent: DocumentContent | null = null;
     private pendingEditedAt: string | null = null;
+    /** Edits taken from the editor but not yet in the local store. */
+    private localWritesInFlight = 0;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private queue: Promise<void> = Promise.resolve();
     private unsubscribers: (() => void)[] = [];
@@ -135,6 +142,7 @@ export class PageDocumentSession {
 
         this.pendingContent = null;
         this.pendingEditedAt = null;
+        this.localWritesInFlight += 1;
 
         const record: LocalDocument = {
             ...this.current,
@@ -147,16 +155,43 @@ export class PageDocumentSession {
 
         return this.enqueue(async () => {
             this.options.onStatus({ kind: "saving" });
-            await this.options.store.putLocalEdit(record);
+            try {
+                await this.options.store.putLocalEdit(record);
+            } finally {
+                this.localWritesInFlight -= 1;
+            }
             this.current = record;
             this.options.changes.announce(record.pageId);
-            await this.options.sync.requestSync();
+            // Not awaited: the edit is stored; sending it is the engine's job.
+            this.options.sync.requestSync().catch((error: unknown) => {
+                console.error("Synchronisierung konnte nicht gestartet werden:", error);
+            });
         });
     }
 
-    /** Asks the server for a newer version, e.g. when back online. */
-    refresh(): Promise<void> {
-        return this.enqueue(() => this.fetchNewerVersion());
+    /**
+     * Asks the server for a newer version, e.g. when back online. Unsynced
+     * edits are the engine's job; only a synced copy is refreshed.
+     */
+    async refresh(): Promise<void> {
+        const { pageId, remote, store, changes } = this.options;
+        if (!this.current?.synced) return;
+
+        let fetched;
+        try {
+            fetched = await remote.fetch(pageId);
+        } catch (error) {
+            this.reportFetchFailure(error);
+            return;
+        }
+
+        // The store only replaces a synced copy that is older (compare-and-set).
+        return this.enqueue(async () => {
+            this.options.onPermission(fetched.canEdit);
+            const { replaced } = await store.applyRemote(pageId, fetched.document, fetched.canEdit);
+            if (replaced) changes.announce(pageId);
+            if (!this.hasUnstoredEdits() && this.current?.synced) this.options.onStatus({ kind: "synced" });
+        });
     }
 
     /** The user asks again after an error. */
@@ -170,6 +205,11 @@ export class PageDocumentSession {
         for (const unsubscribe of this.unsubscribers) unsubscribe();
         this.unsubscribers = [];
         return flushed;
+    }
+
+    /** Typing wins over stored or remote versions until it is stored itself. */
+    private hasUnstoredEdits(): boolean {
+        return this.pendingContent !== null || this.localWritesInFlight > 0;
     }
 
     private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -194,37 +234,18 @@ export class PageDocumentSession {
 
         if (stored.mutationId === current.mutationId && stored.editedAt === current.editedAt) {
             this.current = stored;
-            if (stored.synced && !this.pendingContent) this.options.onStatus({ kind: "synced" });
+            if (stored.synced && !this.hasUnstoredEdits()) this.options.onStatus({ kind: "synced" });
             return;
         }
 
         // Typing wins: the pending edit is newer and will replace it.
-        if (this.pendingContent) return;
+        if (this.hasUnstoredEdits()) return;
 
         // Option A (CLAUDE.md §2): our unsynced edit lost against a newer version.
         const supersededLocalEdit = !current.synced && stored.synced;
         this.current = stored;
         this.options.onRemoteContent(stored.content, supersededLocalEdit);
         this.options.onStatus(stored.synced ? { kind: "synced" } : { kind: "saving" });
-    }
-
-    /** Unsynced edits are the engine's job; only a synced copy is refreshed. */
-    private async fetchNewerVersion(): Promise<void> {
-        const { pageId, remote, store, changes } = this.options;
-        if (!this.current?.synced) return;
-
-        let fetched;
-        try {
-            fetched = await remote.fetch(pageId);
-        } catch (error) {
-            this.reportFetchFailure(error);
-            return;
-        }
-
-        this.options.onPermission(fetched.canEdit);
-        const { replaced } = await store.applyRemote(pageId, fetched.document, fetched.canEdit);
-        if (replaced) changes.announce(pageId);
-        if (!this.pendingContent && this.current?.synced) this.options.onStatus({ kind: "synced" });
     }
 
     private showFailure(failure: SyncFailure): void {
@@ -234,7 +255,7 @@ export class PageDocumentSession {
             !current ||
             current.synced ||
             current.mutationId !== failure.mutationId ||
-            this.pendingContent
+            this.hasUnstoredEdits()
         ) {
             return;
         }
@@ -250,7 +271,7 @@ export class PageDocumentSession {
         if (!(error instanceof RemoteRequestError) || error.reason === "permanent") {
             console.error("Dokument konnte nicht vom Server geladen werden:", error);
             this.options.onStatus({
-                kind: "error",
+                kind: "loadFailed",
                 message: error instanceof Error ? error.message : "Unbekannter Fehler",
             });
             return;

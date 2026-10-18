@@ -54,19 +54,22 @@ einem pgTAP-Test absichern.
 |---|---|
 | `npm run dev` | Entwicklungsserver |
 | `npm run lint` | ESLint |
+| `npm test` | Unit-Tests (Vitest) |
 | `npm run build` | Typprüfung (`tsc -b`) und Produktionsbuild nach `dist/` |
 | `npm run preview` | Produktionsbuild lokal ausliefern |
 
 ## CI und Deployment
 
 - **CI** (`.github/workflows/ci.yml`) läuft bei jedem Pull Request und jedem
-  Push auf `master`: Lint, Build, Prüfung des Base-Pfads `/nodi/`, alle
-  Migrationen auf einer frischen Datenbank, `supabase db lint` und
-  `supabase test db`.
+  Push auf `master`: Lint, Unit-Tests, Build, Prüfung des Base-Pfads `/nodi/`,
+  der PWA-Dateien und des Bundles auf geheime Schlüssel, alle Migrationen auf
+  einer frischen Datenbank, `supabase db lint` und `supabase test db`.
 - **Deployment** (`.github/workflows/deploy.yml`) bei Push auf den Branch
-  `production`: zuerst werden ausstehende Datenbank-Migrationen auf das
-  Supabase-Projekt angewendet (`supabase db push`), danach wird gebaut und auf
-  GitHub Pages veröffentlicht. Schlägt die Migration fehl, wird nicht deployt.
+  `production`: zuerst Lint, Unit-Tests und der Produktions-Build sowie alle
+  Migrationen und pgTAP-Tests auf einer frischen Datenbank. Erst wenn beides
+  grün ist, werden ausstehende Migrationen auf das Supabase-Projekt angewendet
+  (`supabase db push`) und der Build auf GitHub Pages veröffentlicht. Schlägt
+  ein Schritt fehl, bleiben Datenbank und Seite unverändert.
   Benötigte Repository-Secrets:
 
   | Secret | Wofür |
