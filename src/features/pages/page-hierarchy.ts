@@ -67,3 +67,24 @@ export function collectRestoreIds(
 
     return [...ids];
 }
+
+/**
+ * The pages of one section of the sidebar: every root page of that section
+ * (a page whose parent is not in the list) with all its subpages. A
+ * subpage stays below its root, whatever its own visibility.
+ */
+export function pagesInSection(pages: Page[], section: Page["visibility"]): Page[] {
+    const byId = new Map(pages.map((page) => [page.id, page]));
+
+    function rootOf(page: Page): Page {
+        const seen = new Set<string>();
+        let current = page;
+        while (current.parent_id && byId.has(current.parent_id) && !seen.has(current.id)) {
+            seen.add(current.id);
+            current = byId.get(current.parent_id) ?? current;
+        }
+        return current;
+    }
+
+    return pages.filter((page) => rootOf(page).visibility === section);
+}

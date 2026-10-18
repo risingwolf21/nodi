@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, LogOut, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Plus, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree } from "../PageTree";
-import type { Page, Workspace } from "../types";
+import { pagesInSection } from "../page-hierarchy";
+import type { Page, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
 
 type SidebarProps = {
@@ -23,12 +24,24 @@ type SidebarProps = {
     signingOut: boolean;
     onSignOut: () => void;
     onSelect: (pageId: string) => void;
-    onCreatePage: (parentId: string | null) => void;
+    /** `section` is used for root pages; subpages take their parent's. */
+    onCreatePage: (parentId: string | null, section: PageSection) => void;
+    onOpenMembers: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
 };
+
+const SECTIONS: { section: PageSection; title: string; addLabel: string; emptyText: string }[] = [
+    {
+        section: "workspace",
+        title: "Workspace",
+        addLabel: "Neue Seite im Workspace",
+        emptyText: "Noch keine geteilten Seiten",
+    },
+    { section: "private", title: "Privat", addLabel: "Neue private Seite", emptyText: "Noch keine privaten Seiten" },
+];
 
 const footerButton =
     "flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent/70 pointer-coarse:h-10";
@@ -49,6 +62,7 @@ export function Sidebar({
     onSignOut,
     onSelect,
     onCreatePage,
+    onOpenMembers,
     onRename,
     onArchive,
     onRestore,
@@ -99,6 +113,17 @@ export function Sidebar({
                         </MenuItem>
                     ))}
                     <div className="my-1 border-t" />
+                    {!readOnly && workspace && (
+                        <MenuItem
+                            onSelect={() => {
+                                setWorkspaceMenuOpen(false);
+                                onOpenMembers();
+                            }}
+                        >
+                            <Users className="size-4" />
+                            Mitglieder
+                        </MenuItem>
+                    )}
                     {accountEmail && (
                         <p className="truncate px-2 py-1 text-xs text-muted-foreground">
                             {accountEmail}
@@ -132,15 +157,38 @@ export function Sidebar({
                     <TrashView pages={archivedPages} userId={userId} onRestore={onRestore} onDelete={onDelete} />
                 ) : (
                     <>
-                        <PageTree
-                            pages={pages}
-                            selectedPageId={selectedPageId}
-                            readOnly={readOnly}
-                            onSelect={onSelect}
-                            onAddChild={(parentId) => onCreatePage(parentId)}
-                            onRename={onRename}
-                            onArchive={onArchive}
-                        />
+                        {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
+                            <section key={section} aria-labelledby={`section-${section}`} className="mb-3">
+                                <div className="group/section flex h-7 items-center justify-between px-2">
+                                    <h2
+                                        id={`section-${section}`}
+                                        className="text-xs font-medium text-muted-foreground"
+                                    >
+                                        {title}
+                                    </h2>
+                                    {!readOnly && (
+                                        <button
+                                            type="button"
+                                            aria-label={addLabel}
+                                            onClick={() => onCreatePage(null, section)}
+                                            className="flex size-6 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-sidebar-accent focus-visible:opacity-100 group-hover/section:opacity-100 pointer-coarse:size-8 pointer-coarse:opacity-100"
+                                        >
+                                            <Plus className="size-4" />
+                                        </button>
+                                    )}
+                                </div>
+                                <PageTree
+                                    pages={pagesInSection(pages, section)}
+                                    selectedPageId={selectedPageId}
+                                    readOnly={readOnly}
+                                    emptyText={emptyText}
+                                    onSelect={onSelect}
+                                    onAddChild={(parentId) => onCreatePage(parentId, section)}
+                                    onRename={onRename}
+                                    onArchive={onArchive}
+                                />
+                            </section>
+                        ))}
                         {sharedPages.length > 0 && (
                             <section aria-labelledby="shared-pages-title" className="mt-4">
                                 <h2
@@ -171,7 +219,7 @@ export function Sidebar({
                         className={footerButton}
                         onClick={() => {
                             setShowTrash(false);
-                            onCreatePage(null);
+                            onCreatePage(null, "private");
                         }}
                     >
                         <Plus className="size-4 text-muted-foreground" />
