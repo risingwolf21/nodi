@@ -860,6 +860,50 @@ Arbeitspakete, je ein Pull Request:
         kleinen Bildschirmen.
     -   Nicht im ersten Wurf: Titelbilder (Storage), Verschieben per
         Drag & Drop (braucht Zyklenprüfung), Suche, Favoriten.
+11. **Teilen und Berechtigungen nach dem Notion-Modell**
+    (Nutzerwunsch 2026-10-18).
+    -   **Verschlüsselung:** keine Ende-zu-Ende-Verschlüsselung; der
+        Server darf Inhalte lesen (Suche, Teilen, Server-Funktionen).
+        Encryption at rest übernimmt die Plattform (Supabase/AWS,
+        AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
+        nur HTTPS-Endpunkte.
+    -   **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
+        ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
+    -   **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
+        abgesichert: Zugriff nur für Owner, Workspace-Mitglieder oder
+        geteilte Nutzer, inklusive Vererbung über `parent_id`.
+        Berechtigungen nie nur im Frontend prüfen. Der Service-Role-Key
+        nur in Edge Functions, nie im Client.
+    -   **Abgleich mit dem Ist-Stand (2026-10-18):**
+        -   `page_shares` (`read`/`edit`) entspricht dem vorgeschlagenen
+            `page_permissions` (`viewer`/`editor`); der Owner ist
+            `pages.owner_id`. Vorschlag: Tabelle behalten statt umbenennen;
+            eine eigene Rolle `owner` wäre eine zweite Quelle der Wahrheit.
+        -   Der Inhalt liegt in `page_documents` (LWW-RPC, Pakete 6–8),
+            nicht in `pages.content`; so bleibt es.
+        -   RLS gibt es bereits über `can_read_page`/`can_edit_page`.
+            **Neu nötig:** Vererbung: ein Share auf eine Seite gilt für
+            alle Unterseiten (rekursiv über `parent_id`, mit begrenzter
+            Tiefe, solange Verschieben keine Zyklenprüfung hat, §13).
+        -   **Neu nötig:** Oberfläche zum Teilen (Nutzer per E-Mail
+            einladen, Rolle ändern, Zugriff entziehen; nur der Owner).
+        -   **Neu nötig:** Wird der Zugriff entzogen, löscht der Client
+            beim nächsten Kontakt mit dem Server die lokale Kopie und den
+            Eintrag im Seitenbaum-Cache. Offline bleibt eine bereits
+            geladene Kopie bis dahin auf dem Gerät; „sofort“ gilt für den
+            Server.
+        -   Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
+            CI-Check auf `dist/`).
+    -   **Vor der Umsetzung zu entscheiden:** Vererbung auch für
+        `private` Unterseiten? Öffentliche Links (`pages.is_public` oder
+        Share-Token, Zugriff dann nur über eine RPC, nicht über
+        anon-RLS) jetzt oder später? Wie findet der Owner einen Nutzer
+        (E-Mail, ohne alle Profile offenzulegen)?
+    -   **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
+        Zeilen (`pages`, `page_documents`), auch für Unterseiten.
+        Viewer kann lesen, aber nicht schreiben (`save_page_document` →
+        `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
+        Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
