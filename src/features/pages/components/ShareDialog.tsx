@@ -44,6 +44,17 @@ function PermissionSelect({
     );
 }
 
+function LoadFailed({ text, onRetry }: { text: string; onRetry: () => void }) {
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">{text}</p>
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                Erneut laden
+            </Button>
+        </div>
+    );
+}
+
 /**
  * Owner only (the server checks it too): invite by e-mail, change, revoke,
  * and publish the page with a public link.
@@ -52,8 +63,13 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
     const [shares, setShares] = useState<PageShare[] | null>(null);
     // undefined while loading, null when the page is not published.
     const [publicToken, setPublicToken] = useState<string | null | undefined>(undefined);
+    // A failed load is not shown as "not shared" or "no link": the owner
+    // would think the page is private.
+    const [sharesLoadError, setSharesLoadError] = useState("");
+    const [linkLoadError, setLinkLoadError] = useState("");
     const [copied, setCopied] = useState(false);
     const [reloadCount, setReloadCount] = useState(0);
+    const [linkReloadCount, setLinkReloadCount] = useState(0);
     const [email, setEmail] = useState("");
     const [permission, setPermission] = useState<SharePermission>("read");
     const [busy, setBusy] = useState(false);
@@ -64,13 +80,13 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
 
         pageSharing.list(page.id).then(
             (loaded) => {
-                if (active) setShares(loaded);
+                if (!active) return;
+                setShares(loaded);
+                setSharesLoadError("");
             },
             (err: unknown) => {
-                if (active) {
-                    setShares([]);
-                    setError(err instanceof Error ? err.message : "Die Freigaben konnten nicht geladen werden.");
-                }
+                if (!active) return;
+                setSharesLoadError(err instanceof Error ? err.message : "Die Freigaben konnten nicht geladen werden.");
             },
         );
 
@@ -84,20 +100,20 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
 
         pageSharing.getPublicLink(page.id).then(
             (token) => {
-                if (active) setPublicToken(token);
+                if (!active) return;
+                setPublicToken(token);
+                setLinkLoadError("");
             },
             (err: unknown) => {
-                if (active) {
-                    setPublicToken(null);
-                    setError(err instanceof Error ? err.message : "Der öffentliche Link konnte nicht geladen werden.");
-                }
+                if (!active) return;
+                setLinkLoadError(err instanceof Error ? err.message : "Der öffentliche Link konnte nicht geladen werden.");
             },
         );
 
         return () => {
             active = false;
         };
-    }, [page.id]);
+    }, [page.id, linkReloadCount]);
 
     async function run(action: () => Promise<void>): Promise<boolean> {
         setBusy(true);
@@ -190,7 +206,15 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
 
                 <div>
                     <h3 className="mb-1 text-sm font-medium">Zugriff</h3>
-                    {shares === null ? (
+                    {sharesLoadError && shares === null ? (
+                        <LoadFailed
+                            text={sharesLoadError}
+                            onRetry={() => {
+                                setSharesLoadError("");
+                                setReloadCount((count) => count + 1);
+                            }}
+                        />
+                    ) : shares === null ? (
                         <p className="text-sm text-muted-foreground">Wird geladen …</p>
                     ) : shares.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Noch mit niemandem geteilt.</p>
@@ -227,7 +251,15 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
 
                 <div className="border-t pt-4">
                     <h3 className="mb-1 text-sm font-medium">Öffentlicher Link</h3>
-                    {publicToken === undefined ? (
+                    {linkLoadError && publicToken === undefined ? (
+                        <LoadFailed
+                            text={linkLoadError}
+                            onRetry={() => {
+                                setLinkLoadError("");
+                                setLinkReloadCount((count) => count + 1);
+                            }}
+                        />
+                    ) : publicToken === undefined ? (
                         <p className="text-sm text-muted-foreground">Wird geladen …</p>
                     ) : publicToken === null ? (
                         <div className="flex items-center justify-between gap-2">

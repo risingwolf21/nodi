@@ -40,10 +40,8 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                 if (active) setMembers(loaded);
             },
             (err: unknown) => {
-                if (active) {
-                    setMembers([]);
-                    setError(err instanceof Error ? err.message : "Die Mitglieder konnten nicht geladen werden.");
-                }
+                // members stays unknown: no owner or member actions on a guess.
+                if (active) setError(err instanceof Error ? err.message : "Die Mitglieder konnten nicht geladen werden.");
             },
         );
 
@@ -139,7 +137,21 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                 )}
 
                 {members === null ? (
-                    <p className="text-sm text-muted-foreground">Wird geladen …</p>
+                    error ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setError("");
+                                setReloadCount((count) => count + 1);
+                            }}
+                        >
+                            Erneut laden
+                        </Button>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">Wird geladen …</p>
+                    )
                 ) : (
                     <ul className="divide-y">
                         {members.map((member) => (

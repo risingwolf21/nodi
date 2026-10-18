@@ -1,13 +1,44 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
-import { pageTreeCacheFor } from "../services/page-tree-cache";
+import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
 import type { Page, PageSection, PageSettings, StoredPage } from "../types";
+import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
 
 export const OFFLINE_READ_ONLY_MESSAGE =
     "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
+
+// RLS filters updates without rights silently; the returned rows tell.
+const NO_EDIT_RIGHT_MESSAGE = "Du darfst diese Seite nicht bearbeiten.";
+
+type PostgrestResponse = {
+    error: { message: string; code?: string } | null;
+    status: number;
+};
+
+/** A failed change in German; the technical details go to the console. */
+export function pageChangeError(response: PostgrestResponse, fallback: string): RemoteRequestError | null {
+    const failure = toRequestError(response);
+    if (!failure) return null;
+
+    console.error(fallback, failure.reason, failure.message);
+    const message =
+        failure.reason === "offline"
+            ? OFFLINE_READ_ONLY_MESSAGE
+            : response.error?.code === "42501"
+              ? "Dafür fehlen dir die Rechte."
+              : fallback;
+    return new RemoteRequestError(failure.reason, message);
+}
+
+/** Validates the pages from the server like the cache does. */
+export function parseServerPages(data: unknown): StoredPage[] {
+    const pages = parseStoredPages(data ?? []);
+    if (!pages) throw new Error("Unerwartete Antwort beim Laden der Seiten.");
+    return pages;
+}
 
 // Columns of a page in the tree (StoredPage).
 export const PAGE_COLUMNS = "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width";
@@ -51,77 +82,65 @@ export function usePages(
     const [fromCache, setFromCache] = useState(false);
     // Workspace the shown pages belong to; guards the cache write below.
     const [shownWorkspaceId, setShownWorkspaceId] = useState("");
-    const [reloadCount, setReloadCount] = useState(0);
-
-    // A hint only: back online, ask the server again.
-    useEffect(() => {
-        const reload = () => setReloadCount((count) => count + 1);
-        window.addEventListener("online", reload);
-        return () => window.removeEventListener("online", reload);
-    }, []);
+    // Same, for async changes: their result is dropped after a switch.
+    const shownWorkspaceRef = useRef("");
+    // Server data shown for this workspace: a reload does not show the cache first.
+    const shownFromServerFor = useRef("");
+    const reloadCount = useServerReload(fromCache || error !== "");
 
     useEffect(() => {
         let active = true;
-        let serverAnswered = false;
 
         function show(storedPages: StoredPage[], cached: boolean) {
             setPages(storedPages.filter((page) => !page.is_archived).map(toPage));
             setArchivedPages(storedPages.filter((page) => page.is_archived).map(toPage));
             setShownWorkspaceId(workspaceId);
+            shownWorkspaceRef.current = workspaceId;
             setFromCache(cached);
+            if (!cached) shownFromServerFor.current = workspaceId;
         }
 
         async function load() {
             setLoading(true);
-            setError("");
+            if (shownWorkspaceRef.current !== workspaceId) setError("");
 
             try {
                 if (!workspaceId || !userId) {
-                    if (active) show([], false);
+                    if (active) {
+                        show([], false);
+                        setError("");
+                    }
                     return;
                 }
+                const currentUserId = userId;
 
-                // The cache answers first; the server replaces it when it answers.
-                const cachedRead = pageTreeCacheFor(userId)
-                    .getPages(workspaceId)
-                    .catch((cacheError: unknown) => {
-                        console.warn("Lokaler Seitenbaum ist nicht lesbar:", cacheError);
-                        return null;
-                    });
-                void cachedRead.then((cached) => {
-                    if (cached && active && !serverAnswered) show(cached, true);
+                const result = await loadCacheThenServer({
+                    userId: currentUserId,
+                    readCache: () => pageTreeCacheFor(currentUserId).getPages(workspaceId),
+                    fetchServer: async () => {
+                        const response = await supabase
+                            .from("pages")
+                            .select(PAGE_COLUMNS)
+                            .eq("workspace_id", workspaceId)
+                            .order("created_at", { ascending: true });
+                        const failure = toRequestError(response);
+                        if (failure) throw failure;
+                        return parseServerPages(response.data);
+                    },
+                    cacheFirst: shownFromServerFor.current !== workspaceId,
+                    isActive: () => active,
+                    show,
                 });
-
-                const response = await supabase
-                    .from("pages")
-                    .select(PAGE_COLUMNS)
-                    .eq("workspace_id", workspaceId)
-                    .order("created_at", { ascending: true });
-                serverAnswered = true;
                 if (!active) return;
-
-                const failure = toRequestError(response);
-                if (failure?.reason === "offline") {
-                    const cached = await cachedRead;
-                    if (!active) return;
-                    if (cached) {
-                        show(cached, true);
-                        return;
-                    }
-                    throw new Error(
-                        "Die Seiten sind offline noch nicht verfügbar. Öffne Nodi einmal mit Internetverbindung.",
-                    );
-                }
-                if (failure) throw failure;
-
-                show((response.data ?? []) as StoredPage[], false);
+                setError(
+                    result === "none"
+                        ? "Die Seiten sind offline noch nicht verfügbar. Öffne Nodi einmal mit Internetverbindung."
+                        : "",
+                );
             } catch (err) {
                 if (active) {
-                    setError(
-                        err instanceof Error
-                            ? err.message
-                            : "Seiten konnten nicht geladen werden.",
-                    );
+                    console.error("Seiten konnten nicht geladen werden:", err);
+                    setError("Die Seiten konnten nicht geladen werden.");
                 }
             } finally {
                 if (active) setLoading(false);
@@ -134,6 +153,9 @@ export function usePages(
             active = false;
         };
     }, [workspaceId, userId, reloadCount]);
+
+    // While another workspace loads, its predecessor's tree is not shown.
+    const showsCurrentWorkspace = shownWorkspaceId === workspaceId;
 
     // Keeps the cache in step with what the server confirmed, including
     // the changes below. A cached tree is never written back.
@@ -153,7 +175,16 @@ export function usePages(
 
     const requireOnline = useCallback(() => {
         if (fromCache) throw new Error(OFFLINE_READ_ONLY_MESSAGE);
-    }, [fromCache]);
+        if (shownWorkspaceRef.current !== workspaceId) {
+            throw new Error("Die Seiten werden noch geladen.");
+        }
+    }, [fromCache, workspaceId]);
+
+    /** The workspace switched while a change was on its way. */
+    const switchedSince = useCallback(
+        (calledFor: string) => shownWorkspaceRef.current !== calledFor,
+        [],
+    );
 
     const createPage = useCallback(
         async (title: string, parentId: string | null, section: PageSection): Promise<Page> => {
@@ -185,7 +216,7 @@ export function usePages(
 
             setError("");
 
-            const { error: insertError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .insert({
                     id: createdPage.id,
@@ -197,13 +228,14 @@ export function usePages(
                     parent_id: parentId,
                 });
 
-            if (insertError) throw insertError;
+            const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
+            if (failure) throw failure;
 
-            setPages((current) => [...current, createdPage]);
+            if (!switchedSince(workspaceId)) setPages((current) => [...current, createdPage]);
 
             return createdPage;
         },
-        [userId, workspaceId, pages, requireOnline],
+        [userId, workspaceId, pages, requireOnline, switchedSince],
     );
 
     const setPageSection = useCallback(
@@ -238,10 +270,11 @@ export function usePages(
                           owner_id: section === "private" && userId ? userId : page.owner_id,
                       }
                     : page;
+            if (switchedSince(workspaceId)) return;
             setPages((current) => current.map(move));
             setArchivedPages((current) => current.map(move));
         },
-        [pages, archivedPages, userId, requireOnline],
+        [pages, archivedPages, userId, workspaceId, requireOnline, switchedSince],
     );
 
     const renamePage = useCallback(
@@ -255,14 +288,18 @@ export function usePages(
 
             setError("");
 
-            const { error: updateError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .update({ title: normalizedTitle })
                 .eq("id", pageId)
                 .eq("workspace_id", workspaceId)
-                .eq("is_archived", false);
+                .eq("is_archived", false)
+                .select("id");
 
-            if (updateError) throw updateError;
+            const failure = pageChangeError(response, "Die Seite konnte nicht umbenannt werden.");
+            if (failure) throw failure;
+            if ((response.data ?? []).length === 0) throw new Error(NO_EDIT_RIGHT_MESSAGE);
+            if (switchedSince(workspaceId)) return;
 
             setPages((current) =>
                 current.map((page) =>
@@ -272,7 +309,7 @@ export function usePages(
                 ),
             );
         },
-        [workspaceId, requireOnline],
+        [workspaceId, requireOnline, switchedSince],
     );
 
     const updatePage = useCallback(
@@ -280,19 +317,23 @@ export function usePages(
             requireOnline();
             setError("");
 
-            const { error: updateError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .update(settings)
                 .eq("id", pageId)
-                .eq("workspace_id", workspaceId);
+                .eq("workspace_id", workspaceId)
+                .select("id");
 
-            if (updateError) throw updateError;
+            const failure = pageChangeError(response, "Die Seite konnte nicht geändert werden.");
+            if (failure) throw failure;
+            if ((response.data ?? []).length === 0) throw new Error(NO_EDIT_RIGHT_MESSAGE);
+            if (switchedSince(workspaceId)) return;
 
             setPages((current) =>
                 current.map((page) => (page.id === pageId ? { ...page, ...settings } : page)),
             );
         },
-        [workspaceId, requireOnline],
+        [workspaceId, requireOnline, switchedSince],
     );
 
     const archivePage = useCallback(
@@ -307,16 +348,21 @@ export function usePages(
                 throw new Error("Die Seite wurde nicht gefunden.");
             }
 
-            const { error: archiveError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .update({ is_archived: true })
                 .eq("workspace_id", workspaceId)
                 .in("id", ids)
-                .eq("is_archived", false);
+                .eq("is_archived", false)
+                .select("id");
 
-            if (archiveError) throw archiveError;
+            const failure = pageChangeError(response, "Die Seite konnte nicht in den Papierkorb verschoben werden.");
+            if (failure) throw failure;
 
-            const archivedIds = new Set(ids);
+            // Only what the server changed; subpages without edit rights stay.
+            const archivedIds = new Set((response.data ?? []).map((row) => row.id));
+            if (!archivedIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
+            if (switchedSince(workspaceId)) return [...archivedIds];
 
             setPages((current) =>
                 current.filter((page) => !archivedIds.has(page.id)),
@@ -327,9 +373,9 @@ export function usePages(
                 ...pages.filter((page) => archivedIds.has(page.id)),
             ]);
 
-            return ids;
+            return [...archivedIds];
         },
-        [pages, archivedPages, workspaceId, requireOnline],
+        [pages, archivedPages, workspaceId, requireOnline, switchedSince],
     );
 
     const restorePage = useCallback(
@@ -343,16 +389,20 @@ export function usePages(
                 throw new Error("Die archivierte Seite wurde nicht gefunden.");
             }
 
-            const { error: restoreError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .update({ is_archived: false })
                 .eq("workspace_id", workspaceId)
                 .in("id", ids)
-                .eq("is_archived", true);
+                .eq("is_archived", true)
+                .select("id");
 
-            if (restoreError) throw restoreError;
+            const failure = pageChangeError(response, "Die Seite konnte nicht wiederhergestellt werden.");
+            if (failure) throw failure;
 
-            const restoredIds = new Set(ids);
+            const restoredIds = new Set((response.data ?? []).map((row) => row.id));
+            if (!restoredIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
+            if (switchedSince(workspaceId)) return [...restoredIds];
 
             setArchivedPages((current) =>
                 current.filter((page) => !restoredIds.has(page.id)),
@@ -365,9 +415,9 @@ export function usePages(
                 ),
             ]);
 
-            return ids;
+            return [...restoredIds];
         },
-        [archivedPages, workspaceId, requireOnline],
+        [archivedPages, workspaceId, requireOnline, switchedSince],
     );
 
 
@@ -386,7 +436,7 @@ export function usePages(
 
             // Only the owner may delete for good; RLS filters other
             // deletes without an error, so the returned rows tell.
-            const { data: deletedRows, error: deleteError } = await supabase
+            const response = await supabase
                 .from("pages")
                 .delete()
                 .eq("workspace_id", workspaceId)
@@ -394,10 +444,12 @@ export function usePages(
                 .eq("id", pageId)
                 .select("id");
 
-            if (deleteError) throw deleteError;
-            if (deletedRows.length === 0) {
+            const failure = pageChangeError(response, "Die Seite konnte nicht gelöscht werden.");
+            if (failure) throw failure;
+            if ((response.data ?? []).length === 0) {
                 throw new Error("Nur der Eigentümer kann diese Seite endgültig löschen.");
             }
+            if (switchedSince(workspaceId)) return ids;
 
             const deletedIds = new Set(ids);
 
@@ -407,13 +459,13 @@ export function usePages(
 
             return ids;
         },
-        [archivedPages, workspaceId, requireOnline],
+        [archivedPages, workspaceId, requireOnline, switchedSince],
     );
 
 
     return {
-        pages,
-        archivedPages,
+        pages: showsCurrentWorkspace ? pages : [],
+        archivedPages: showsCurrentWorkspace ? archivedPages : [],
         loading,
         error,
         fromCache,

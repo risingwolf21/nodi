@@ -1,3 +1,4 @@
+import { hasAccountSession } from "@/lib/account-session";
 import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import type { LocalDocumentStore } from "./local-document-store";
@@ -13,10 +14,7 @@ export async function deleteRevokedLocalCopies(
     userId: string,
     store: LocalDocumentStore,
 ): Promise<string[]> {
-    // Without this account's session RLS answers as anon with no pages,
-    // e.g. while the app runs on the remembered account (offline start).
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.user.id !== userId) return [];
+    if (!(await hasAccountSession(userId))) return [];
 
     const response = await supabase.from("pages").select("id", { count: "exact" });
 

@@ -17,7 +17,8 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
 }
 
-function parseWorkspaces(value: unknown): Workspace[] | null {
+/** Also used for server answers; null means the data is not valid. */
+export function parseWorkspaces(value: unknown): Workspace[] | null {
     if (!Array.isArray(value)) return null;
     const valid = value.every(
         (item) => isObject(item) && typeof item.id === "string" && typeof item.name === "string",
@@ -25,7 +26,8 @@ function parseWorkspaces(value: unknown): Workspace[] | null {
     return valid ? value.map(({ id, name }: Workspace) => ({ id, name })) : null;
 }
 
-function parseStoredPages(value: unknown): StoredPage[] | null {
+/** Also used for server answers; null means the data is not valid. */
+export function parseStoredPages(value: unknown): StoredPage[] | null {
     if (!Array.isArray(value)) return null;
     const valid = value.every(
         (item) =>
