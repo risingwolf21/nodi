@@ -173,19 +173,22 @@ export function DatabaseView({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center gap-1 overflow-x-auto px-[var(--page-gutter)]" role="tablist" aria-label="Ansichten">
-                {views.map((view) => (
-                    <ViewTab
-                        key={view.id}
-                        view={view}
-                        active={view.id === activeView?.id}
-                        editable={editable}
-                        canDelete={views.length > 1}
-                        onSelect={() => setActiveViewId(view.id)}
-                        onRename={(name) => run(updateView(view.id, { name }))}
-                        onDelete={() => setViewToDelete(view)}
-                    />
-                ))}
+            {/* No overflow here: it would clip the menus of the tabs and the toolbar. */}
+            <div className="flex flex-wrap items-center gap-1 px-[var(--page-gutter)]">
+                <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Ansichten">
+                    {views.map((view) => (
+                        <ViewTab
+                            key={view.id}
+                            view={view}
+                            active={view.id === activeView?.id}
+                            editable={editable}
+                            canDelete={views.length > 1}
+                            onSelect={() => setActiveViewId(view.id)}
+                            onRename={(name) => run(updateView(view.id, { name }))}
+                            onDelete={() => setViewToDelete(view)}
+                        />
+                    ))}
+                </div>
                 {editable && (
                     <div className="relative shrink-0">
                         <button
@@ -209,7 +212,7 @@ export function DatabaseView({
                     </div>
                 )}
                 {activeView && (
-                    <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                    <div className="ml-auto flex flex-wrap items-center gap-0.5">
                         <FilterPanel
                             config={activeView.config}
                             properties={data.properties}

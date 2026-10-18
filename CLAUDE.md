@@ -259,7 +259,9 @@ src/
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
-                            # menu.tsx (schließt bei Klick außerhalb);
+                            # menu.tsx (schließt bei Klick außerhalb;
+                            # `detached`: fest positioniert, für Menüs
+                            # in Scroll-Containern wie Tabellen);
                             # dialog.tsx (natives <dialog>: Escape, Fokus
                             # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout

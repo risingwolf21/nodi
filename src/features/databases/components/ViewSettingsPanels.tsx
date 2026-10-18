@@ -138,7 +138,7 @@ export function FilterPanel({ config, properties, editable, onChange, onError }:
                 <Filter className="size-3.5" />
                 Filter{config.filter.length > 0 ? ` (${config.filter.length})` : ""}
             </button>
-            <Menu open={open} onClose={() => setOpen(false)} role="dialog" label="Filter" className="w-[min(26rem,calc(100vw-2rem))] p-2">
+            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Filter" className="w-[min(26rem,calc(100vw-2rem))] p-2">
                 {config.filter.length === 0 && (
                     <p className="px-1 pb-2 text-xs text-muted-foreground">Noch keine Filter: alle Einträge werden gezeigt.</p>
                 )}
@@ -237,7 +237,7 @@ export function PropertiesPanel({ config, properties, editable, onChange, onErro
                 <SlidersHorizontal className="size-3.5" />
                 <span className="hidden sm:inline">Eigenschaften</span>
             </button>
-            <Menu open={open} onClose={() => setOpen(false)} role="dialog" label="Eigenschaften" className="w-60 p-1">
+            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Eigenschaften" className="w-60 p-1">
                 {properties.length === 0 && (
                     <p className="px-2 py-1 text-xs text-muted-foreground">Noch keine Eigenschaften.</p>
                 )}
@@ -286,7 +286,7 @@ export function SortPanel({ config, properties, editable, onChange, onError }: P
                 <ArrowUpDown className="size-3.5" />
                 Sortieren{config.sort.length > 0 ? ` (${config.sort.length})` : ""}
             </button>
-            <Menu open={open} onClose={() => setOpen(false)} role="dialog" label="Sortieren" className="w-[min(22rem,calc(100vw-2rem))] p-2">
+            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Sortieren" className="w-[min(22rem,calc(100vw-2rem))] p-2">
                 {config.sort.length === 0 && (
                     <p className="px-1 pb-2 text-xs text-muted-foreground">Ohne Sortierung gilt die eigene Reihenfolge.</p>
                 )}

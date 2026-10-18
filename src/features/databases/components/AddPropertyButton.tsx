@@ -41,7 +41,7 @@ export function AddPropertyButton({ onAdd, onError, label }: AddPropertyButtonPr
                 <Plus className="size-4" />
                 {label}
             </button>
-            <Menu open={open} onClose={() => setOpen(false)} align="end" className="w-52">
+            <Menu detached open={open} onClose={() => setOpen(false)} align="end" className="w-52">
                 <p className="px-2 pt-1 pb-1 text-xs text-muted-foreground">Neue Eigenschaft</p>
                 <div className="max-h-72 overflow-y-auto">
                     {PROPERTY_TYPES.map((type) => (
