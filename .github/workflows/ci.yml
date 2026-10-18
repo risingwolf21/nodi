@@ -56,6 +56,11 @@ jobs:
             test -f "dist/icons/$icon.png" || (echo "dist/icons/$icon.png fehlt" && exit 1)
           done
 
+      - name: Check bundle for secret keys
+        run: |
+          ! grep -rl "sb_secret_" dist \
+            || (echo "Ein geheimer Supabase-Schlüssel steht im Bundle" && exit 1)
+
   database:
     name: Database migrations & tests
     runs-on: ubuntu-latest

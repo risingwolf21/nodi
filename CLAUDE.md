@@ -307,8 +307,10 @@ supabase/
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
-                            # pages.full_width (P10)
-  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
+                            # pages.full_width (P10), Teilen und
+                            # öffentliche Links (P11a)
+  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
+                            # Seiteneinstellungen, Teilen
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -950,11 +952,33 @@ Arbeitspakete, je ein Pull Request:
             Server.
         -   Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
             CI-Check auf `dist/`).
-    -   **Vor der Umsetzung zu entscheiden:** Vererbung auch für
-        `private` Unterseiten? Öffentliche Links (`pages.is_public` oder
-        Share-Token, Zugriff dann nur über eine RPC, nicht über
-        anon-RLS) jetzt oder später? Wie findet der Owner einen Nutzer
-        (E-Mail, ohne alle Profile offenzulegen)?
+    -   **Entschieden (Nutzer, 2026-10-18):** (1) Freigaben gelten
+        **nicht** für `private` Unterseiten; die Vererbung endet an einer
+        privaten Seite (sie und alles darunter brauchen eine eigene
+        Freigabe). (2) Öffentliche Links **jetzt**, nur über eine RPC.
+        (3) Nutzer finden per **exakter E-Mail-Eingabe**.
+    -   **Annahme:** Ein öffentlicher Link gilt nur für genau diese Seite,
+        nicht für ihre Unterseiten (später erweiterbar).
+    -   **Aufteilung:** 11a Datenbank (RPCs, Vererbung, Links, pgTAP,
+        Schlüssel-Checks), 11b Oberfläche zum Teilen und „Mit mir
+        geteilt“, lokale Kopie bei Entzug löschen, 11c öffentliche
+        Seitenansicht ohne Login.
+    -   **Umsetzung 11a** (`20261018120000_page_sharing.sql`):
+        `has_page_share(page, require_edit)` geht rekursiv über
+        `parent_id` nach oben (Stopp an `private`, Tiefe ≤ 50 gegen
+        Zyklen); `can_read_page`/`can_edit_page` nutzen es, damit gelten
+        alle bestehenden Policies und `save_page_document` automatisch.
+        `share_page(page, email, 'read'|'edit')` (nur Owner; `42501`,
+        `22023`, `P0002` unbekannte E-Mail; erneutes Teilen ändert die
+        Rolle), `list_page_shares(page)` mit E-Mails (nur Owner).
+        Ändern/Entziehen über die bestehenden Owner-Policies auf
+        `page_shares`. Tabelle `page_public_links` (ein Token je Seite,
+        nur Owner), `get_public_page(token)` für `anon` (nur diese
+        Seite, nicht archiviert). Die Fehlermeldung bei unbekannter
+        E-Mail verrät dem Owner, ob ein Konto existiert (bewusst, wie bei
+        Einladungen üblich). Deploy lehnt `sb_secret_`- und
+        `service_role`-Schlüssel als Publishable Key ab; CI prüft das
+        Bundle auf `sb_secret_`.
     -   **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
         Zeilen (`pages`, `page_documents`), auch für Unterseiten.
         Viewer kann lesen, aber nicht schreiben (`save_page_document` →
