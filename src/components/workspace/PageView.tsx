@@ -19,6 +19,8 @@ type PageViewProps = {
     onRename: (pageId: string, title: string) => Promise<void>;
     onUpdate: (pageId: string, settings: PageSettings) => Promise<void>;
     onArchive: (page: Page) => void;
+    /** Only for the page owner. */
+    onShare?: (page: Page) => void;
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -42,6 +44,7 @@ export function PageView({
     onRename,
     onUpdate,
     onArchive,
+    onShare,
 }: PageViewProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
@@ -98,6 +101,16 @@ export function PageView({
                 <MoreHorizontal className="size-5" />
             </button>
             <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                {onShare && (
+                    <MenuItem
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onShare(page);
+                        }}
+                    >
+                        Teilen
+                    </MenuItem>
+                )}
                 <MenuItem onSelect={toggleFullWidth}>
                     <span className="flex-1">Volle Breite</span>
                     {page.full_width && <Check className="size-4 text-brand" />}

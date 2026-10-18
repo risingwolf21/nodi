@@ -11,6 +11,7 @@ export function pageTreeDatabaseName(userId: string): string {
 }
 
 const pagesKey = (workspaceId: string) => `pages:${workspaceId}`;
+const SHARED_PAGES_KEY = "shared-pages";
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -34,12 +35,14 @@ function parseStoredPages(value: unknown): StoredPage[] | null {
             (item.parent_id === null || typeof item.parent_id === "string") &&
             typeof item.is_archived === "boolean",
     );
-    // Trees cached before package 10 have no icon or width; they stay valid.
+    // Trees cached before packages 10 and 11b have no icon, width or
+    // owner; they stay valid (no owner: not shareable until reloaded).
     return valid
-        ? value.map(({ id, title, parent_id, is_archived, icon, full_width }: StoredPage) => ({
+        ? value.map(({ id, title, parent_id, owner_id, is_archived, icon, full_width }: StoredPage) => ({
               id,
               title,
               parent_id,
+              owner_id: typeof owner_id === "string" ? owner_id : "",
               is_archived,
               icon: typeof icon === "string" ? icon : null,
               full_width: full_width === true,
@@ -77,6 +80,15 @@ export class PageTreeCache {
 
     putPages(workspaceId: string, pages: StoredPage[]): Promise<void> {
         return this.write(pagesKey(workspaceId), pages);
+    }
+
+    /** Pages shared with the user from workspaces they are not a member of. */
+    async getSharedPages(): Promise<StoredPage[] | null> {
+        return parseStoredPages(await this.read(SHARED_PAGES_KEY));
+    }
+
+    putSharedPages(pages: StoredPage[]): Promise<void> {
+        return this.write(SHARED_PAGES_KEY, pages);
     }
 
     close(): Promise<void> {

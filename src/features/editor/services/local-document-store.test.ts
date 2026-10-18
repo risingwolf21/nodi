@@ -137,4 +137,17 @@ describe("LocalDocumentStore", () => {
             expect((await store.get(pageId))?.mutationId).toBe(idB);
         });
     });
+
+    it("deletes synced copies of pages that are no longer readable, keeps unsynced edits", async () => {
+        await store.putLocalEdit(localEdit({ pageId: "readable", synced: true }));
+        await store.putLocalEdit(localEdit({ pageId: "revoked", synced: true }));
+        await store.putLocalEdit(localEdit({ pageId: "revoked-unsynced", synced: false }));
+
+        const deleted = await store.deleteSyncedExcept(new Set(["readable"]));
+
+        expect(deleted).toEqual(["revoked"]);
+        expect(await store.get("readable")).not.toBeNull();
+        expect(await store.get("revoked")).toBeNull();
+        expect(await store.get("revoked-unsynced")).not.toBeNull();
+    });
 });
