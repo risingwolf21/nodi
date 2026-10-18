@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(18);
 
 -- Users: owner, workspace member (editor), read-only share recipient
 insert into auth.users (id, email)
@@ -39,7 +39,7 @@ values
    '11111111-1111-4111-8111-111111111111',
    '11111111-1111-4111-8111-111111111111',
    'Read-only page', 'private'),
-  -- for the legacy write path
+  -- target of the rejected direct writes
   ('dddddddd-dddd-4ddd-8ddd-dddddddddddd',
    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    '11111111-1111-4111-8111-111111111111',
@@ -194,7 +194,7 @@ select throws_ok(
   'Missing edit time is rejected'
 );
 
--- 14: read-only recipient cannot save (RLS)
+-- 14: read-only recipient cannot save
 set local request.jwt.claim.sub = '33333333-3333-4333-8333-333333333333';
 
 select throws_ok(
@@ -208,7 +208,7 @@ select throws_ok(
   'Read-only share recipient cannot save'
 );
 
--- 15: a page that does not exist is rejected by RLS before the foreign key
+-- 15: a page that does not exist is rejected like a missing permission
 select throws_ok(
   $$select * from public.save_page_document(
       '99999999-9999-4999-8999-999999999999',
@@ -220,20 +220,28 @@ select throws_ok(
   'Saving to a page that does not exist is rejected'
 );
 
--- 16: the legacy write path still works and gets an edit time
+-- 16-17: direct writes bypassing the LWW rule are rejected, even for
+-- the page owner (old clients' upsert)
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 
-insert into public.page_documents (page_id, document)
-values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '[]'::jsonb);
-
-select is(
-  (select client_updated_at from public.page_documents
-   where page_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
-  now(),
-  'Direct insert without edit time defaults client_updated_at to now()'
+select throws_ok(
+  $$insert into public.page_documents (page_id, document)
+    values ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '[]'::jsonb)$$,
+  '42501',
+  null,
+  'Direct insert into page_documents is rejected'
 );
 
--- 17: anonymous users cannot call the function
+select throws_ok(
+  $$update public.page_documents
+    set document = '[]'::jsonb
+    where page_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'$$,
+  '42501',
+  null,
+  'Direct update of page_documents is rejected'
+);
+
+-- 18: anonymous users cannot call the function
 set local role anon;
 
 select throws_ok(

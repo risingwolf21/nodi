@@ -2,6 +2,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RemoteRequestError } from "../document-sync";
 import type { LocalDocument, RemoteDocument, RemoteDocumentApi, SaveOutcome } from "../types";
+import type { DocumentChanges } from "./document-changes";
 import { LocalDocumentStore } from "./local-document-store";
 import {
     loadInitialDocument,
@@ -9,6 +10,7 @@ import {
     type PageDocumentSessionOptions,
     type SessionStatus,
 } from "./page-document-session";
+import { SyncEngine } from "./sync-engine";
 
 const pageId = "page-1";
 const ownId = "00000000-0000-4000-8000-0000000000a1";
@@ -41,14 +43,39 @@ function createRemote(saveOutcome: SaveOutcome = { kind: "saved" }) {
 }
 
 let store: LocalDocumentStore;
+let changes: DocumentChanges;
 let statuses: SessionStatus[];
 let remoteContent: ReturnType<typeof vi.fn<PageDocumentSessionOptions["onRemoteContent"]>>;
 
+/** Delivers asynchronously like BroadcastChannel, to every subscriber. */
+function createChanges(): DocumentChanges {
+    const listeners = new Set<(pageId: string) => void>();
+    return {
+        announce: (changedPageId) =>
+            queueMicrotask(() => listeners.forEach((listener) => listener(changedPageId))),
+        subscribe(listener) {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
+        },
+    };
+}
+
 function createSession(remote: RemoteDocumentApi) {
+    const sync = new SyncEngine({
+        userId: "user-1",
+        store,
+        remote,
+        changes,
+        lock: (_name, task) => task(),
+    });
     return new PageDocumentSession({
         pageId,
         store,
         remote,
+        changes,
+        sync,
         onStatus: (status) => statuses.push(status),
         onRemoteContent: remoteContent,
         onPermission: () => undefined,
@@ -61,12 +88,13 @@ const lastStatus = () => statuses.at(-1);
 
 beforeEach(() => {
     store = new LocalDocumentStore("user-1", new IDBFactory());
+    changes = createChanges();
     statuses = [];
     remoteContent = vi.fn<PageDocumentSessionOptions["onRemoteContent"]>();
 });
 
 describe("PageDocumentSession", () => {
-    it("stores an edit locally, sends it and marks it synced", async () => {
+    it("stores an edit locally, lets the engine send it and shows synced", async () => {
         const remote = createRemote();
         const session = createSession(remote);
         await session.start(synced(), { freshFromServer: true });
@@ -80,7 +108,7 @@ describe("PageDocumentSession", () => {
             { editedAt: "2026-10-17T10:00:00.000Z", mutationId: ownId },
         );
         expect(await store.get(pageId)).toMatchObject({ synced: true, mutationId: ownId });
-        expect(lastStatus()).toEqual({ kind: "synced" });
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
     });
 
     it("keeps the edit locally when offline and sends it on retry", async () => {
@@ -100,7 +128,7 @@ describe("PageDocumentSession", () => {
         remote.save.mockResolvedValue({ kind: "saved" });
         await session.retry();
 
-        expect(lastStatus()).toEqual({ kind: "synced" });
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
         expect(await store.get(pageId)).toMatchObject({ synced: true });
     });
 
@@ -115,7 +143,7 @@ describe("PageDocumentSession", () => {
         session.recordEdit([{ type: "paragraph", content: "older edit" }]);
         await session.flush();
 
-        expect(remoteContent).toHaveBeenCalledWith(newerRemote.content, true);
+        await vi.waitFor(() => expect(remoteContent).toHaveBeenCalledWith(newerRemote.content, true));
         expect(await store.get(pageId)).toMatchObject({ synced: true, mutationId: otherDeviceId });
         expect(lastStatus()).toEqual({ kind: "synced" });
     });
@@ -134,7 +162,7 @@ describe("PageDocumentSession", () => {
         expect(await store.get(pageId)).toMatchObject({ synced: false });
     });
 
-    it("sends an unsynced local copy right after opening", async () => {
+    it("hands an unsynced local copy to the engine right after opening", async () => {
         const remote = createRemote();
         const session = createSession(remote);
         const unsynced = synced({ synced: false, mutationId: ownId });
@@ -144,7 +172,7 @@ describe("PageDocumentSession", () => {
 
         expect(remote.save).toHaveBeenCalledTimes(1);
         expect(remote.fetch).not.toHaveBeenCalled();
-        expect(lastStatus()).toEqual({ kind: "synced" });
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
     });
 
     it("updates a synced local copy with a newer server version", async () => {
@@ -154,7 +182,7 @@ describe("PageDocumentSession", () => {
 
         await session.start(synced(), { freshFromServer: false });
 
-        expect(remoteContent).toHaveBeenCalledWith(newerRemote.content, false);
+        await vi.waitFor(() => expect(remoteContent).toHaveBeenCalledWith(newerRemote.content, false));
         expect(lastStatus()).toEqual({ kind: "synced" });
     });
 
@@ -175,6 +203,7 @@ describe("PageDocumentSession", () => {
         session.recordEdit([{ type: "paragraph", content: "typed meanwhile" }]);
         resolveFetch();
         await started;
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(remoteContent).not.toHaveBeenCalled();
     });
@@ -188,6 +217,25 @@ describe("PageDocumentSession", () => {
         await session.start(synced(), { freshFromServer: false });
 
         expect(lastStatus()).toEqual({ kind: "offline" });
+    });
+
+    it("shows an edit made in another tab", async () => {
+        const remote = createRemote({ kind: "failed", reason: "offline", message: "Failed to fetch" });
+        const session = createSession(remote);
+        await store.putLocalEdit(synced());
+        await session.start(synced(), { freshFromServer: true });
+
+        const otherTabEdit = synced({
+            content: [{ type: "paragraph", content: "other tab" }],
+            editedAt: "2026-10-17T10:30:00.000Z",
+            mutationId: "00000000-0000-4000-8000-0000000000b2",
+            synced: false,
+        });
+        await store.putLocalEdit(otherTabEdit);
+        changes.announce(pageId);
+
+        await vi.waitFor(() => expect(remoteContent).toHaveBeenCalledWith(otherTabEdit.content, false));
+        expect(lastStatus()).toEqual({ kind: "saving" });
     });
 });
 

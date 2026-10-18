@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(11);
+select plan(10);
 
 -- Test users: workspace owner, workspace member
 insert into auth.users (id, email)
@@ -89,54 +89,29 @@ select throws_ok(
   'Member cannot move a page into another workspace'
 );
 
--- Server sets audit fields, client values are ignored
-insert into public.page_documents (page_id, document, updated_at, updated_by)
-values (
-  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  '[]'::jsonb,
-  '2000-01-01T00:00:00Z',
-  '11111111-1111-4111-8111-111111111111'
+-- Server sets audit fields; documents are written only through the RPC,
+-- which runs with definer rights but must still record the caller
+select lives_ok(
+  $$select * from public.save_page_document(
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      '[]'::jsonb,
+      now() - interval '1 minute',
+      '00000000-0000-4000-8000-000000000001')$$,
+  'Member can save the document through the RPC'
 );
 
 select is(
   (select updated_by from public.page_documents
    where page_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
   '22222222-2222-4222-8222-222222222222'::uuid,
-  'Insert: updated_by is the authenticated user, not the client value'
+  'updated_by is the authenticated user, not the function owner'
 );
 
 select is(
   (select updated_at from public.page_documents
    where page_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
   now(),
-  'Insert: updated_at is the server time, not the client value'
-);
-
--- Same statement shape as the editor's upsert via PostgREST
-insert into public.page_documents (page_id, document, updated_at, updated_by)
-values (
-  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  '[{"type":"paragraph"}]'::jsonb,
-  '2000-01-01T00:00:00Z',
-  '11111111-1111-4111-8111-111111111111'
-)
-on conflict (page_id) do update
-set document = excluded.document,
-    updated_at = excluded.updated_at,
-    updated_by = excluded.updated_by;
-
-select is(
-  (select updated_by from public.page_documents
-   where page_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  '22222222-2222-4222-8222-222222222222'::uuid,
-  'Upsert: updated_by is the authenticated user, not the client value'
-);
-
-select is(
-  (select updated_at from public.page_documents
-   where page_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  now(),
-  'Upsert: updated_at is the server time, not the client value'
+  'updated_at is the server time'
 );
 
 -- Test as page owner

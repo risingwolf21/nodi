@@ -8,6 +8,8 @@ import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
 import { RemoteRequestError } from "@/features/editor/document-sync";
+import { syncEngineFor } from "@/features/editor/services/account-sync";
+import { documentChangesFor } from "@/features/editor/services/document-changes";
 import {
     localDocumentStoreFor,
     type LocalDocumentStore,
@@ -69,10 +71,12 @@ function toEditorBlocks(content: DocumentContent): DocumentContent {
 }
 
 function EditorContent({
+    userId,
     pageId,
     initial,
     store,
 }: {
+    userId: string;
     pageId: string;
     initial: InitialDocument;
     store: LocalDocumentStore;
@@ -102,6 +106,8 @@ function EditorContent({
             pageId,
             store,
             remote: remoteDocumentRepository,
+            changes: documentChangesFor(userId),
+            sync: syncEngineFor(userId),
             onStatus: (next) => {
                 if (!disposed) setStatus(next);
             },
@@ -130,21 +136,22 @@ function EditorContent({
         };
         const flush = () => void current.flush();
         // A hint only; the request itself shows whether the server answers.
-        const retryWhenOnline = () => void current.retry();
+        // Unsynced edits are resent by the sync engine.
+        const refreshWhenOnline = () => void current.refresh();
 
         document.addEventListener("visibilitychange", flushWhenHidden);
         window.addEventListener("pagehide", flush);
-        window.addEventListener("online", retryWhenOnline);
+        window.addEventListener("online", refreshWhenOnline);
 
         return () => {
             document.removeEventListener("visibilitychange", flushWhenHidden);
             window.removeEventListener("pagehide", flush);
-            window.removeEventListener("online", retryWhenOnline);
+            window.removeEventListener("online", refreshWhenOnline);
             disposed = true;
             session.current = null;
             void current.dispose();
         };
-    }, [editor, initial, pageId, store]);
+    }, [editor, initial, pageId, store, userId]);
 
     useEffect(() => {
         if (!showSupersededNotice) return;
@@ -259,7 +266,7 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
 
     // Das Ergebnis der vorherigen Seite während des Ladens ignorieren.
     // Dadurch muss der Effect keinen synchronen Reset ausführen.
-    if (!store || !loadResult || loadResult.pageId !== pageId) {
+    if (!user || !store || !loadResult || loadResult.pageId !== pageId) {
         return (
             <p className="p-6 text-sm text-muted-foreground">
                 Dokument wird geladen …
@@ -278,6 +285,7 @@ export default function BlockEditor({ pageId }: BlockEditorProps) {
     return (
         <EditorContent
             key={pageId}
+            userId={user.id}
             pageId={pageId}
             initial={loadResult.initial}
             store={store}

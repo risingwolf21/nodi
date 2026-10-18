@@ -5,7 +5,9 @@ import type {
     RemoteDocumentApi,
     RequestFailureReason,
 } from "../types";
+import type { DocumentChanges } from "./document-changes";
 import type { LocalDocumentStore } from "./local-document-store";
+import type { SyncEngine, SyncFailure } from "./sync-engine";
 
 export const SAVE_DEBOUNCE_MS = 800;
 
@@ -24,8 +26,10 @@ export type PageDocumentSessionOptions = {
     pageId: string;
     store: LocalDocumentStore;
     remote: RemoteDocumentApi;
+    changes: DocumentChanges;
+    sync: Pick<SyncEngine, "requestSync" | "retryNow" | "onFailure">;
     onStatus: (status: SessionStatus) => void;
-    /** Server content replaced the local content (other device, Option A). */
+    /** Stored content replaced what the editor shows (other device or tab). */
     onRemoteContent: (content: DocumentContent, supersededLocalEdit: boolean) => void;
     onPermission: (canEdit: boolean) => void;
     now?: () => Date;
@@ -57,9 +61,10 @@ export async function loadInitialDocument(
 }
 
 /**
- * Save and sync flow for one open page: every edit is written to the local
- * store first, then sent to the server. Operations run one after another,
- * so an older write can never overtake a newer one on this device.
+ * Editing flow for one open page: every edit is written to the local
+ * store first; the sync engine sends it. The session follows the stored
+ * state, so results from the engine and from other tabs arrive the same
+ * way. Operations run one after another.
  */
 export class PageDocumentSession {
     private readonly options: PageDocumentSessionOptions;
@@ -68,6 +73,7 @@ export class PageDocumentSession {
     private pendingEditedAt: string | null = null;
     private timer: ReturnType<typeof setTimeout> | null = null;
     private queue: Promise<void> = Promise.resolve();
+    private unsubscribers: (() => void)[] = [];
 
     constructor(options: PageDocumentSessionOptions) {
         this.options = options;
@@ -82,16 +88,25 @@ export class PageDocumentSession {
     }
 
     /**
-     * Starts with the document the editor shows. Unless it came straight
-     * from the server, its state is compared with the server once.
+     * Starts with the document the editor shows. An unsynced copy is handed
+     * to the sync engine; a synced copy that did not come straight from the
+     * server is compared with the server once.
      */
     start(initial: LocalDocument, { freshFromServer }: { freshFromServer: boolean }): Promise<void> {
+        const { changes, sync, pageId } = this.options;
         this.current = initial;
-        // An unsynced copy is sent right away by reconcile().
         this.options.onStatus(initial.synced ? { kind: "synced" } : { kind: "saving" });
 
+        this.unsubscribers.push(
+            changes.subscribe((changedPageId) => {
+                if (changedPageId === pageId) void this.enqueue(() => this.adoptStoredVersion());
+            }),
+            sync.onFailure((failure) => this.showFailure(failure)),
+        );
+
+        if (!initial.synced) return sync.requestSync();
         if (freshFromServer) return this.queue;
-        return this.enqueue(() => this.reconcile());
+        return this.refresh();
     }
 
     recordEdit(content: DocumentContent): void {
@@ -134,17 +149,27 @@ export class PageDocumentSession {
             this.options.onStatus({ kind: "saving" });
             await this.options.store.putLocalEdit(record);
             this.current = record;
-            await this.push(record);
+            this.options.changes.announce(record.pageId);
+            await this.options.sync.requestSync();
         });
     }
 
-    /** Retry after an error or when the user asks for it. */
-    retry(): Promise<void> {
-        return this.enqueue(() => this.reconcile());
+    /** Asks the server for a newer version, e.g. when back online. */
+    refresh(): Promise<void> {
+        return this.enqueue(() => this.fetchNewerVersion());
     }
 
+    /** The user asks again after an error. */
+    retry(): Promise<void> {
+        return Promise.all([this.options.sync.retryNow(), this.refresh()]).then(() => undefined);
+    }
+
+    /** Pending edits are stored and handed to the sync engine. */
     dispose(): Promise<void> {
-        return this.flush();
+        const flushed = this.flush();
+        for (const unsubscribe of this.unsubscribers) unsubscribe();
+        this.unsubscribers = [];
+        return flushed;
     }
 
     private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -159,101 +184,69 @@ export class PageDocumentSession {
         return run;
     }
 
-    /** Sends an unsynced local version, or takes over a newer server version. */
-    private async reconcile(): Promise<void> {
+    /** Follows the stored state after the engine, a refresh or another tab changed it. */
+    private async adoptStoredVersion(): Promise<void> {
         const current = this.current;
-        if (!current) return;
+        const stored = await this.options.store.get(this.options.pageId);
+        if (!current || !stored) return;
 
-        if (!current.synced) {
-            await this.push(current);
+        if (stored.canEdit !== null) this.options.onPermission(stored.canEdit);
+
+        if (stored.mutationId === current.mutationId && stored.editedAt === current.editedAt) {
+            this.current = stored;
+            if (stored.synced && !this.pendingContent) this.options.onStatus({ kind: "synced" });
             return;
         }
 
-        let remote;
+        // Typing wins: the pending edit is newer and will replace it.
+        if (this.pendingContent) return;
+
+        // Option A (CLAUDE.md §2): our unsynced edit lost against a newer version.
+        const supersededLocalEdit = !current.synced && stored.synced;
+        this.current = stored;
+        this.options.onRemoteContent(stored.content, supersededLocalEdit);
+        this.options.onStatus(stored.synced ? { kind: "synced" } : { kind: "saving" });
+    }
+
+    /** Unsynced edits are the engine's job; only a synced copy is refreshed. */
+    private async fetchNewerVersion(): Promise<void> {
+        const { pageId, remote, store, changes } = this.options;
+        if (!this.current?.synced) return;
+
+        let fetched;
         try {
-            remote = await this.options.remote.fetch(current.pageId);
+            fetched = await remote.fetch(pageId);
         } catch (error) {
-            this.reportFetchFailure(error, false);
+            this.reportFetchFailure(error);
             return;
         }
 
-        this.options.onPermission(remote.canEdit);
-        const { record, replaced } = await this.options.store.applyRemote(
-            current.pageId,
-            remote.document,
-            remote.canEdit,
+        this.options.onPermission(fetched.canEdit);
+        const { replaced } = await store.applyRemote(pageId, fetched.document, fetched.canEdit);
+        if (replaced) changes.announce(pageId);
+        if (!this.pendingContent && this.current?.synced) this.options.onStatus({ kind: "synced" });
+    }
+
+    private showFailure(failure: SyncFailure): void {
+        const current = this.current;
+        if (
+            failure.pageId !== this.options.pageId ||
+            !current ||
+            current.synced ||
+            current.mutationId !== failure.mutationId ||
+            this.pendingContent
+        ) {
+            return;
+        }
+
+        this.options.onStatus(
+            failure.reason === "permanent"
+                ? { kind: "error", message: failure.message }
+                : { kind: "unsynced", reason: failure.reason },
         );
-
-        // Typing during the fetch wins: the pending edit is newer anyway.
-        if (this.pendingContent || this.current !== current) return;
-
-        this.current = record;
-        if (replaced) this.options.onRemoteContent(record.content, false);
-        this.options.onStatus({ kind: "synced" });
     }
 
-    private async push(record: LocalDocument): Promise<void> {
-        if (!record.mutationId) return;
-
-        this.options.onStatus({ kind: "saving" });
-        const outcome = await this.options.remote.save(record.pageId, record.content, {
-            editedAt: record.editedAt,
-            mutationId: record.mutationId,
-        });
-
-        if (outcome.kind === "saved") {
-            const stillCurrent = await this.options.store.markSynced(record.pageId, record.mutationId);
-            if (stillCurrent && this.current?.mutationId === record.mutationId) {
-                this.current = { ...record, synced: true };
-                if (!this.pendingContent) this.options.onStatus({ kind: "synced" });
-            }
-            return;
-        }
-
-        if (outcome.kind === "failed") {
-            this.options.onStatus(
-                outcome.reason === "permanent"
-                    ? { kind: "error", message: outcome.message }
-                    : { kind: "unsynced", reason: outcome.reason },
-            );
-            return;
-        }
-
-        await this.takeOverSupersedingVersion(record.mutationId);
-    }
-
-    /** Option A (CLAUDE.md §2): load the newer version and say so. */
-    private async takeOverSupersedingVersion(rejectedMutationId: string): Promise<void> {
-        const pageId = this.current?.pageId;
-        if (!pageId) return;
-
-        let remote;
-        try {
-            remote = await this.options.remote.fetch(pageId);
-        } catch (error) {
-            this.reportFetchFailure(error, true);
-            return;
-        }
-
-        this.options.onPermission(remote.canEdit);
-        const { record, replaced } = await this.options.store.applyRemote(
-            pageId,
-            remote.document,
-            remote.canEdit,
-            rejectedMutationId,
-        );
-
-        // A newer local edit exists; it will be sent next and decide itself.
-        if (!replaced || this.pendingContent || this.current?.mutationId !== rejectedMutationId) {
-            return;
-        }
-
-        this.current = record;
-        this.options.onRemoteContent(record.content, true);
-        this.options.onStatus({ kind: "synced" });
-    }
-
-    private reportFetchFailure(error: unknown, hasUnsyncedEdit: boolean): void {
+    private reportFetchFailure(error: unknown): void {
         if (!(error instanceof RemoteRequestError) || error.reason === "permanent") {
             console.error("Dokument konnte nicht vom Server geladen werden:", error);
             this.options.onStatus({
@@ -263,8 +256,6 @@ export class PageDocumentSession {
             return;
         }
 
-        this.options.onStatus(
-            hasUnsyncedEdit ? { kind: "unsynced", reason: error.reason } : { kind: "offline" },
-        );
+        this.options.onStatus({ kind: "offline" });
     }
 }

@@ -14,6 +14,7 @@ import { PageTree } from "@/features/pages/PageTree";
 import { CreatePageForm } from "@/features/pages/CreatePageForm";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { TrashView } from "@/features/pages/components/TrashView";
+import { syncEngineFor } from "@/features/editor/services/account-sync";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -112,6 +113,16 @@ export default function WorkspaceHome() {
             active = false;
         };
     }, [loadWorkspaces]);
+
+    // Sends edits that are still waiting, also those of pages not open now.
+    const userId = user?.id;
+    useEffect(() => {
+        if (!userId) return;
+
+        const engine = syncEngineFor(userId);
+        engine.start();
+        return () => engine.stop();
+    }, [userId]);
 
     useEffect(() => {
         if (!sidebarOpen) return;
