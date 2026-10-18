@@ -1,6 +1,8 @@
 
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { displayTitle } from "../page-display";
 import type { Page } from "../types";
 import { findArchivedAncestors } from "../page-hierarchy";
 import { Undo2, Trash2 } from "lucide-react";
@@ -9,7 +11,6 @@ type TrashViewProps = {
     pages: Page[];
     /** Only the owner of a page may delete it for good. */
     userId: string | undefined;
-    loading?: boolean;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
 };
@@ -17,7 +18,6 @@ type TrashViewProps = {
 export function TrashView({
     pages,
     userId,
-    loading = false,
     onRestore,
     onDelete,
 }: TrashViewProps) {
@@ -105,20 +105,16 @@ export function TrashView({
         }
     }
 
-    function renderPages(parentId: string | null, depth = 0): ReactNode {
+    function renderPages(parentId: string | null): ReactNode {
         const children = childrenByParent.get(parentId) ?? [];
 
         return children.map((page) => (
             <li key={page.id} className="min-w-0">
                 <div className="flex min-w-0 items-center gap-1 py-1">
-                    <button
-                        type="button"
-                        title={page.title}
-                        onClick={() => requestRestore(page)}
-                        className="min-w-0 flex-1 truncate text-left text-sm hover:text-foreground"
-                    >
-                        {page.title}
-                    </button>
+                    {/* Restoring is the button's job, not a click on the title. */}
+                    <span title={displayTitle(page)} className="min-w-0 flex-1 truncate text-sm">
+                        {displayTitle(page)}
+                    </span>
 
                     <div className="flex shrink-0 items-center gap-1">
                         <Button
@@ -126,6 +122,7 @@ export function TrashView({
                             variant="ghost"
                             title="Wiederherstellen"
                             aria-label={`„${page.title}“ wiederherstellen`}
+                            disabled={busyId !== null}
                             onClick={() => requestRestore(page)}
                         >
                             <Undo2 className="h-4 w-4" />
@@ -137,6 +134,7 @@ export function TrashView({
                                 variant="ghost"
                                 title="Endgültig löschen"
                                 aria-label={`„${page.title}“ endgültig löschen`}
+                                disabled={busyId !== null}
                                 onClick={() => setPageToDelete(page)}
                             >
                                 <Trash2 className="h-4 w-4" />
@@ -145,17 +143,9 @@ export function TrashView({
                     </div>
                 </div>
 
-                <ul className="pl-3">{renderPages(page.id, depth + 1)}</ul>
+                <ul className="pl-3">{renderPages(page.id)}</ul>
             </li>
         ));
-    }
-
-    if (loading) {
-        return (
-            <p className="p-4 text-sm text-muted-foreground">
-                Papierkorb wird geladen …
-            </p>
-        );
     }
 
     return (
@@ -183,129 +173,107 @@ export function TrashView({
             )}
 
             {pageToRestore && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                    onMouseDown={(event) => {
-                        if (
-                            event.target === event.currentTarget &&
-                            busyId === null
-                        ) {
-                            setPageToRestore(null);
-                        }
-                    }}
+                <Dialog
+                    role="alertdialog"
+                    labelledBy="restore-with-parents-title"
+                    onClose={() => setPageToRestore(null)}
+                    busy={busyId !== null}
+                    className="max-w-md"
                 >
-                    <section
-                        role="alertdialog"
-                        aria-modal="true"
-                        aria-labelledby="restore-with-parents-title"
-                        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+                    <h3
+                        id="restore-with-parents-title"
+                        className="text-lg font-semibold"
                     >
-                        <h3
-                            id="restore-with-parents-title"
-                            className="text-lg font-semibold"
-                        >
-                            Mit übergeordneten Seiten wiederherstellen?
-                        </h3>
+                        Mit übergeordneten Seiten wiederherstellen?
+                    </h3>
 
-                        <p className="text-sm text-muted-foreground">
-                            „{pageToRestore.title}“ liegt in einer Seite, die
-                            sich ebenfalls im Papierkorb befindet. Damit sie
-                            wieder an ihrem Platz erscheint, werden auch diese
-                            Seiten wiederhergestellt:{" "}
-                            {ancestorsToRestore
-                                .map((ancestor) => `„${ancestor.title}“`)
-                                .join(" › ")}
-                            . Andere Unterseiten bleiben im Papierkorb.
+                    <p className="text-sm text-muted-foreground">
+                        „{pageToRestore.title}“ liegt in einer Seite, die
+                        sich ebenfalls im Papierkorb befindet. Damit sie
+                        wieder an ihrem Platz erscheint, werden auch diese
+                        Seiten wiederhergestellt:{" "}
+                        {ancestorsToRestore
+                            .map((ancestor) => `„${ancestor.title}“`)
+                            .join(" › ")}
+                        . Andere Unterseiten bleiben im Papierkorb.
+                    </p>
+
+                    {error && (
+                        <p role="alert" className="text-sm text-destructive">
+                            {error}
                         </p>
+                    )}
 
-                        {error && (
-                            <p role="alert" className="text-sm text-destructive">
-                                {error}
-                            </p>
-                        )}
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            disabled={busyId !== null}
+                            onClick={() => setPageToRestore(null)}
+                        >
+                            Abbrechen
+                        </Button>
 
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                disabled={busyId !== null}
-                                onClick={() => setPageToRestore(null)}
-                            >
-                                Abbrechen
-                            </Button>
-
-                            <Button
-                                disabled={busyId !== null}
-                                onClick={() => void handleRestore(pageToRestore.id)}
-                            >
-                                {busyId === pageToRestore.id
-                                    ? "Stellt wieder her …"
-                                    : "Wiederherstellen"}
-                            </Button>
-                        </div>
-                    </section>
-                </div>
+                        <Button
+                            disabled={busyId !== null}
+                            onClick={() => void handleRestore(pageToRestore.id)}
+                        >
+                            {busyId === pageToRestore.id
+                                ? "Stellt wieder her …"
+                                : "Wiederherstellen"}
+                        </Button>
+                    </div>
+                </Dialog>
             )}
 
             {pageToDelete && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                    onMouseDown={(event) => {
-                        if (
-                            event.target === event.currentTarget &&
-                            busyId === null
-                        ) {
-                            setPageToDelete(null);
-                        }
-                    }}
+                <Dialog
+                    role="alertdialog"
+                    labelledBy="permanent-delete-title"
+                    onClose={() => setPageToDelete(null)}
+                    busy={busyId !== null}
+                    className="max-w-md"
                 >
-                    <section
-                        role="alertdialog"
-                        aria-modal="true"
-                        aria-labelledby="permanent-delete-title"
-                        className="w-full max-w-md space-y-4 rounded-lg border bg-background p-5 shadow-lg"
+                    <h3
+                        id="permanent-delete-title"
+                        className="text-lg font-semibold"
                     >
-                        <h3
-                            id="permanent-delete-title"
-                            className="text-lg font-semibold"
-                        >
-                            Endgültig löschen?
-                        </h3>
+                        Endgültig löschen?
+                    </h3>
 
-                        <p className="text-sm text-muted-foreground">
-                            „{pageToDelete.title}“ wird dauerhaft gelöscht.
-                            {countDescendants(pageToDelete.id) > 0 &&
-                                ` Zusätzlich werden ${countDescendants(pageToDelete.id)} Unterseite(n) gelöscht.`}
-                            {" "}Gespeicherte Inhalte können danach nicht
-                            wiederhergestellt werden.
+                    <p className="text-sm text-muted-foreground">
+                        „{pageToDelete.title}“ wird dauerhaft gelöscht.
+                        {countDescendants(pageToDelete.id) > 0 &&
+                            ` Zusätzlich werden ${countDescendants(pageToDelete.id)} Unterseite(n) gelöscht.`}
+                        {" "}Gespeicherte Inhalte können danach nicht
+                        wiederhergestellt werden.
+                    </p>
+
+                    {error && (
+                        <p role="alert" className="text-sm text-destructive">
+                            {error}
                         </p>
+                    )}
 
-                        {error && (
-                            <p role="alert" className="text-sm text-destructive">
-                                {error}
-                            </p>
-                        )}
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            disabled={busyId !== null}
+                            onClick={() => setPageToDelete(null)}
+                        >
+                            Abbrechen
+                        </Button>
 
-                        <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                disabled={busyId !== null}
-                                onClick={() => setPageToDelete(null)}
-                            >
-                                Abbrechen
-                            </Button>
-
-                            <Button
-                                variant="destructive"
-                                disabled={busyId !== null}
-                                onClick={() => void handleDelete()}
-                            >
-                                {busyId === pageToDelete.id
-                                    ? "Löscht …"
-                                    : "Endgültig löschen"}
-                            </Button>
-                        </div>
-                    </section>
-                </div>
+                        <Button
+                            variant="destructive"
+                            disabled={busyId !== null}
+                            onClick={() => void handleDelete()}
+                        >
+                            {busyId === pageToDelete.id
+                                ? "Löscht …"
+                                : "Endgültig löschen"}
+                        </Button>
+                    </div>
+                </Dialog>
             )}
         </div>
     );

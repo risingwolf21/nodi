@@ -9,11 +9,11 @@ import {
 import type { Page } from "./types";
 
 // Projekt > Kapitel > Abschnitt > Notiz, daneben Kapitel 2 unter Projekt
-const project: Page = { id: "project", title: "Projekt", parent_id: null, owner_id: "u1", visibility: "private", icon: null, full_width: false };
-const chapter: Page = { id: "chapter", title: "Kapitel", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false };
-const chapterTwo: Page = { id: "chapter-2", title: "Kapitel 2", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false };
-const section: Page = { id: "section", title: "Abschnitt", parent_id: "chapter", owner_id: "u1", visibility: "private", icon: null, full_width: false };
-const note: Page = { id: "note", title: "Notiz", parent_id: "section", owner_id: "u1", visibility: "private", icon: null, full_width: false };
+const project: Page = { id: "project", title: "Projekt", parent_id: null, owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+const chapter: Page = { id: "chapter", title: "Kapitel", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+const chapterTwo: Page = { id: "chapter-2", title: "Kapitel 2", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+const section: Page = { id: "section", title: "Abschnitt", parent_id: "chapter", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+const note: Page = { id: "note", title: "Notiz", parent_id: "section", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
 
 const allArchived = [project, chapter, chapterTwo, section, note];
 
@@ -25,8 +25,8 @@ describe("collectDescendantIds", () => {
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false };
-        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false };
+        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
 
         expect(collectDescendantIds("a", [first, second]).sort()).toEqual(["a", "b"]);
     });
@@ -47,8 +47,8 @@ describe("findArchivedAncestors", () => {
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false };
-        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false };
+        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
 
         expect(findArchivedAncestors("a", [first, second])).toEqual([second]);
     });
@@ -87,7 +87,7 @@ describe("findAncestors", () => {
 });
 
 describe("pagesInSection", () => {
-    const shared: Page = { id: "shared", title: "Team", parent_id: null, owner_id: "u1", visibility: "workspace", icon: null, full_width: false };
+    const shared: Page = { id: "shared", title: "Team", parent_id: null, owner_id: "u1", visibility: "workspace", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
     const sharedChild: Page = { ...shared, id: "shared-child", parent_id: "shared" };
     // An older private subpage of a shared page stays below its root
     const privateBelowShared: Page = { ...shared, id: "private-below", parent_id: "shared", visibility: "private" };

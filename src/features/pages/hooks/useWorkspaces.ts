@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
-import { pageTreeCacheFor } from "../services/page-tree-cache";
+import { pageTreeCacheFor, parseWorkspaces } from "../services/page-tree-cache";
 import type { Workspace } from "../types";
+import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
 import { OFFLINE_READ_ONLY_MESSAGE } from "./usePages";
 
 type UseWorkspacesResult = {
@@ -39,7 +40,9 @@ async function fetchWorkspaces(userId: string): Promise<Workspace[]> {
     const workspaceFailure = toRequestError(workspaceResponse);
     if (workspaceFailure) throw workspaceFailure;
 
-    return (workspaceResponse.data ?? []) as Workspace[];
+    const workspaces = parseWorkspaces(workspaceResponse.data ?? []);
+    if (!workspaces) throw new Error("Unerwartete Antwort beim Laden der Workspaces.");
+    return workspaces;
 }
 
 function cacheWorkspaces(userId: string, workspaces: Workspace[]): void {
@@ -56,7 +59,11 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [fromCache, setFromCache] = useState(false);
-    const [reloadCount, setReloadCount] = useState(0);
+    // Reloads after a manual request (e.g. leaving a workspace).
+    const [manualReloads, setManualReloads] = useState(0);
+    const serverReloads = useServerReload(fromCache || error !== "");
+    // Server data shown for this account: a reload does not show the cache first.
+    const shownFromServerFor = useRef("");
 
     const show = useCallback((items: Workspace[], cached: boolean) => {
         setWorkspaces(items);
@@ -66,56 +73,36 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
         setFromCache(cached);
     }, []);
 
-    // A hint only: back online, ask the server again.
-    useEffect(() => {
-        const reload = () => setReloadCount((count) => count + 1);
-        window.addEventListener("online", reload);
-        return () => window.removeEventListener("online", reload);
-    }, []);
-
     useEffect(() => {
         if (!userId) return;
         let active = true;
-        let serverAnswered = false;
-
-        // The cache answers first; the server replaces it when it answers.
-        const cachedRead = pageTreeCacheFor(userId)
-            .getWorkspaces()
-            .catch((cacheError: unknown) => {
-                console.warn("Lokale Workspaces sind nicht lesbar:", cacheError);
-                return null;
-            });
-        void cachedRead.then((cached) => {
-            if (!cached || !active || serverAnswered) return;
-            show(cached, true);
-            setLoading(false);
-        });
 
         async function load(currentUserId: string) {
             try {
-                const items = await fetchWorkspaces(currentUserId);
-                serverAnswered = true;
+                const result = await loadCacheThenServer({
+                    userId: currentUserId,
+                    readCache: () => pageTreeCacheFor(currentUserId).getWorkspaces(),
+                    fetchServer: () => fetchWorkspaces(currentUserId),
+                    cacheFirst: shownFromServerFor.current !== currentUserId,
+                    isActive: () => active,
+                    show: (items, cached) => {
+                        show(items, cached);
+                        setLoading(false);
+                        if (cached) return;
+                        shownFromServerFor.current = currentUserId;
+                        cacheWorkspaces(currentUserId, items);
+                    },
+                });
                 if (!active) return;
-
-                show(items, false);
-                setError("");
-                cacheWorkspaces(currentUserId, items);
+                setError(
+                    result === "none"
+                        ? "Nodi ist offline noch nicht verfügbar. Öffne die App einmal mit Internetverbindung."
+                        : "",
+                );
             } catch (err) {
-                serverAnswered = true;
                 if (!active) return;
-
-                if (err instanceof RemoteRequestError && err.reason === "offline") {
-                    const cached = await cachedRead;
-                    if (!active) return;
-                    if (cached) {
-                        show(cached, true);
-                        return;
-                    }
-                    setError("Nodi ist offline noch nicht verfügbar. Öffne die App einmal mit Internetverbindung.");
-                    return;
-                }
-
-                setError(err instanceof Error ? err.message : "Workspaces konnten nicht geladen werden.");
+                console.error("Workspaces konnten nicht geladen werden:", err);
+                setError("Die Workspaces konnten nicht geladen werden.");
             } finally {
                 if (active) setLoading(false);
             }
@@ -126,7 +113,7 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
         return () => {
             active = false;
         };
-    }, [userId, show, reloadCount]);
+    }, [userId, show, manualReloads, serverReloads]);
 
     const createWorkspace = useCallback(
         async (name: string) => {
@@ -149,7 +136,7 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
 
             if (insertError) {
                 console.error("Workspace insert failed:", insertError);
-                throw new Error(insertError.message);
+                throw new Error("Der Workspace konnte nicht erstellt werden.");
             }
 
             const items = await fetchWorkspaces(userId);
@@ -159,7 +146,7 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
         [userId, fromCache, show],
     );
 
-    const reload = useCallback(() => setReloadCount((count) => count + 1), []);
+    const reload = useCallback(() => setManualReloads((count) => count + 1), []);
 
     return {
         workspaces,

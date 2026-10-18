@@ -19,11 +19,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Migrationen laufen vor dem Build. Schlägt dieser Job fehl, wird das
-  # Frontend nicht deployt. Migrationen müssen daher mit dem noch laufenden
-  # alten Frontend kompatibel sein (siehe CLAUDE.md §9).
+  # Reihenfolge: build und verify-database → migrate → deploy. Erst wenn
+  # Frontend und Migrationen geprüft sind, wird die Datenbank geändert;
+  # sonst liefe ein neues Schema mit einem Frontend, das nie deployt wird.
+  # Migrationen müssen mit dem noch laufenden alten Frontend kompatibel
+  # sein (siehe CLAUDE.md §9).
+  verify-database:
+    name: Verify migrations on a fresh database
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0
+
+      - name: Start database and apply migrations
+        run: supabase db start
+
+      - name: Lint database schema
+        run: supabase db lint --fail-on error
+
+      - name: Run pgTAP tests
+        run: supabase test db
+
   migrate:
     name: Apply database migrations
+    needs: [build, verify-database]
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -56,7 +80,7 @@ jobs:
         run: supabase db push --yes
 
   build:
-    needs: migrate
+    name: Lint, test and build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -90,11 +114,28 @@ jobs:
               || (echo "VITE_SUPABASE_PUBLISHABLE_KEY ist der Service-Role-Key; nur den anon/Publishable Key verwenden" && exit 1)
           fi
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
       - name: Build application
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+      - name: Check GitHub Pages base path
+        run: |
+          grep -q 'src="/nodi/assets/' dist/index.html \
+            || (echo "dist/index.html verwendet nicht den Base-Pfad /nodi/" && exit 1)
+
+      # Der echte Produktions-Build, mit den Werten aus den Secrets.
+      - name: Check bundle for secret keys
+        run: |
+          ! grep -rl "sb_secret_" dist \
+            || (echo "Ein geheimer Supabase-Schlüssel steht im Bundle" && exit 1)
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -109,7 +150,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, migrate]
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

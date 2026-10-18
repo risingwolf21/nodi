@@ -1,3 +1,4 @@
+import { RemoteRequestError } from "@/lib/request-errors";
 import type {
     DocumentContent,
     DocumentVersion,
@@ -50,7 +51,8 @@ export function parseRemoteDocumentRow(row: unknown): RemoteDocument | null {
         !isTimestamp(row.client_updated_at) ||
         !isOptionalString(row.last_mutation_id)
     ) {
-        throw new Error("Unerwartetes Dokumentformat vom Server.");
+        // Retrying does not help with a malformed answer.
+        throw new RemoteRequestError("permanent", "Unerwartetes Dokumentformat vom Server.");
     }
 
     return {

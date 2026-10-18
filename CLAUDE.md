@@ -259,13 +259,31 @@ src/
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
-                            # menu.tsx (schließt bei Klick außerhalb)
+                            # menu.tsx (schließt bei Klick außerhalb;
+                            # `detached`: fest positioniert, für Menüs
+                            # in Scroll-Containern wie Tabellen);
+                            # dialog.tsx (natives <dialog>: Escape, Fokus
+                            # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
     workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor
   features/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
       SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
+    databases/              # Paket 14b
+      types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
+      database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
+      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property
+      hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch
+      components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
+      components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
+      components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
+      components/BoardView.tsx       # Board: Spalten je Option, Ziehen setzt den Wert (14c)
+      components/ListView.tsx        # Liste (14c)
+      components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
+      components/FeedView.tsx        # Feed mit Textvorschau (14d)
+      components/CalendarView.tsx    # Monatskalender (14d)
+      components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
       types.ts              # Dokument-, Versions- und Sync-Typen
@@ -282,7 +300,8 @@ src/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
       types.ts
-      components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
+      page-display.ts       # „Ohne Titel“ für leere Namen (Einträge)
+      components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite/Datenbank, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
@@ -324,11 +343,14 @@ supabase/
                             # öffentliche Links (P11a), endgültig
                             # löschen nur Owner, Reparatur
                             # unsichtbarer Seiten (Bestandsdaten),
-                            # Mitglieder und Bereiche (P12a)
+                            # Mitglieder und Bereiche (P12a),
+                            # Seitenbaum/Teilen gehärtet (P13a),
+                            # Datenbanken (P14a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
-                            # Mitglieder und Bereiche (P12a)
+                            # Mitglieder und Bereiche (P12a), Härtung (P13a),
+                            # Datenbanken (P14a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -358,6 +380,10 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
     erst nach Serverbestätigung und nur, wenn die lokale Version noch
     dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+    Lokales Schreiben wartet nie auf das Netz (Paket 13b): Der Anstoß an
+    die Sync-Engine und die Abfrage einer neueren Version laufen außerhalb
+    der Warteschlange der Sitzung. Bis eine Änderung im Store liegt, gilt
+    sie als „Tippen gewinnt“ (auch gegen andere Tabs).
 -   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
     bilden die Warteschlange; sie übersteht Neustarts, weil sie in
     IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
@@ -379,7 +405,9 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     kurzer Hinweis.
 -   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
     „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
-    Änderung bleibt lokal erhalten.
+    Änderung bleibt lokal erhalten. Scheitert nur das Laden einer
+    neueren Version, steht dort „Aktualisieren fehlgeschlagen“ (kein
+    Speicherfehler). Ein ungültiges Dokument vom Server ist dauerhaft.
 -   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
     schreiben ausstehende Änderungen sofort lokal und senden sie.
 -   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
@@ -394,6 +422,17 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
     nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
     lehnen Änderungen zusätzlich ab). `online` lädt neu.
+    Seit 13c gemeinsam in `hooks/load-cache-then-server.ts`: Ohne
+    Sitzung dieses Kontos wird der Server nicht gefragt (eine anonyme
+    Antwort wäre eine leere Liste und überschriebe den Cache). Zeigt die
+    Liste schon Serverdaten, kommt beim Neuladen nicht erst der Cache
+    (kein Flackern zu „nur lesbar“). Solange Cache oder Fehler angezeigt
+    werden, laden auch „App wieder sichtbar“ und eine erneuerte Sitzung
+    neu. Serverdaten werden wie der Cache validiert. Änderungen prüfen
+    die zurückgegebenen Zeilen (RLS filtert ohne Fehler) und verwerfen
+    ihr Ergebnis nach einem Workspace-Wechsel; während der nächste
+    Workspace lädt, ist der alte Baum ausgeblendet und die offene Seite
+    geschlossen.
 -   **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
     Netz da, liefert `getSession()` keine Sitzung, obwohl sie
     gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
@@ -758,10 +797,14 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 -   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
     **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
     `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
--   Ablauf des Deploys: **`migrate` → `build` → `deploy`**. Der Job
-    `migrate` verknüpft das Supabase-Projekt und führt
-    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt er
-    fehl, wird nicht gebaut und nicht deployt. Benötigte Secrets:
+-   Ablauf des Deploys (seit 13d): **`build` und `verify-database` →
+    `migrate` → `deploy`**. `build` führt Lint, Unit-Tests, den
+    Produktions-Build und die Prüfungen auf Base-Pfad und geheime
+    Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
+    frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
+    danach verknüpft `migrate` das Supabase-Projekt und führt
+    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+    Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
     `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
     `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
     (`cancel-in-progress: false`).
@@ -774,8 +817,9 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
     `db push` ab. Abhilfe lokal:
     `supabase migration repair --status applied <version>`.
 -   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
-    Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
-    auf frischer DB, `supabase db lint`, `supabase test db`.
+    Push auf `master`: Lint, Unit-Tests, Build, Prüfung von Base-Pfad,
+    PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
+    DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
@@ -1110,6 +1154,156 @@ Arbeitspakete, je ein Pull Request:
             für Mitglieder „Workspace verlassen“ (mit Warnung; danach
             Workspace-Liste neu laden und lokale Kopien bereinigen).
 
+13. **Korrekturen aus dem Code-Review** (Nutzerauftrag 2026-10-18, je
+    Teil ein PR, in dieser Reihenfolge).
+    -   **13a Sicherheit (Datenbank)**
+        (`20261018180000_harden_page_tree_and_sharing.sql`):
+        -   `parent_id` ist für API-Clients unveränderlich (`42501`), bis
+            es eine Funktion zum Verschieben mit Prüfungen gibt. Vorher
+            konnte ein Mitglied fremde Workspace-Bäume unter die eigene
+            Seite hängen und mit `set_page_section` übernehmen, und eine
+            Bearbeitungsfreigabe reichte zum Weiterteilen oder für Zyklen.
+        -   Unterseiten nur mit Schreibrecht auf die Elternseite
+            (Insert-Policy `can_edit_page(parent_id)`).
+        -   `set_page_section` lässt private Seiten anderer Mitglieder
+            (samt Unterseiten) in beide Richtungen unverändert.
+        -   Trigger `drop_access_of_previous_owner`: Wechselt der Owner
+            einer Seite (Austritt, Entfernen, Verschieben nach privat),
+            enden Freigaben und öffentlicher Link des bisherigen Owners.
+        -   `is_page_owner(page)` = Owner und Mitglied des Workspace; gilt
+            für `share_page`, `list_page_shares` und die Policies zum
+            Lesen, Anlegen und Ändern von Freigaben und Links. Entziehen
+            bleibt ohne Mitgliedschaft möglich.
+        -   `share_page`/`add_workspace_member` finden nur bestätigte
+            Konten (`email_confirmed_at`).
+        -   Das Token eines öffentlichen Links setzt der Server.
+        -   Workspaces sind per API nicht mehr löschbar (die App bietet
+            es nicht an; Kaskade hätte private Seiten anderer gelöscht).
+        -   pgTAP: `page_tree_hardening.test.sql`.
+    -   **13b Editor-Speichern** unabhängig vom Netz: Lokales Speichern
+        wartet nicht mehr auf Sync oder Netz; eine Eingabe gilt als
+        „wird getippt“, bis sie lokal liegt; `WorkspaceHome` je Konto.
+    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (siehe §4,
+        `hooks/load-cache-then-server.ts`).
+    -   **13d Deploy-Gate:** `build` (Lint, Tests, Build, Bundle-Checks)
+        und `verify-database` (Migrationen, `db lint`, pgTAP) laufen vor
+        `migrate` und `deploy`.
+    -   **13e Aufräumen:** ein natives `<dialog>` für alle Modals
+        (`components/ui/dialog.tsx`), kein doppeltes Absenden bei „Neue
+        Seite“/„Workspace erstellen“, Papierkorb-Korrekturen, Doku.
+
+14. **Datenbanken wie Notion** (Nutzerwunsch 2026-10-18).
+    -   **Entschieden (Nutzer, 2026-10-18):** (1) Eigenschaften gibt es nur
+        an Einträgen einer Datenbank. (2) Eigenschaften (und Ansichten)
+        anlegen, ändern, löschen darf jeder mit Schreibrecht. (3) Ein
+        Eintrag ist eine Seite mit Eigenschaften (eigener Inhalt im
+        Editor). (4) Mehrere Ansichten wie bei Notion; im ersten Wurf
+        Tabelle, Board, Liste, Galerie, Feed, Kalender; „Karte“ heißt
+        Landkarte (Map) und kommt später. (5) Eigenschaften zuerst nur
+        online bearbeitbar; offline werden sie aus dem Cache angezeigt.
+    -   **Annahmen:** Zuerst Datenbanken als eigene Seite (inline im Text
+        später). Einträge haben im ersten Wurf keine eigenen Unterseiten
+        in der Oberfläche. Einen Eintrag anlegen braucht Internet (wie
+        neue Seiten, §2). Ansichten gelten für alle (wie bei Notion).
+    -   **Aufteilung:** 14a Datenbank, 14b Oberfläche: Datenbank anlegen,
+        Ansichts-Tabs, Tabelle (Werte bearbeiten, Spalten anlegen, Filter,
+        Sortierung), Eintrag mit Eigenschaftsleiste; 14c Board, Liste,
+        Galerie; 14d Feed, Kalender. Später: Landkarte (Orts-Eigenschaft,
+        Kartendienst wählen), Person, Dateien (Storage), Relation, Rollup,
+        Formel.
+    -   **Umsetzung 14a** (`20261018200000_databases.sql`):
+        -   `pages.kind` (`page`/`database`, unveränderlich) und
+            `pages.position` (manuelle Reihenfolge, Mittelwert zweier
+            Nachbarn). Einträge sind Unterseiten einer Datenbank; eine
+            Datenbank kann kein Eintrag sein (`22023`).
+        -   `database_properties` (Name, Typ, `options` als JSON-Objekt,
+            Reihenfolge) und `database_views` (Typ, `config` für Filter,
+            Sortierung, Gruppierung, sichtbare Eigenschaften). Lesen mit
+            `can_read_page`, Schreiben mit `can_edit_page` der Datenbank.
+            Eine neue Datenbank bekommt per Trigger die Ansicht „Tabelle“.
+        -   Typen: `text`, `number`, `checkbox`, `select`, `multi_select`,
+            `status`, `date` (`{start, end}`), `url` (nur http/https),
+            `email`, `created_time`, `last_edited_time` (berechnet, nicht
+            setzbar). Ein Typwechsel löscht die Werte der Eigenschaft.
+        -   `page_property_values` (je Eintrag und Eigenschaft ein Wert,
+            JSON `null` = geleert) nur über
+            `set_page_property(page, property, value, edited_at,
+            mutation_id)` → `(applied, stored_edited_at,
+            stored_mutation_id)`: LWW je Feld wie `save_page_document`
+            (Kappung auf `now()`, Gleichstand per Mutation-ID). Fehler:
+            `42501` keine Schreibrechte, `22023` falsche Eigenschaft oder
+            ungültiger Wert, `22004` Argument fehlt. Direkte Schreibrechte
+            sind entzogen.
+        -   pgTAP: `databases.test.sql`.
+    -   **Umsetzung 14b** (nur Frontend, keine Migration):
+        -   `Page` lädt `kind`, `position`, `created_at` mit (alte Caches:
+            `page`, `null`, leer). Seitenleiste: „Neue Datenbank“ (privat,
+            Titel „Unbenannte Datenbank“); Einträge erscheinen nicht im
+            Baum, Datenbanken haben kein „+“ für Unterseiten.
+        -   Eine Datenbank-Seite zeigt statt des Editors Ansichts-Tabs
+            (umbenennen, löschen außer der letzten, „+“ = neue Tabelle),
+            Filter (alle Regeln müssen passen), Sortierung (leere Werte
+            zuletzt, Auswahl/Status nach Reihenfolge der Optionen),
+            ein-/ausblendbare Eigenschaften und die Tabelle. Einstellungen
+            gehören zur Ansicht und gelten für alle.
+        -   Tabelle: Name direkt bearbeitbar, „Öffnen“, Werte je Typ direkt
+            bearbeitbar, Spaltenkopf (umbenennen, Typ ändern mit Rückfrage,
+            ausblenden, löschen mit Rückfrage), „+“ legt eine Eigenschaft
+            an, „Neu“ einen Eintrag (Name hat sofort den Fokus; Einträge
+            dürfen ohne Namen sein, „Ohne Titel“). Neue Einträge hängen
+            hinten an (`position`).
+        -   Ein Eintrag zeigt unter dem Titel die Eigenschaftsleiste
+            (gleiche Wert-Editoren, „Eigenschaft hinzufügen“), darunter den
+            Editor wie bei jeder Seite.
+        -   `useDatabase`: Cache zuerst (`database:<id>` in
+            `nodi-<userId>-tree`, nur vom Server bestätigte Daten), dann
+            Server. Aus dem Cache und ohne `can_edit_page` ist alles nur
+            lesbar. Werte erscheinen sofort; lehnt der Server ab, wird der
+            alte Wert wiederhergestellt (nur wenn kein neuerer Schreibvorgang
+            für das Feld läuft); verdrängt (LWW) → neu laden.
+            „Zuletzt bearbeitet“ = jüngste Änderung an Text oder Werten.
+        -   Noch nicht: Einträge in geteilten Datenbanken anderer Workspaces
+            anlegen (nur ansehen und Werte ändern), manuelle Reihenfolge per
+            Ziehen, Optionen umbenennen/einfärben/löschen.
+    -   **Umsetzung 14c** (nur Frontend, keine Migration):
+        -   Neue Ansichten Board, Liste, Galerie („+“ an den Tabs wählt den
+            Typ). Filter, Sortierung und sichtbare Eigenschaften gelten wie
+            in der Tabelle.
+        -   Board: eine Spalte je Option einer Auswahl- oder
+            Status-Eigenschaft, vorn „Ohne <Name>“ für Einträge ohne
+            (gültigen) Wert. Gruppiert wird nach `config.groupByPropertyId`,
+            sonst nach der ersten Status-, dann Auswahl-Eigenschaft
+            („Gruppieren“ in der Leiste). Ohne passende Eigenschaft bietet
+            das Board „Status-Eigenschaft anlegen“ an. Karten per Ziehen
+            (Maus) in eine andere Spalte = Wert setzen (`set_page_property`,
+            sofort sichtbar); auf Touch-Geräten ändert man den Wert im
+            Eintrag. Die Gruppen-Eigenschaft steht nicht auf den Karten.
+        -   Liste: eine Zeile je Eintrag, Werte rechts (ab `sm`). Galerie:
+            Karten im Raster, ohne Titelbilder.
+        -   „Neu“ in Board, Liste und Galerie legt einen Eintrag an und
+            öffnet ihn; in einer Board-Spalte bekommt er deren Wert.
+        -   Noch nicht: Reihenfolge innerhalb einer Spalte per Ziehen,
+            Spalten ausblenden, Titelbilder in der Galerie.
+    -   **Umsetzung 14d** (nur Frontend, keine Migration):
+        -   Feed: Einträge untereinander mit „Zuletzt bearbeitet“,
+            Eigenschaften und dem Anfang des Textes (`previewText`: Text
+            der ersten drei Blöcke, höchstens 280 Zeichen; Tabellen und
+            Bilder ausgelassen). Die Abfrage holt dafür nur
+            `document->0..2`, keine ganzen Dokumente; die Vorschau wird mit
+            der Datenbank gecacht (`documentPreview`). Sie zeigt den Stand
+            des Servers: ungesyncte lokale Änderungen erscheinen erst nach
+            dem Sync und neuem Laden.
+        -   Kalender: Monatsraster ab Montag mit Vor/Zurück/„Heute“ (Monat
+            nur im Tab, nicht gespeichert). Einträge stehen am Tag einer
+            Datums-Eigenschaft (`config.datePropertyId`, sonst die erste;
+            „Datum“ in der Leiste), Zeiträume an jedem Tag (höchstens 62).
+            „+“ an einem Tag legt einen Eintrag mit diesem Datum an und
+            öffnet ihn. Ohne Datums-Eigenschaft: „Datums-Eigenschaft
+            anlegen“. Einträge ohne Datum erscheinen im Kalender nicht.
+        -   Alle sechs Ansichtstypen der Datenbank sind damit nutzbar.
+        -   Noch nicht: Einträge im Kalender per Ziehen verschieben,
+            Wochenansicht, Landkarte (später, eigener Ansichtstyp).
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1153,13 +1347,18 @@ Noch nicht abschließend geprüft:
     gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
     löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
     filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
--   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
-    Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
-    Verschieben derzeit nicht an.
+-   Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
+    gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
+    Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
+-   RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
+    die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
+    prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
 -   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
     lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
 -   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
-    dauern (kein eigener Timeout).
+    dauern (kein eigener Timeout). Scheitert `signOut()`, läuft die
+    Sync-Engine weiter (13b). Was während des Abmeldens noch getippt
+    wird, kann verloren gehen (Editor ist dabei nicht gesperrt).
 -   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
     ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
     bleiben dann bis zur nächsten Abmeldung auf dem Gerät.

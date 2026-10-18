@@ -2,6 +2,9 @@
 /** "workspace": every member reads and edits; "private": only the owner (plus shares). */
 export type PageSection = "workspace" | "private";
 
+/** A database's subpages are its entries (package 14). Fixed at creation. */
+export type PageKind = "page" | "database";
+
 export type Page = {
     id: string;
     title: string;
@@ -14,6 +17,11 @@ export type Page = {
     icon: string | null;
     /** Text column spans the whole width (like Notion's "Full width"). */
     full_width: boolean;
+    kind: PageKind;
+    /** Manual order among siblings (database entries); null: by creation. */
+    position: number | null;
+    /** ISO time; empty for trees cached before package 14. */
+    created_at: string;
 };
 
 /** Page settings that can be changed after creation. */
