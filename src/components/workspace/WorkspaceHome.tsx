@@ -16,6 +16,8 @@ import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { TrashView } from "@/features/pages/components/TrashView";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
+import { SignOutDialog } from "@/features/auth/SignOutDialog";
+import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -38,6 +40,11 @@ export default function WorkspaceHome() {
     const [error, setError] = useState("");
     const [parentForNewPage, setParentForNewPage] = useState<string | null>(null);
     const [showTrash, setShowTrash] = useState(false);
+    const [signOutStep, setSignOutStep] = useState<
+        | { kind: "idle" }
+        | { kind: "syncing" }
+        | { kind: "confirm"; unsyncedPages: number }
+    >({ kind: "idle" });
     // Only relevant below the md breakpoint, where the sidebar is a drawer.
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -96,6 +103,28 @@ export default function WorkspaceHome() {
             setWorkspaceName("");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Der Workspace konnte nicht erstellt werden.");
+        }
+    }
+
+    // Logout policy (CLAUDE.md §2): sync first; if that is not possible,
+    // ask before local changes are discarded.
+    async function handleSignOut() {
+        if (!user) return;
+
+        setError("");
+        setSignOutStep({ kind: "syncing" });
+
+        try {
+            const unsyncedPages = await syncBeforeSignOut(user.id);
+            if (unsyncedPages > 0) {
+                setSignOutStep({ kind: "confirm", unsyncedPages });
+                return;
+            }
+            await signOutAndDeleteLocalData(user.id, signOut);
+        } catch (err) {
+            console.error("Abmelden fehlgeschlagen:", err);
+            setError(err instanceof Error ? err.message : "Abmelden ist fehlgeschlagen.");
+            setSignOutStep({ kind: "idle" });
         }
     }
 
@@ -161,8 +190,13 @@ export default function WorkspaceHome() {
                     <span className="hidden text-sm text-muted-foreground sm:inline">
                         {user?.email}
                     </span>
-                    <Button variant="outline" size="sm" onClick={() => void signOut()}>
-                        Abmelden
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={signOutStep.kind !== "idle"}
+                        onClick={() => void handleSignOut()}
+                    >
+                        {signOutStep.kind === "syncing" ? "Synchronisiert …" : "Abmelden"}
                     </Button>
                 </div>
             </header>
@@ -337,6 +371,14 @@ export default function WorkspaceHome() {
                         )}
                     </section>
                 </div>
+            )}
+
+            {signOutStep.kind === "confirm" && user && (
+                <SignOutDialog
+                    unsyncedPages={signOutStep.unsyncedPages}
+                    onCancel={() => setSignOutStep({ kind: "idle" })}
+                    onDiscardAndSignOut={() => signOutAndDeleteLocalData(user.id, signOut)}
+                />
             )}
 
             {activePageAction && (

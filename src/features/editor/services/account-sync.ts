@@ -19,3 +19,9 @@ export function syncEngineFor(userId: string): SyncEngine {
     }
     return engine;
 }
+
+/** Stops and drops the engine when the account signs out. */
+export function forgetSyncEngine(userId: string): void {
+    enginesByUser.get(userId)?.stop();
+    enginesByUser.delete(userId);
+}
