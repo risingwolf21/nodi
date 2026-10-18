@@ -32,16 +32,18 @@ export function SyncStatusIndicator({ engine, offline }: SyncStatusIndicatorProp
 
     const pages = unsyncedPages === 1 ? "1 Seite" : `${unsyncedPages} Seiten`;
 
+    // Small screens: count only. Retries also run when the app is visible
+    // again or back online, and the editor offers its own retry button.
     return (
-        <span className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-            <span>
+        <span className="flex min-w-0 items-center gap-2 text-xs leading-tight text-muted-foreground">
+            <span role="status" className="text-right">
                 {pages} nicht synchronisiert
-                {failure && ` – ${failureHints[failure]}`}
+                {failure && <span className="hidden sm:inline"> – {failureHints[failure]}</span>}
             </span>
             {failure && (
                 <button
                     type="button"
-                    className="underline"
+                    className="hidden shrink-0 underline sm:inline"
                     onClick={() => void engine.retryNow()}
                 >
                     Erneut versuchen
