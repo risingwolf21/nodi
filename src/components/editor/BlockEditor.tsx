@@ -28,6 +28,7 @@ import type { DocumentContent } from "@/features/editor/types";
 type FrameProps = {
     topBarStart: ReactNode;
     topBarEnd?: ReactNode;
+    fullWidth: boolean;
     /** Title and icon above the content; editable only with edit rights. */
     renderHeader: (canEdit: boolean) => ReactNode;
 };
@@ -95,6 +96,7 @@ function EditorContent({
     store,
     topBarStart,
     topBarEnd,
+    fullWidth,
     renderHeader,
 }: FrameProps & {
     userId: string;
@@ -196,6 +198,7 @@ function EditorContent({
         <EditorFrame
             topBarStart={topBarStart}
             topBarEnd={topBarEnd}
+            fullWidth={fullWidth}
             status={
                 <span className="flex items-center gap-3">
                     {canEdit === false && <span>Nur Lesezugriff</span>}
@@ -284,7 +287,11 @@ export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
     // Dadurch muss der Effect keinen synchronen Reset ausführen.
     if (!user || !store || !loadResult || loadResult.pageId !== pageId) {
         return (
-            <EditorFrame topBarStart={frame.topBarStart} topBarEnd={frame.topBarEnd}>
+            <EditorFrame
+                topBarStart={frame.topBarStart}
+                topBarEnd={frame.topBarEnd}
+                fullWidth={frame.fullWidth}
+            >
                 {frame.renderHeader(false)}
                 <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
                     Dokument wird geladen …
@@ -295,7 +302,11 @@ export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
 
     if ("error" in loadResult) {
         return (
-            <EditorFrame topBarStart={frame.topBarStart} topBarEnd={frame.topBarEnd}>
+            <EditorFrame
+                topBarStart={frame.topBarStart}
+                topBarEnd={frame.topBarEnd}
+                fullWidth={frame.fullWidth}
+            >
                 {frame.renderHeader(false)}
                 <p className="px-[var(--page-gutter)] text-sm text-destructive" role="alert">
                     {loadResult.error}

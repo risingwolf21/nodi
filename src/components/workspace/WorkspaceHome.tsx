@@ -59,7 +59,7 @@ export default function WorkspaceHome() {
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
         renamePage,
-        setPageIcon,
+        updatePage,
         archivePage,
         restorePage,
         permanentlyDeletePage,
@@ -237,7 +237,7 @@ export default function WorkspaceHome() {
                                 onBack={closePage}
                                 onSelect={(id) => openPage(id)}
                                 onRename={renamePage}
-                                onSetIcon={setPageIcon}
+                                onUpdate={updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             />
                         ) : (

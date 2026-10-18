@@ -34,14 +34,15 @@ function parseStoredPages(value: unknown): StoredPage[] | null {
             (item.parent_id === null || typeof item.parent_id === "string") &&
             typeof item.is_archived === "boolean",
     );
-    // Trees cached before package 10 have no icon; they stay valid.
+    // Trees cached before package 10 have no icon or width; they stay valid.
     return valid
-        ? value.map(({ id, title, parent_id, is_archived, icon }: StoredPage) => ({
+        ? value.map(({ id, title, parent_id, is_archived, icon, full_width }: StoredPage) => ({
               id,
               title,
               parent_id,
               is_archived,
               icon: typeof icon === "string" ? icon : null,
+              full_width: full_width === true,
           }))
         : null;
 }

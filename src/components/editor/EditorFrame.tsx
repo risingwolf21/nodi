@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 type EditorFrameProps = {
     /** Left part of the top bar: back button and path. */
@@ -8,6 +9,8 @@ type EditorFrameProps = {
     topBarEnd?: ReactNode;
     /** Hints between top bar and content, e.g. sync problems. */
     notices?: ReactNode;
+    /** Use the whole width instead of the narrow reading column. */
+    fullWidth?: boolean;
     children: ReactNode;
 };
 
@@ -16,7 +19,14 @@ type EditorFrameProps = {
  * that scrolls with title and content. Kept out of the lazily loaded
  * editor chunk so that loading states use the same frame.
  */
-export function EditorFrame({ topBarStart, status, topBarEnd, notices, children }: EditorFrameProps) {
+export function EditorFrame({
+    topBarStart,
+    status,
+    topBarEnd,
+    notices,
+    fullWidth = false,
+    children,
+}: EditorFrameProps) {
     return (
         <div className="flex h-full min-h-0 flex-col">
             <div className="box-content flex h-11 shrink-0 items-center gap-2 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-3 text-sm">
@@ -26,7 +36,14 @@ export function EditorFrame({ topBarStart, status, topBarEnd, notices, children 
             </div>
             {notices}
             <div className="min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
-                <div className="mx-auto w-full max-w-[860px] pt-8 pb-32 md:pt-16">{children}</div>
+                <div
+                    className={cn(
+                        "mx-auto w-full pt-8 pb-32 md:pt-16",
+                        fullWidth ? "max-w-none" : "max-w-[860px]",
+                    )}
+                >
+                    {children}
+                </div>
             </div>
         </div>
     );

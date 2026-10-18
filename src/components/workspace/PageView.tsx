@@ -1,9 +1,9 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { ChevronLeft, FileText, MoreHorizontal } from "lucide-react";
+import { Check, ChevronLeft, FileText, MoreHorizontal } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/features/pages/components/PageHeader";
-import type { Page } from "@/features/pages/types";
+import type { Page, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -17,7 +17,7 @@ type PageViewProps = {
     onBack: () => void;
     onSelect: (pageId: string) => void;
     onRename: (pageId: string, title: string) => Promise<void>;
-    onSetIcon: (pageId: string, icon: string | null) => Promise<void>;
+    onUpdate: (pageId: string, settings: PageSettings) => Promise<void>;
     onArchive: (page: Page) => void;
 };
 
@@ -40,10 +40,19 @@ export function PageView({
     onBack,
     onSelect,
     onRename,
-    onSetIcon,
+    onUpdate,
     onArchive,
 }: PageViewProps) {
     const [menuOpen, setMenuOpen] = useState(false);
+    const [menuError, setMenuError] = useState("");
+
+    function toggleFullWidth() {
+        setMenuOpen(false);
+        setMenuError("");
+        onUpdate(page.id, { full_width: !page.full_width }).catch((err: unknown) => {
+            setMenuError(err instanceof Error ? err.message : "Die Breite konnte nicht gespeichert werden.");
+        });
+    }
 
     const topBarStart = (
         <>
@@ -89,6 +98,11 @@ export function PageView({
                 <MoreHorizontal className="size-5" />
             </button>
             <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                <MenuItem onSelect={toggleFullWidth}>
+                    <span className="flex-1">Volle Breite</span>
+                    {page.full_width && <Check className="size-4 text-brand" />}
+                </MenuItem>
+                <div className="my-1 border-t" />
                 <MenuItem
                     destructive
                     onSelect={() => {
@@ -103,19 +117,26 @@ export function PageView({
     );
 
     const renderHeader = (canEdit: boolean) => (
-        <PageHeader
-            page={page}
-            editable={canEdit && !readOnly}
-            focusTitle={focusTitle}
-            onRename={onRename}
-            onSetIcon={onSetIcon}
-        />
+        <>
+            {menuError && (
+                <p className="mb-4 px-[var(--page-gutter)] text-sm text-destructive" role="alert">
+                    {menuError}
+                </p>
+            )}
+            <PageHeader
+                page={page}
+                editable={canEdit && !readOnly}
+                focusTitle={focusTitle}
+                onRename={onRename}
+                onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
+            />
+        </>
     );
 
     return (
         <Suspense
             fallback={
-                <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd}>
+                <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
                     {renderHeader(false)}
                     <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
                         Editor wird geladen …
@@ -128,6 +149,7 @@ export function PageView({
                 pageId={page.id}
                 topBarStart={topBarStart}
                 topBarEnd={topBarEnd}
+                fullWidth={page.full_width}
                 renderHeader={renderHeader}
             />
         </Suspense>
