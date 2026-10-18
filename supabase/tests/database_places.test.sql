@@ -33,15 +33,17 @@ select lives_ok(
   'A map view can be added'
 );
 
--- 3-4: valid places
+-- 3-5: valid places; fixed, increasing edit times (now() is the same for the
+-- whole transaction, so equal times would leave the order to the random
+-- mutation ids)
 select lives_ok(
   $$select public.set_page_property('e0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000001',
-    '{"lat": 48.1372, "lng": 11.5756, "label": "Marienplatz, München"}', now(), gen_random_uuid())$$,
+    '{"lat": 48.1372, "lng": 11.5756, "label": "Marienplatz, München"}', '2026-10-18T10:00:00Z', gen_random_uuid())$$,
   'A place with coordinates and a label is stored'
 );
 select lives_ok(
   $$select public.set_page_property('e0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000001',
-    '{"lat": -90, "lng": 180}', now(), gen_random_uuid())$$,
+    '{"lat": -90, "lng": 180}', '2026-10-18T10:00:01Z', gen_random_uuid())$$,
   'A place without a label is stored (edges of the range included)'
 );
 select results_eq(
