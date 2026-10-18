@@ -3,13 +3,14 @@ import {
     useCreateBlockNote,
     useEditorChange,
 } from "@blocknote/react";
-import { BlockNoteView, type Theme } from "@blocknote/mantine";
+import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
 import { RemoteRequestError } from "@/lib/request-errors";
 import { EditorFrame } from "@/components/editor/EditorFrame";
+import { editorTheme } from "@/components/editor/editor-theme";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import {
@@ -40,15 +41,6 @@ type BlockEditorProps = FrameProps & {
 type LoadResult =
     | { pageId: string; initial: InitialDocument }
     | { pageId: string; error: string };
-
-// The app's tokens switch with the system color scheme, so one theme
-// serves light and dark; BlockNote keeps its own colors for the rest.
-const editorTheme: Theme = {
-    colors: {
-        editor: { text: "var(--foreground)", background: "var(--background)" },
-    },
-    fontFamily: "var(--font-sans)",
-};
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;

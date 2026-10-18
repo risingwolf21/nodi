@@ -6,12 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PageActionsDialog, type PageActionMode } from "@/features/pages/components/PageActionsDialog";
+import { ShareDialog } from "@/features/pages/components/ShareDialog";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
 import type { Page } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
+import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
+import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
+import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
@@ -65,17 +69,25 @@ export default function WorkspaceHome() {
         permanentlyDeletePage,
     } = usePages(workspaceId, user?.id);
 
+    const { pages: sharedPages, error: sharedPagesError } = useSharedPages(
+        user?.id,
+        loading ? undefined : workspaces.map((workspace) => workspace.id),
+    );
+
     const [activePageAction, setActivePageAction] = useState<{
         page: Page;
         mode: PageActionMode;
     } | null>(null);
+    const [sharingPage, setSharingPage] = useState<Page | null>(null);
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
     const readOnly = workspacesFromCache || pagesFromCache;
 
-    // Missing after archiving, deleting or switching the workspace.
-    const page = pages.find((item) => item.id === pageId) ?? null;
-    const ancestors = page ? findAncestors(page.id, pages).reverse() : [];
+    // Missing after archiving, deleting, switching the workspace or when
+    // a share was revoked.
+    const sharedPage = sharedPages.find((item) => item.id === pageId) ?? null;
+    const page = pages.find((item) => item.id === pageId) ?? sharedPage;
+    const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
 
     // Sends edits that are still waiting, also those of pages not open now.
     const userId = user?.id;
@@ -85,6 +97,21 @@ export default function WorkspaceHome() {
         const engine = syncEngineFor(userId);
         engine.start();
         return () => engine.stop();
+    }, [userId]);
+
+    // Revoked shares: the local copies go at the next contact with the server.
+    useEffect(() => {
+        if (!userId) return;
+
+        const store = localDocumentStoreFor(userId);
+        const deleteRevoked = () => {
+            deleteRevokedLocalCopies(userId, store).catch((err: unknown) => {
+                console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
+            });
+        };
+        deleteRevoked();
+        window.addEventListener("online", deleteRevoked);
+        return () => window.removeEventListener("online", deleteRevoked);
     }, [userId]);
 
     useEffect(() => {
@@ -162,7 +189,7 @@ export default function WorkspaceHome() {
         return <main className="p-8 text-sm text-muted-foreground">Nodi wird geladen …</main>;
     }
 
-    const visibleError = error || workspacesError || pagesError;
+    const visibleError = error || workspacesError || pagesError || sharedPagesError;
 
     return (
         <main className="flex h-svh bg-background">
@@ -205,6 +232,7 @@ export default function WorkspaceHome() {
                             onWorkspaceChange={setWorkspaceId}
                             pages={pages}
                             archivedPages={archivedPages}
+                            sharedPages={sharedPages}
                             selectedPageId={page?.id ?? ""}
                             readOnly={readOnly}
                             status={
@@ -232,13 +260,15 @@ export default function WorkspaceHome() {
                             <PageView
                                 page={page}
                                 ancestors={ancestors}
-                                readOnly={readOnly}
+                                // Title, icon and width of a shared page belong to its workspace.
+                                readOnly={readOnly || sharedPage !== null}
                                 focusTitle={newPageId === page.id}
                                 onBack={closePage}
                                 onSelect={(id) => openPage(id)}
                                 onRename={renamePage}
                                 onUpdate={updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
+                                onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
@@ -277,6 +307,15 @@ export default function WorkspaceHome() {
                     unsyncedPages={signOutStep.unsyncedPages}
                     onCancel={() => setSignOutStep({ kind: "idle" })}
                     onDiscardAndSignOut={() => signOutAndDeleteLocalData(user.id, signOut)}
+                />
+            )}
+
+            {sharingPage && user && (
+                <ShareDialog
+                    key={sharingPage.id}
+                    page={sharingPage}
+                    userId={user.id}
+                    onClose={() => setSharingPage(null)}
                 />
             )}
 

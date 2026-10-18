@@ -1,6 +1,7 @@
 import { Fragment, lazy, Suspense, useState } from "react";
 import { Check, ChevronLeft, FileText, MoreHorizontal } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
+import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import type { Page, PageSettings } from "@/features/pages/types";
@@ -19,6 +20,8 @@ type PageViewProps = {
     onRename: (pageId: string, title: string) => Promise<void>;
     onUpdate: (pageId: string, settings: PageSettings) => Promise<void>;
     onArchive: (page: Page) => void;
+    /** Only for the page owner. */
+    onShare?: (page: Page) => void;
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -42,6 +45,7 @@ export function PageView({
     onRename,
     onUpdate,
     onArchive,
+    onShare,
 }: PageViewProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
@@ -98,6 +102,16 @@ export function PageView({
                 <MoreHorizontal className="size-5" />
             </button>
             <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                {onShare && (
+                    <MenuItem
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onShare(page);
+                        }}
+                    >
+                        Teilen
+                    </MenuItem>
+                )}
                 <MenuItem onSelect={toggleFullWidth}>
                     <span className="flex-1">Volle Breite</span>
                     {page.full_width && <Check className="size-4 text-brand" />}
@@ -134,24 +148,34 @@ export function PageView({
     );
 
     return (
-        <Suspense
+        <LoadErrorBoundary
+            key={page.id}
             fallback={
-                <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+                <EditorFrame topBarStart={topBarStart} fullWidth={page.full_width}>
                     {renderHeader(false)}
-                    <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                        Editor wird geladen …
-                    </p>
+                    <LoadErrorNotice message="Der Editor konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu. Gespeicherte Änderungen bleiben erhalten." />
                 </EditorFrame>
             }
         >
-            <BlockEditor
-                key={page.id}
-                pageId={page.id}
-                topBarStart={topBarStart}
-                topBarEnd={topBarEnd}
-                fullWidth={page.full_width}
-                renderHeader={renderHeader}
-            />
-        </Suspense>
+            <Suspense
+                fallback={
+                    <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+                        {renderHeader(false)}
+                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                            Editor wird geladen …
+                        </p>
+                    </EditorFrame>
+                }
+            >
+                <BlockEditor
+                    key={page.id}
+                    pageId={page.id}
+                    topBarStart={topBarStart}
+                    topBarEnd={topBarEnd}
+                    fullWidth={page.full_width}
+                    renderHeader={renderHeader}
+                />
+            </Suspense>
+        </LoadErrorBoundary>
     );
 }

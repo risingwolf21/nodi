@@ -252,9 +252,11 @@ src/
   index.css
   vite-env.d.ts
   components/
+    LoadErrorBoundary.tsx   # Fehler beim Nachladen: Hinweis + „Neu laden“
     auth/AuthForm.tsx
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
+    editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb)
@@ -275,6 +277,7 @@ src/
         sync-engine.ts               # sendet alle ungesyncten Änderungen
         account-sync.ts              # eine Sync-Engine je Konto und Tab
         document-changes.ts          # BroadcastChannel zwischen Tabs
+        revoked-documents.ts         # lokale Kopien nicht mehr lesbarer Seiten löschen
     pages/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
@@ -282,10 +285,17 @@ src/
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/PageActionsDialog.tsx
+      components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
+      hooks/useSharedPages.ts       # „Mit mir geteilt“, Cache zuerst, nur lesend
       hooks/useWorkspaces.ts
       services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
+      services/page-sharing.ts      # RPCs share_page/list_page_shares, Entziehen, Links
+    public/
+      public-page.ts        # Token aus `?p=`, Link-URL, RPC get_public_page
+      PublicPage.tsx        # öffentliche Ansicht ohne Login (in main.tsx gewählt)
+      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
@@ -307,8 +317,10 @@ supabase/
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
-                            # pages.full_width (P10)
-  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW
+                            # pages.full_width (P10), Teilen und
+                            # öffentliche Links (P11a)
+  tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
+                            # Seiteneinstellungen, Teilen
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -915,6 +927,14 @@ Arbeitspakete, je ein Pull Request:
         Encryption at rest übernimmt die Plattform (Supabase/AWS,
         AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
         nur HTTPS-Endpunkte.
+    -   **Klartext in der Datenbank (Nutzerentscheidung 2026-10-18):**
+        Dokumente und Titel stehen lesbar in `page_documents`/`pages`.
+        RLS schützt vor anderen Nutzern, nicht vor Betreibern: Wer das
+        Supabase-Dashboard oder den Service-Role-Key nutzt, umgeht RLS
+        und kann Inhalte lesen; Encryption at rest ändert daran nichts.
+        Gewollt, wie bei Notion. Ausgleich: Dashboard-Zugang klein halten
+        (2FA) und in der Datenschutzerklärung offenlegen. Server- oder
+        Ende-zu-Ende-Verschlüsselung der Inhalte vorerst nicht.
     -   **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
         ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
     -   **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
@@ -942,16 +962,78 @@ Arbeitspakete, je ein Pull Request:
             Server.
         -   Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
             CI-Check auf `dist/`).
-    -   **Vor der Umsetzung zu entscheiden:** Vererbung auch für
-        `private` Unterseiten? Öffentliche Links (`pages.is_public` oder
-        Share-Token, Zugriff dann nur über eine RPC, nicht über
-        anon-RLS) jetzt oder später? Wie findet der Owner einen Nutzer
-        (E-Mail, ohne alle Profile offenzulegen)?
+    -   **Entschieden (Nutzer, 2026-10-18):** (1) Freigaben gelten
+        **nicht** für `private` Unterseiten; die Vererbung endet an einer
+        privaten Seite (sie und alles darunter brauchen eine eigene
+        Freigabe). (2) Öffentliche Links **jetzt**, nur über eine RPC.
+        (3) Nutzer finden per **exakter E-Mail-Eingabe**.
+    -   **Annahme:** Ein öffentlicher Link gilt nur für genau diese Seite,
+        nicht für ihre Unterseiten (später erweiterbar).
+    -   **Aufteilung:** 11a Datenbank (RPCs, Vererbung, Links, pgTAP,
+        Schlüssel-Checks), 11b Oberfläche zum Teilen und „Mit mir
+        geteilt“, lokale Kopie bei Entzug löschen, 11c öffentlicher Link
+        im Teilen-Dialog und öffentliche Seitenansicht ohne Login (der
+        Link-Schalter kam nach 11c, damit ein erzeugter Link sofort
+        funktioniert).
+    -   **Umsetzung 11a** (`20261018120000_page_sharing.sql`):
+        `has_page_share(page, require_edit)` geht rekursiv über
+        `parent_id` nach oben (Stopp an `private`, Tiefe ≤ 50 gegen
+        Zyklen); `can_read_page`/`can_edit_page` nutzen es, damit gelten
+        alle bestehenden Policies und `save_page_document` automatisch.
+        `share_page(page, email, 'read'|'edit')` (nur Owner; `42501`,
+        `22023`, `P0002` unbekannte E-Mail; erneutes Teilen ändert die
+        Rolle), `list_page_shares(page)` mit E-Mails (nur Owner).
+        Ändern/Entziehen über die bestehenden Owner-Policies auf
+        `page_shares`. Tabelle `page_public_links` (ein Token je Seite,
+        nur Owner), `get_public_page(token)` für `anon` (nur diese
+        Seite, nicht archiviert). Die Fehlermeldung bei unbekannter
+        E-Mail verrät dem Owner, ob ein Konto existiert (bewusst, wie bei
+        Einladungen üblich). Deploy lehnt `sb_secret_`- und
+        `service_role`-Schlüssel als Publishable Key ab; CI prüft das
+        Bundle auf `sb_secret_`.
     -   **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
         Zeilen (`pages`, `page_documents`), auch für Unterseiten.
         Viewer kann lesen, aber nicht schreiben (`save_page_document` →
         `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
         Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
+    -   **Umsetzung 11b** (nur Frontend, keine Migration):
+        -   `pages.owner_id` wird mitgeladen (`Page.owner_id`; alte
+            Caches ohne Owner gelten als „nicht teilbar“ bis zum
+            nächsten Laden). „Teilen“ im Seitenmenü nur für den Owner
+            und nur online; der Server prüft es ohnehin.
+        -   `ShareDialog`: Einladen per E-Mail mit Rolle „Kann lesen“ /
+            „Kann bearbeiten“ (`share_page`), Liste (`list_page_shares`),
+            Rolle ändern = erneut `share_page`, Entfernen = `delete` auf
+            `page_shares`. Fehlercodes als deutsche Meldungen.
+        -   „Mit mir geteilt“ (`useSharedPages`): lesbare, nicht
+            archivierte Seiten außerhalb der eigenen Workspaces
+            (`workspace_id not in (…)`, RLS entscheidet). Seiten, deren
+            Elternseite nicht sichtbar ist, sind Wurzeln. Cache zuerst
+            (Schlüssel `shared-pages` in `nodi-<userId>-tree`), offline
+            nur lesend. Titel, Icon und Breite geteilter Seiten sind
+            nicht änderbar; der Inhalt folgt `can_edit_page`.
+        -   Entzug: `deleteRevokedLocalCopies` fragt beim Start und bei
+            `online` alle lesbaren Seiten-IDs ab und löscht lokal nur
+            **synchronisierte** Kopien anderer Seiten (in einer
+            Transaktion). Ungesyncte Änderungen bleiben (keine stillen
+            Datenverluste; die Sync-Engine meldet `42501`). Ohne
+            vollständige Antwort (Fehler, offline, `count` ≠ Zeilen)
+            wird nichts gelöscht. Seitenbaum- und Geteilt-Cache werden
+            bei der nächsten Serverantwort ersetzt.
+    -   **Umsetzung 11c** (nur Frontend, keine Migration):
+        -   Link: `…/nodi/?p=<token>` (Query-Parameter, braucht auf
+            GitHub Pages keine eigene Route; URL relativ zu `BASE_URL`).
+        -   Teilen-Dialog: „Link erstellen“ (`insert` in
+            `page_public_links`, Token vom Server), „Kopieren“, „Link
+            deaktivieren“ (`delete`, wirkt sofort; ein neuer Link hat
+            einen neuen Token). Nur Owner, nur online.
+        -   `main.tsx` zeigt bei `?p=` die öffentliche Ansicht statt der
+            App, ohne `AuthProvider`: kein Login, keine Sync-Engine,
+            nichts in IndexedDB. Ein ungültiges Token wird nicht
+            angefragt. Inhalt per `get_public_page`, validiert, BlockNote
+            mit `editable={false}`. Fehler: ungültig/deaktiviert/
+            archiviert („Dieser Link ist ungültig oder wurde
+            deaktiviert.“), offline, sonstige.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -1001,8 +1083,11 @@ Noch nicht abschließend geprüft:
     Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
     Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
     (Workspace-Menü) erreichbar.
--   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
-    keine Error-Boundary.
+-   (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
+    der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt
+    `LoadErrorBoundary` ihn ab: Pfad und Zurück bleiben, Hinweis mit
+    „Neu laden“ (ein abgelehnter `import()` bleibt bis zum Neuladen
+    abgelehnt). Je Seite eine eigene Boundary (`key={page.id}`).
 -   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
     entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
     Apps älter als Paket 7 können erst nach Bestätigung des
@@ -1018,6 +1103,18 @@ Noch nicht abschließend geprüft:
     inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
     und kann gewinnen.
 -   UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
+-   Teilen (11b): Lokale Kopien entzogener Seiten werden nur beim Start
+    und bei `online` bereinigt, nicht während die App lange offen ist.
+    Mehr als 1000 lesbare Seiten (`max_rows`) → keine Bereinigung.
+    Ungesyncte Änderungen an einer entzogenen Seite bleiben mit Fehler
+    stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
+    Editoren aus anderen Workspaces können Titel und Icon geteilter
+    Seiten nicht ändern (nur Inhalt).
+-   Öffentliche Links (11c): Seiten haben kein `noindex`; wer den Link
+    öffentlich postet, macht die Seite für Suchmaschinen auffindbar.
+    Öffentliche Seiten sind offline nicht verfügbar (bewusst nicht
+    gespeichert). Auch angemeldete Nutzer sehen unter `?p=` nur die
+    öffentliche Ansicht.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.
