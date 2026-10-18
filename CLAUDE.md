@@ -281,6 +281,8 @@ src/
       components/BoardView.tsx       # Board: Spalten je Option, Ziehen setzt den Wert (14c)
       components/ListView.tsx        # Liste (14c)
       components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
+      components/FeedView.tsx        # Feed mit Textvorschau (14d)
+      components/CalendarView.tsx    # Monatskalender (14d)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -1265,6 +1267,25 @@ Arbeitspakete, je ein Pull Request:
             öffnet ihn; in einer Board-Spalte bekommt er deren Wert.
         -   Noch nicht: Reihenfolge innerhalb einer Spalte per Ziehen,
             Spalten ausblenden, Titelbilder in der Galerie.
+    -   **Umsetzung 14d** (nur Frontend, keine Migration):
+        -   Feed: Einträge untereinander mit „Zuletzt bearbeitet“,
+            Eigenschaften und dem Anfang des Textes (`previewText`: Text
+            der ersten drei Blöcke, höchstens 280 Zeichen; Tabellen und
+            Bilder ausgelassen). Die Abfrage holt dafür nur
+            `document->0..2`, keine ganzen Dokumente; die Vorschau wird mit
+            der Datenbank gecacht (`documentPreview`). Sie zeigt den Stand
+            des Servers: ungesyncte lokale Änderungen erscheinen erst nach
+            dem Sync und neuem Laden.
+        -   Kalender: Monatsraster ab Montag mit Vor/Zurück/„Heute“ (Monat
+            nur im Tab, nicht gespeichert). Einträge stehen am Tag einer
+            Datums-Eigenschaft (`config.datePropertyId`, sonst die erste;
+            „Datum“ in der Leiste), Zeiträume an jedem Tag (höchstens 62).
+            „+“ an einem Tag legt einen Eintrag mit diesem Datum an und
+            öffnet ihn. Ohne Datums-Eigenschaft: „Datums-Eigenschaft
+            anlegen“. Einträge ohne Datum erscheinen im Kalender nicht.
+        -   Alle sechs Ansichtstypen der Datenbank sind damit nutzbar.
+        -   Noch nicht: Einträge im Kalender per Ziehen verschieben,
+            Wochenansicht, Landkarte (später, eigener Ansichtstyp).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

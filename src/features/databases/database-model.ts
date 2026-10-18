@@ -46,6 +46,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     last_edited_time: "Geändert am",
 };
 
+/** All view types of the server (package 14a); the map comes later. */
 export const VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery", "feed", "calendar"];
 
 export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
@@ -56,9 +57,6 @@ export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     feed: "Feed",
     calendar: "Kalender",
 };
-
-/** View types the app can show so far (packages 14b–14d). */
-export const AVAILABLE_VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery"];
 
 export const OPTION_COLORS: readonly OptionColor[] = [
     "gray",
@@ -182,10 +180,24 @@ export function parseViewConfig(value: unknown): ViewConfig {
         ? config.hiddenPropertyIds.filter((id: unknown): id is string => typeof id === "string")
         : [];
     const groupByPropertyId = typeof config.groupByPropertyId === "string" ? config.groupByPropertyId : null;
-    return { sort, filter, hiddenPropertyIds, groupByPropertyId };
+    const datePropertyId = typeof config.datePropertyId === "string" ? config.datePropertyId : null;
+    return { sort, filter, hiddenPropertyIds, groupByPropertyId, datePropertyId };
 }
 
-export const EMPTY_VIEW_CONFIG: ViewConfig = { sort: [], filter: [], hiddenPropertyIds: [], groupByPropertyId: null };
+export const EMPTY_VIEW_CONFIG: ViewConfig = {
+    sort: [],
+    filter: [],
+    hiddenPropertyIds: [],
+    groupByPropertyId: null,
+    datePropertyId: null,
+};
+
+function stringRecord(value: unknown): Record<string, string> {
+    if (!isObject(value)) return {};
+    return Object.fromEntries(
+        Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+}
 
 export function parseViews(rows: unknown): DatabaseView[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
@@ -234,13 +246,8 @@ export function parseCachedDatabase(value: unknown): DatabaseData | null {
             properties: parseProperties(value.properties),
             views: parseViews(value.views),
             values: parseValues(value.values),
-            documentEditedAt: isObject(value.documentEditedAt)
-                ? Object.fromEntries(
-                      Object.entries(value.documentEditedAt).filter(
-                          (entry): entry is [string, string] => typeof entry[1] === "string",
-                      ),
-                  )
-                : {},
+            documentEditedAt: stringRecord(value.documentEditedAt),
+            documentPreview: stringRecord(value.documentPreview),
             canEdit: value.canEdit === true,
         };
     } catch {
@@ -601,6 +608,93 @@ export function groupRows(rows: DatabaseRow[], property: DatabaseProperty): RowG
         group.rows.push(row);
     }
     return groups;
+}
+
+// ---------------------------------------------------------------------------
+// Feed.
+
+export const PREVIEW_LENGTH = 280;
+
+/** Text of BlockNote inline content: text and links, nested. */
+function inlineText(content: unknown): string {
+    if (!Array.isArray(content)) return "";
+    return content
+        .map((item: unknown) => {
+            if (!isObject(item)) return "";
+            if (typeof item.text === "string") return item.text;
+            return inlineText(item.content);
+        })
+        .join("");
+}
+
+/**
+ * Plain text of the first BlockNote blocks for a feed: one line per block,
+ * empty blocks and other content (tables, images) left out.
+ */
+export function previewText(blocks: unknown[]): string {
+    const text = blocks
+        .map((block) => (isObject(block) ? inlineText(block.content).trim() : ""))
+        .filter(Boolean)
+        .join("\n");
+    return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH).trimEnd()} …` : text;
+}
+
+// ---------------------------------------------------------------------------
+// Calendar.
+
+/** The chosen date property, otherwise the first one. */
+export function dateProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const dates = [...properties].sort((a, b) => a.position - b.position).filter((property) => property.type === "date");
+    return dates.find((property) => property.id === config.datePropertyId) ?? dates[0];
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** A range longer than this is shown only on its first days. */
+const MAX_RANGE_DAYS = 62;
+
+function utcDay(day: string): number {
+    return Date.parse(`${day}T00:00:00Z`);
+}
+
+function dayString(time: number): string {
+    return new Date(time).toISOString().slice(0, 10);
+}
+
+/** "YYYY-MM-DD" of a local date (today in the user's time zone). */
+export function localDay(date: Date): string {
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/** Weeks of a month, Monday first (as in Germany), filled with days of the neighbor months. */
+export function monthGrid(year: number, month: number): string[][] {
+    const first = Date.UTC(year, month, 1);
+    const mondayOffset = (new Date(first).getUTCDay() + 6) % 7;
+    const start = first - mondayOffset * DAY_MS;
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const weekCount = Math.ceil((mondayOffset + daysInMonth) / 7);
+    return Array.from({ length: weekCount }, (_, week) =>
+        Array.from({ length: 7 }, (_, weekday) => dayString(start + (week * 7 + weekday) * DAY_MS)),
+    );
+}
+
+/** Entries per day ("YYYY-MM-DD"); a range appears on each of its days. Rows keep their order. */
+export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<string, DatabaseRow[]> {
+    const days = new Map<string, DatabaseRow[]>();
+    for (const row of rows) {
+        const value = row.values[property.id];
+        if (!isDateValue(value)) continue;
+        const start = utcDay(dayOf(value.start));
+        const end = value.end ? utcDay(dayOf(value.end)) : start;
+        if (Number.isNaN(start)) continue;
+        const last = Number.isNaN(end) || end < start ? start : Math.min(end, start + (MAX_RANGE_DAYS - 1) * DAY_MS);
+        for (let time = start; time <= last; time += DAY_MS) {
+            const day = dayString(time);
+            days.set(day, [...(days.get(day) ?? []), row]);
+        }
+    }
+    return days;
 }
 
 /** A name for a new property or view that is not taken yet. */

@@ -4,22 +4,26 @@ import { Menu, MenuItem } from "@/components/ui/menu";
 import type { Page } from "@/features/pages/types";
 import { cn } from "@/lib/utils";
 import {
-    AVAILABLE_VIEW_TYPES,
+    VIEW_TYPES,
     VIEW_TYPE_LABELS,
     applyView,
     buildRows,
+    canGroupBy,
+    dateProperty,
     defaultOptions,
     groupProperty,
     visibleProperties,
 } from "../database-model";
 import { useDatabase } from "../hooks/useDatabase";
-import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
+import type { DatabaseView as DatabaseViewModel, PropertyValue, ViewType } from "../types";
 import { BoardView } from "./BoardView";
+import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { FeedView } from "./FeedView";
 import { GalleryView } from "./GalleryView";
 import { ListView } from "./ListView";
 import { TableView } from "./TableView";
-import { FilterPanel, GroupPanel, PropertiesPanel, SortPanel } from "./ViewSettingsPanels";
+import { FilterPanel, PropertiesPanel, PropertyChoicePanel, SortPanel } from "./ViewSettingsPanels";
 
 const VIEW_ICONS = {
     table: Table2,
@@ -186,15 +190,16 @@ export function DatabaseView({
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
+    const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
 
-    // Board, list and gallery open a new entry at once (like Notion); a
-    // board column also sets its value.
-    async function createAndOpenEntry(groupValue?: { propertyId: string; optionId: string | null }) {
+    // Views other than the table open a new entry at once (like Notion); a
+    // board column or a calendar day also sets its value.
+    async function createAndOpenEntry(initial?: { propertyId: string; value: PropertyValue }) {
         if (!onCreateEntry || creatingEntry.current) return;
         creatingEntry.current = true;
         try {
             const pageId = await onCreateEntry();
-            if (groupValue?.optionId) await setValue(pageId, groupValue.propertyId, groupValue.optionId);
+            if (initial && initial.value !== null) await setValue(pageId, initial.propertyId, initial.value);
             onOpenEntry(pageId);
         } catch (err) {
             report(err instanceof Error ? err.message : "Der Eintrag konnte nicht angelegt werden.");
@@ -233,7 +238,7 @@ export function DatabaseView({
                             <Plus className="size-4" />
                         </button>
                         <Menu open={addViewOpen} onClose={() => setAddViewOpen(false)} align="start">
-                            {AVAILABLE_VIEW_TYPES.map((type) => {
+                            {VIEW_TYPES.map((type) => {
                                 const Icon = VIEW_ICONS[type];
                                 return (
                                     <MenuItem key={type} onSelect={() => void addNewView(type)}>
@@ -248,12 +253,30 @@ export function DatabaseView({
                 {activeView && (
                     <div className="ml-auto flex flex-wrap items-center gap-0.5">
                         {activeView.type === "board" && (
-                            <GroupPanel
-                                config={activeView.config}
-                                properties={data.properties}
-                                editable={editable}
+                            <PropertyChoicePanel
+                                label="Gruppieren"
+                                icon={Columns3}
+                                emptyText="Keine Auswahl- oder Status-Eigenschaft."
+                                choices={data.properties.filter((property) => canGroupBy(property.type))}
                                 current={boardGroup}
-                                onChange={(config) => updateView(activeView.id, { config })}
+                                editable={editable}
+                                onChoose={(groupByPropertyId) =>
+                                    updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
+                                }
+                                onError={report}
+                            />
+                        )}
+                        {activeView.type === "calendar" && (
+                            <PropertyChoicePanel
+                                label="Datum"
+                                icon={CalendarDays}
+                                emptyText="Keine Datums-Eigenschaft."
+                                choices={data.properties.filter((property) => property.type === "date")}
+                                current={calendarDate}
+                                editable={editable}
+                                onChoose={(datePropertyId) =>
+                                    updateView(activeView.id, { config: { ...activeView.config, datePropertyId } })
+                                }
                                 onError={report}
                             />
                         )}
@@ -308,7 +331,7 @@ export function DatabaseView({
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={
                         onCreateEntry && boardGroup
-                            ? (optionId) => createAndOpenEntry({ propertyId: boardGroup.id, optionId })
+                            ? (optionId) => createAndOpenEntry({ propertyId: boardGroup.id, value: optionId })
                             : undefined
                     }
                     onMoveEntry={(pageId, optionId) => setValue(pageId, boardGroup?.id ?? "", optionId)}
@@ -334,6 +357,33 @@ export function DatabaseView({
                     editable={editable}
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                />
+            )}
+            {activeView?.type === "feed" && (
+                <FeedView
+                    rows={rows}
+                    properties={columns}
+                    previews={data.documentPreview}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                />
+            )}
+            {activeView?.type === "calendar" && (
+                <CalendarView
+                    rows={rows}
+                    dateProperty={calendarDate}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={
+                        onCreateEntry && calendarDate
+                            ? (day) => createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
+                            : undefined
+                    }
+                    onAddDateProperty={async () => {
+                        await addProperty("date");
+                    }}
+                    onError={report}
                 />
             )}
             {activeView?.type === "table" && (
