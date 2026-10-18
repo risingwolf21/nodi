@@ -14,6 +14,8 @@ type UseWorkspacesResult = {
     /** The list comes from the local cache because the server is unreachable. */
     fromCache: boolean;
     createWorkspace: (name: string) => Promise<void>;
+    /** Loads the list again, e.g. after leaving a workspace. */
+    reload: () => void;
 };
 
 async function fetchWorkspaces(userId: string): Promise<Workspace[]> {
@@ -157,6 +159,8 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
         [userId, fromCache, show],
     );
 
+    const reload = useCallback(() => setReloadCount((count) => count + 1), []);
+
     return {
         workspaces,
         workspaceId,
@@ -165,5 +169,6 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
         error,
         fromCache,
         createWorkspace,
+        reload,
     };
 }

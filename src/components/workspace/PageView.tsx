@@ -4,7 +4,7 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/features/pages/components/PageHeader";
-import type { Page, PageSettings } from "@/features/pages/types";
+import type { Page, PageSection, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -13,7 +13,10 @@ type PageViewProps = {
     page: Page;
     /** Root first. */
     ancestors: Page[];
+    /** Offline: nothing about the page can be changed. */
     readOnly: boolean;
+    /** Width, trash and sharing; not for pages shared from other workspaces. */
+    showPageMenu: boolean;
     focusTitle: boolean;
     onBack: () => void;
     onSelect: (pageId: string) => void;
@@ -22,6 +25,8 @@ type PageViewProps = {
     onArchive: (page: Page) => void;
     /** Only for the page owner. */
     onShare?: (page: Page) => void;
+    /** Only for root pages of the owner. */
+    onMoveSection?: (page: Page, target: PageSection) => void;
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -39,6 +44,7 @@ export function PageView({
     page,
     ancestors,
     readOnly,
+    showPageMenu,
     focusTitle,
     onBack,
     onSelect,
@@ -46,6 +52,7 @@ export function PageView({
     onUpdate,
     onArchive,
     onShare,
+    onMoveSection,
 }: PageViewProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
@@ -90,7 +97,7 @@ export function PageView({
         </>
     );
 
-    const topBarEnd = readOnly ? null : (
+    const topBarEnd = readOnly || !showPageMenu ? null : (
         <div className="relative shrink-0">
             <button
                 type="button"
@@ -110,6 +117,16 @@ export function PageView({
                         }}
                     >
                         Teilen
+                    </MenuItem>
+                )}
+                {onMoveSection && (
+                    <MenuItem
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
+                        }}
+                    >
+                        {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
                     </MenuItem>
                 )}
                 <MenuItem onSelect={toggleFullWidth}>

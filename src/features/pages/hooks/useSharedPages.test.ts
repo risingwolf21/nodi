@@ -9,7 +9,7 @@ const stored = (id: string, parent_id: string | null, is_archived = false): Stor
     id,
     title: id,
     parent_id,
-    owner_id: "owner",
+    owner_id: "owner", visibility: "private",
     is_archived,
     icon: null,
     full_width: false,

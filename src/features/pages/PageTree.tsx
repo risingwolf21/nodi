@@ -11,6 +11,7 @@ type PageTreeProps = {
     onAddChild: (parentId: string) => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
+    emptyText?: string;
 };
 
 export function PageTree({
@@ -20,14 +21,15 @@ export function PageTree({
     onSelect,
     onAddChild,
     onRename,
-    onArchive
+    onArchive,
+    emptyText = "Noch keine Seiten",
 }: PageTreeProps) {
     const rootPages = pages.filter((page) => page.parent_id === null);
 
     if (rootPages.length === 0) {
         return (
             <p className="px-2 py-1 text-sm text-muted-foreground">
-                Noch keine Seiten
+                {emptyText}
             </p>
         );
     }

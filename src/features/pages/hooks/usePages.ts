@@ -1,22 +1,23 @@
 
 import { useCallback, useEffect, useState } from "react";
-import { toRequestError } from "@/lib/request-errors";
+import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { collectDescendantIds, collectRestoreIds } from "../page-hierarchy";
 import { pageTreeCacheFor } from "../services/page-tree-cache";
-import type { Page, PageSettings, StoredPage } from "../types";
+import type { Page, PageSection, PageSettings, StoredPage } from "../types";
 
 export const OFFLINE_READ_ONLY_MESSAGE =
     "Offline: Seiten können erst wieder mit Internetverbindung angelegt oder geändert werden.";
 
 // Columns of a page in the tree (StoredPage).
-export const PAGE_COLUMNS = "id,title,parent_id,owner_id,is_archived,icon,full_width";
+export const PAGE_COLUMNS = "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width";
 
-export const toPage = ({ id, title, parent_id, owner_id, icon, full_width }: StoredPage): Page => ({
+export const toPage = ({ id, title, parent_id, owner_id, visibility, icon, full_width }: StoredPage): Page => ({
     id,
     title,
     parent_id,
     owner_id,
+    visibility,
     icon,
     full_width,
 });
@@ -28,7 +29,10 @@ type UsePagesResult = {
     error: string;
     /** The tree comes from the local cache because the server is unreachable. */
     fromCache: boolean;
-    createPage: (title: string, parentId: string | null) => Promise<Page>;
+    /** A subpage takes the section of its parent; `section` is for root pages. */
+    createPage: (title: string, parentId: string | null, section: PageSection) => Promise<Page>;
+    /** Moves a root page with all subpages to the other section (owner only). */
+    setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     renamePage: (pageId: string, title: string) => Promise<void>;
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
@@ -152,7 +156,7 @@ export function usePages(
     }, [fromCache]);
 
     const createPage = useCallback(
-        async (title: string, parentId: string | null): Promise<Page> => {
+        async (title: string, parentId: string | null, section: PageSection): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
@@ -164,11 +168,17 @@ export function usePages(
                 throw new Error("Der Seitentitel darf nicht leer sein.");
             }
 
+            // The server enforces it for private parents; a shared parent's
+            // subpage is shared as well.
+            const parent = parentId ? pages.find((page) => page.id === parentId) : undefined;
+            const visibility = parent ? parent.visibility : section;
+
             const createdPage: Page = {
                 id: crypto.randomUUID(),
                 title: normalizedTitle,
                 parent_id: parentId,
                 owner_id: userId,
+                visibility,
                 icon: null,
                 full_width: false,
             };
@@ -183,7 +193,7 @@ export function usePages(
                     owner_id: userId,
                     created_by: userId,
                     title: normalizedTitle,
-                    visibility: "workspace",
+                    visibility,
                     parent_id: parentId,
                 });
 
@@ -193,7 +203,45 @@ export function usePages(
 
             return createdPage;
         },
-        [userId, workspaceId, requireOnline],
+        [userId, workspaceId, pages, requireOnline],
+    );
+
+    const setPageSection = useCallback(
+        async (pageId: string, section: PageSection) => {
+            requireOnline();
+            setError("");
+
+            const response = await supabase.rpc("set_page_section", {
+                p_page_id: pageId,
+                p_visibility: section,
+            });
+            const failure = toRequestError(response);
+            if (failure) {
+                console.error("Bereich konnte nicht geändert werden:", failure.reason, failure.message);
+                throw new RemoteRequestError(
+                    failure.reason,
+                    failure.reason === "offline"
+                        ? OFFLINE_READ_ONLY_MESSAGE
+                        : response.error?.code === "42501"
+                          ? "Nur wem die Seite gehört, kann sie verschieben."
+                          : "Die Seite konnte nicht verschoben werden.",
+                );
+            }
+
+            // The whole tree moves; to private, subpages of others become ours.
+            const moved = new Set(collectDescendantIds(pageId, [...pages, ...archivedPages]));
+            const move = (page: Page): Page =>
+                moved.has(page.id)
+                    ? {
+                          ...page,
+                          visibility: section,
+                          owner_id: section === "private" && userId ? userId : page.owner_id,
+                      }
+                    : page;
+            setPages((current) => current.map(move));
+            setArchivedPages((current) => current.map(move));
+        },
+        [pages, archivedPages, userId, requireOnline],
     );
 
     const renamePage = useCallback(
@@ -336,14 +384,20 @@ export function usePages(
                 );
             }
 
-            const { error: deleteError } = await supabase
+            // Only the owner may delete for good; RLS filters other
+            // deletes without an error, so the returned rows tell.
+            const { data: deletedRows, error: deleteError } = await supabase
                 .from("pages")
                 .delete()
                 .eq("workspace_id", workspaceId)
                 .eq("is_archived", true)
-                .eq("id", pageId);
+                .eq("id", pageId)
+                .select("id");
 
             if (deleteError) throw deleteError;
+            if (deletedRows.length === 0) {
+                throw new Error("Nur der Eigentümer kann diese Seite endgültig löschen.");
+            }
 
             const deletedIds = new Set(ids);
 
@@ -364,6 +418,7 @@ export function usePages(
         error,
         fromCache,
         createPage,
+        setPageSection,
         renamePage,
         updatePage,
         archivePage,
