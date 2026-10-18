@@ -64,6 +64,8 @@ function statusText(status: SessionStatus): string {
             return "Offline";
         case "error":
             return "Speichern fehlgeschlagen";
+        case "loadFailed":
+            return "Aktualisieren fehlgeschlagen";
     }
 }
 
@@ -184,7 +186,8 @@ function EditorContent({
         session.current?.recordEdit(editor.document);
     }, editor);
 
-    const canRetry = status.kind === "error" || status.kind === "unsynced";
+    const canRetry = status.kind === "error" || status.kind === "loadFailed" || status.kind === "unsynced";
+    const isFailure = status.kind === "error" || status.kind === "loadFailed";
 
     return (
         <EditorFrame
@@ -210,16 +213,14 @@ function EditorContent({
                     {canRetry && (
                         <div className="flex items-center justify-between gap-4 px-4 pb-2">
                             <p
-                                className={
-                                    status.kind === "error"
-                                        ? "text-sm text-destructive"
-                                        : "text-sm text-muted-foreground"
-                                }
-                                role={status.kind === "error" ? "alert" : undefined}
+                                className={isFailure ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+                                role={isFailure ? "alert" : undefined}
                             >
                                 {status.kind === "error"
                                     ? `Speichern fehlgeschlagen: ${status.message}. Die Änderung bleibt auf diesem Gerät gespeichert.`
-                                    : "Die Änderungen sind auf diesem Gerät gespeichert und werden übertragen, sobald der Server erreichbar ist."}
+                                    : status.kind === "loadFailed"
+                                      ? `Die neueste Version konnte nicht geladen werden: ${status.message}.`
+                                      : "Die Änderungen sind auf diesem Gerät gespeichert und werden übertragen, sobald der Server erreichbar ist."}
                             </p>
 
                             <button

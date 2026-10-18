@@ -102,13 +102,13 @@ describe("PageDocumentSession", () => {
         session.recordEdit([{ type: "paragraph", content: "edit" }]);
         await session.flush();
 
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
         expect(remote.save).toHaveBeenCalledWith(
             pageId,
             [{ type: "paragraph", content: "edit" }],
             { editedAt: "2026-10-17T10:00:00.000Z", mutationId: ownId },
         );
         expect(await store.get(pageId)).toMatchObject({ synced: true, mutationId: ownId });
-        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
     });
 
     it("keeps the edit locally when offline and sends it on retry", async () => {
@@ -119,7 +119,7 @@ describe("PageDocumentSession", () => {
         session.recordEdit([{ type: "paragraph", content: "offline edit" }]);
         await session.flush();
 
-        expect(lastStatus()).toEqual({ kind: "unsynced", reason: "offline" });
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "unsynced", reason: "offline" }));
         expect(await store.get(pageId)).toMatchObject({
             synced: false,
             content: [{ type: "paragraph", content: "offline edit" }],
@@ -157,7 +157,7 @@ describe("PageDocumentSession", () => {
         session.recordEdit([{ type: "paragraph", content: "edit" }]);
         await session.flush();
 
-        expect(lastStatus()).toEqual({ kind: "error", message: "permission denied" });
+        await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "error", message: "permission denied" }));
         expect(statuses.slice(statusesBeforeEdit)).not.toContainEqual({ kind: "synced" });
         expect(await store.get(pageId)).toMatchObject({ synced: false });
     });
@@ -236,6 +236,84 @@ describe("PageDocumentSession", () => {
 
         await vi.waitFor(() => expect(remoteContent).toHaveBeenCalledWith(otherTabEdit.content, false));
         expect(lastStatus()).toEqual({ kind: "saving" });
+    });
+
+    it("stores further edits while the server does not answer", async () => {
+        const remote = createRemote();
+        remote.save.mockImplementation(() => new Promise(() => undefined));
+        const session = createSession(remote);
+        await session.start(synced(), { freshFromServer: true });
+
+        session.recordEdit([{ type: "paragraph", content: "first" }]);
+        await session.flush();
+        await vi.waitFor(() => expect(remote.save).toHaveBeenCalled());
+
+        session.recordEdit([{ type: "paragraph", content: "second" }]);
+        await session.flush();
+
+        expect(await store.get(pageId)).toMatchObject({
+            content: [{ type: "paragraph", content: "second" }],
+            synced: false,
+        });
+    });
+
+    it("stores an edit while loading a newer version hangs", async () => {
+        const remote = createRemote();
+        remote.fetch.mockImplementation(() => new Promise(() => undefined));
+        const session = createSession(remote);
+        await store.putLocalEdit(synced());
+        void session.start(synced(), { freshFromServer: false });
+        await vi.waitFor(() => expect(remote.fetch).toHaveBeenCalled());
+
+        session.recordEdit([{ type: "paragraph", content: "typed" }]);
+        await session.flush();
+
+        expect(await store.get(pageId)).toMatchObject({
+            content: [{ type: "paragraph", content: "typed" }],
+            synced: false,
+        });
+    });
+
+    it("keeps an edit that is being stored when another tab changes the page", async () => {
+        const remote = createRemote({ kind: "failed", reason: "offline", message: "Failed to fetch" });
+        const session = createSession(remote);
+        await store.putLocalEdit(synced());
+        await session.start(synced(), { freshFromServer: true });
+
+        // Another tab stores a version; its announcement is processed while
+        // our edit is on its way into the store.
+        await store.putLocalEdit(
+            synced({
+                content: [{ type: "paragraph", content: "other tab" }],
+                editedAt: "2026-10-17T09:30:00.000Z",
+                mutationId: "00000000-0000-4000-8000-0000000000b2",
+                synced: false,
+            }),
+        );
+        changes.announce(pageId);
+        // Let the session start reading the other tab's version first.
+        for (let tick = 0; tick < 3; tick += 1) await Promise.resolve();
+        session.recordEdit([{ type: "paragraph", content: "ours" }]);
+        await session.flush();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(remoteContent).not.toHaveBeenCalled();
+        expect(await store.get(pageId)).toMatchObject({ content: [{ type: "paragraph", content: "ours" }] });
+    });
+
+    it("reports a failed refresh as a loading problem, not as a failed save", async () => {
+        const remote = createRemote();
+        remote.fetch.mockRejectedValue(new RemoteRequestError("permanent", "Unerwartetes Dokumentformat vom Server."));
+        const session = createSession(remote);
+        await store.putLocalEdit(synced());
+        vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+        await session.start(synced(), { freshFromServer: false });
+
+        expect(lastStatus()).toEqual({
+            kind: "loadFailed",
+            message: "Unerwartetes Dokumentformat vom Server.",
+        });
     });
 });
 
