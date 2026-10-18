@@ -8,6 +8,10 @@ import { authStorageKey, supabase } from "@/lib/supabase";
 import { AuthContext, type Account } from "./auth-context";
 import { forgetAccount, rememberAccount, rememberedAccount } from "./remembered-account";
 
+// Without network, supabase-js retries the token refresh for up to about
+// 30 s before getSession() answers. Start with local data after this.
+const OFFLINE_START_TIMEOUT_MS = 3_000;
+
 const toAccount = (session: Session): Account => ({
     id: session.user.id,
     email: session.user.email ?? null,
@@ -21,18 +25,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         let active = true;
+        let answered = false;
+
+        // navigator.onLine is only a hint; getSession() below decides.
+        const remembered = rememberedAccount();
+        const offlineStart = remembered
+            ? setTimeout(
+                  () => {
+                      if (!active || answered) return;
+                      setOfflineAccount(remembered);
+                      setLoading(false);
+                  },
+                  navigator.onLine ? OFFLINE_START_TIMEOUT_MS : 0,
+              )
+            : null;
 
         supabase.auth.getSession().then(({ data, error }) => {
+            answered = true;
+            if (offlineStart) clearTimeout(offlineStart);
             if (!active) return;
 
             if (data.session) {
                 rememberAccount(toAccount(data.session));
+                setOfflineAccount(null);
             } else if (error && isAuthRetryableFetchError(error)) {
                 // The session is still stored; supabase-js renews it once the
                 // network is back. Until then the app works with local data.
-                setOfflineAccount(rememberedAccount());
-            } else if (error) {
-                console.error("Could not load auth session:", error);
+                setOfflineAccount(remembered);
+            } else {
+                if (error) console.error("Could not load auth session:", error);
+                setOfflineAccount(null);
             }
 
             setSession(data.session);
@@ -59,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return () => {
             active = false;
+            if (offlineStart) clearTimeout(offlineStart);
             subscription.unsubscribe();
         };
     }, []);
