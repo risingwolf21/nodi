@@ -776,10 +776,14 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 -   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
     **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
     `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
--   Ablauf des Deploys: **`migrate` → `build` → `deploy`**. Der Job
-    `migrate` verknüpft das Supabase-Projekt und führt
-    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt er
-    fehl, wird nicht gebaut und nicht deployt. Benötigte Secrets:
+-   Ablauf des Deploys (seit 13d): **`build` und `verify-database` →
+    `migrate` → `deploy`**. `build` führt Lint, Unit-Tests, den
+    Produktions-Build und die Prüfungen auf Base-Pfad und geheime
+    Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
+    frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
+    danach verknüpft `migrate` das Supabase-Projekt und führt
+    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+    Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
     `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
     `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
     (`cancel-in-progress: false`).
@@ -792,8 +796,9 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
     `db push` ab. Abhilfe lokal:
     `supabase migration repair --status applied <version>`.
 -   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
-    Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
-    auf frischer DB, `supabase db lint`, `supabase test db`.
+    Push auf `master`: Lint, Unit-Tests, Build, Prüfung von Base-Pfad,
+    PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
+    DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
