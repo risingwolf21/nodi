@@ -58,7 +58,7 @@ export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
 };
 
 /** View types the app can show so far (packages 14b–14d). */
-export const AVAILABLE_VIEW_TYPES: readonly ViewType[] = ["table"];
+export const AVAILABLE_VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery"];
 
 export const OPTION_COLORS: readonly OptionColor[] = [
     "gray",
@@ -181,8 +181,11 @@ export function parseViewConfig(value: unknown): ViewConfig {
     const hiddenPropertyIds = Array.isArray(config.hiddenPropertyIds)
         ? config.hiddenPropertyIds.filter((id: unknown): id is string => typeof id === "string")
         : [];
-    return { sort, filter, hiddenPropertyIds };
+    const groupByPropertyId = typeof config.groupByPropertyId === "string" ? config.groupByPropertyId : null;
+    return { sort, filter, hiddenPropertyIds, groupByPropertyId };
 }
+
+export const EMPTY_VIEW_CONFIG: ViewConfig = { sort: [], filter: [], hiddenPropertyIds: [], groupByPropertyId: null };
 
 export function parseViews(rows: unknown): DatabaseView[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
@@ -565,6 +568,39 @@ export function applyView(rows: DatabaseRow[], config: ViewConfig, properties: D
 export function visibleProperties(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty[] {
     const hidden = new Set(config.hiddenPropertyIds);
     return [...properties].sort((a, b) => a.position - b.position).filter((property) => !hidden.has(property.id));
+}
+
+// ---------------------------------------------------------------------------
+// Board.
+
+/** A board groups by the options of a select or status property. */
+export function canGroupBy(type: PropertyType): boolean {
+    return type === "select" || type === "status";
+}
+
+/** The chosen group property, otherwise the first status, then the first select property. */
+export function groupProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const sorted = [...properties].sort((a, b) => a.position - b.position);
+    const chosen = sorted.find((property) => property.id === config.groupByPropertyId);
+    if (chosen && canGroupBy(chosen.type)) return chosen;
+    return sorted.find((property) => property.type === "status") ?? sorted.find((property) => property.type === "select");
+}
+
+/** One board column; `option` null collects the entries without a value. */
+export type RowGroup = {
+    option: PropertyOption | null;
+    rows: DatabaseRow[];
+};
+
+/** Columns in the order of the options, "no value" first (like Notion); rows keep their order. */
+export function groupRows(rows: DatabaseRow[], property: DatabaseProperty): RowGroup[] {
+    const groups: RowGroup[] = [{ option: null, rows: [] }, ...property.options.map((option) => ({ option, rows: [] }))];
+    for (const row of rows) {
+        const value = row.values[property.id];
+        const group = groups.find((item) => item.option?.id === value) ?? groups[0];
+        group.rows.push(row);
+    }
+    return groups;
 }
 
 /** A name for a new property or view that is not taken yet. */

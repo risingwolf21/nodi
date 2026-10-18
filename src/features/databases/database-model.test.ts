@@ -3,7 +3,10 @@ import type { Page } from "@/features/pages/types";
 import {
     applyView,
     buildRows,
+    EMPTY_VIEW_CONFIG,
     formatValue,
+    groupProperty,
+    groupRows,
     matchesFilter,
     parseCachedDatabase,
     parseProperties,
@@ -74,7 +77,7 @@ const data: DatabaseData = {
     canEdit: true,
 };
 
-const config = (changes: Partial<ViewConfig> = {}): ViewConfig => ({ sort: [], filter: [], hiddenPropertyIds: [], ...changes });
+const config = (changes: Partial<ViewConfig> = {}): ViewConfig => ({ ...EMPTY_VIEW_CONFIG, ...changes });
 const titles = (configuration: ViewConfig) =>
     applyView(buildRows(entries, data), configuration, data.properties).map((row) => row.page.id);
 
@@ -143,6 +146,35 @@ describe("matchesFilter", () => {
     });
 });
 
+describe("board", () => {
+    const priority: DatabaseProperty = {
+        id: "priority",
+        databaseId: "db",
+        name: "Priorität",
+        type: "select",
+        options: [{ id: "high", name: "Hoch", color: "red" }],
+        position: 0,
+    };
+
+    it("groups by the chosen property, otherwise by the first status", () => {
+        expect(groupProperty([priority, status, estimate], config())?.id).toBe("status");
+        expect(groupProperty([priority, status], config({ groupByPropertyId: "priority" }))?.id).toBe("priority");
+        // A number cannot be a board column.
+        expect(groupProperty([estimate, status], config({ groupByPropertyId: "estimate" }))?.id).toBe("status");
+        expect(groupProperty([estimate], config())).toBeUndefined();
+    });
+
+    it("puts entries without a valid value into the first column", () => {
+        const groups = groupRows(buildRows(entries, data), status);
+        expect(groups.map((group) => [group.option?.id ?? null, group.rows.map((row) => row.page.id)])).toEqual([
+            [null, ["c"]],
+            ["todo", ["b"]],
+            ["doing", []],
+            ["done", ["a"]],
+        ]);
+    });
+});
+
 describe("formatValue", () => {
     it("shows values in German", () => {
         expect(formatValue(estimate, 1234.5)).toBe("1.234,5");
@@ -159,7 +191,12 @@ describe("parsing", () => {
                 filter: [{ propertyId: "x", operator: "explodes", value: "" }],
                 hiddenPropertyIds: ["estimate", 7],
             }),
-        ).toEqual({ sort: [{ propertyId: "status", direction: "asc" }], filter: [], hiddenPropertyIds: ["estimate"] });
+        ).toEqual({
+            sort: [{ propertyId: "status", direction: "asc" }],
+            filter: [],
+            hiddenPropertyIds: ["estimate"],
+            groupByPropertyId: null,
+        });
     });
 
     it("rejects invalid server rows instead of showing them", () => {

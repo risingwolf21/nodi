@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { loadCacheThenServer, useServerReload } from "@/features/pages/hooks/load-cache-then-server";
 import { pageTreeCacheFor } from "@/features/pages/services/page-tree-cache";
 import {
+    EMPTY_VIEW_CONFIG,
     OPTION_COLORS,
     PROPERTY_TYPE_LABELS,
     VIEW_TYPE_LABELS,
@@ -197,7 +198,7 @@ export function useDatabase(databaseId: string, userId: string | undefined): Use
                     current.views.map((item) => item.name),
                 ),
                 type,
-                config: { sort: [], filter: [], hiddenPropertyIds: [] },
+                config: EMPTY_VIEW_CONFIG,
                 position: nextPosition(current.views),
             });
             change((latest) => ({ ...latest, views: [...latest.views, view] }));

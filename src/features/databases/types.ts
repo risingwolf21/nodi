@@ -82,6 +82,8 @@ export type ViewConfig = {
     sort: SortRule[];
     filter: FilterRule[];
     hiddenPropertyIds: string[];
+    /** Board: the select or status property whose options are the columns. */
+    groupByPropertyId: string | null;
 };
 
 export type DatabaseView = {
