@@ -324,11 +324,12 @@ supabase/
                             # öffentliche Links (P11a), endgültig
                             # löschen nur Owner, Reparatur
                             # unsichtbarer Seiten (Bestandsdaten),
-                            # Mitglieder und Bereiche (P12a)
+                            # Mitglieder und Bereiche (P12a),
+                            # Seitenbaum/Teilen gehärtet (P13a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
-                            # Mitglieder und Bereiche (P12a)
+                            # Mitglieder und Bereiche (P12a), Härtung (P13a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1110,6 +1111,38 @@ Arbeitspakete, je ein Pull Request:
             für Mitglieder „Workspace verlassen“ (mit Warnung; danach
             Workspace-Liste neu laden und lokale Kopien bereinigen).
 
+13. **Korrekturen aus dem Code-Review** (Nutzerauftrag 2026-10-18, je
+    Teil ein PR, in dieser Reihenfolge).
+    -   **13a Sicherheit (Datenbank)**
+        (`20261018180000_harden_page_tree_and_sharing.sql`):
+        -   `parent_id` ist für API-Clients unveränderlich (`42501`), bis
+            es eine Funktion zum Verschieben mit Prüfungen gibt. Vorher
+            konnte ein Mitglied fremde Workspace-Bäume unter die eigene
+            Seite hängen und mit `set_page_section` übernehmen, und eine
+            Bearbeitungsfreigabe reichte zum Weiterteilen oder für Zyklen.
+        -   Unterseiten nur mit Schreibrecht auf die Elternseite
+            (Insert-Policy `can_edit_page(parent_id)`).
+        -   `set_page_section` lässt private Seiten anderer Mitglieder
+            (samt Unterseiten) in beide Richtungen unverändert.
+        -   Trigger `drop_access_of_previous_owner`: Wechselt der Owner
+            einer Seite (Austritt, Entfernen, Verschieben nach privat),
+            enden Freigaben und öffentlicher Link des bisherigen Owners.
+        -   `is_page_owner(page)` = Owner und Mitglied des Workspace; gilt
+            für `share_page`, `list_page_shares` und die Policies zum
+            Lesen, Anlegen und Ändern von Freigaben und Links. Entziehen
+            bleibt ohne Mitgliedschaft möglich.
+        -   `share_page`/`add_workspace_member` finden nur bestätigte
+            Konten (`email_confirmed_at`).
+        -   Das Token eines öffentlichen Links setzt der Server.
+        -   Workspaces sind per API nicht mehr löschbar (die App bietet
+            es nicht an; Kaskade hätte private Seiten anderer gelöscht).
+        -   pgTAP: `page_tree_hardening.test.sql`.
+    -   **13b Editor-Speichern** unabhängig vom Netz (geplant).
+    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (geplant).
+    -   **13d Deploy-Gate:** Lint, Tests und Build vor `migrate` (geplant).
+    -   **13e Aufräumen:** gemeinsamer Dialog, Doppel-Absenden, Doku
+        (geplant).
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1153,9 +1186,12 @@ Noch nicht abschließend geprüft:
     gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
     löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
     filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
--   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
-    Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
-    Verschieben derzeit nicht an.
+-   Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
+    gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
+    Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
+-   RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
+    die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
+    prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
 -   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
     lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
 -   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das

@@ -46,7 +46,7 @@ export function MoveSectionDialog({ page, target, onClose, onMove }: MoveSection
                 <p className="text-sm text-muted-foreground">
                     {target === "workspace"
                         ? `„${page.title}“ und alle Unterseiten werden für alle Mitglieder dieses Workspace sichtbar und bearbeitbar.`
-                        : `„${page.title}“ und alle Unterseiten sieht danach nur noch du. Andere Mitglieder verlieren den Zugriff; Unterseiten, die sie angelegt haben, gehen an dich. Einzelne Freigaben bleiben bestehen.`}
+                        : `„${page.title}“ und alle Unterseiten sieht danach nur noch du. Andere Mitglieder verlieren den Zugriff. Ihre geteilten Unterseiten gehen an dich, ihre Freigaben und öffentlichen Links darauf enden; ihre privaten Unterseiten bleiben bei ihnen. Deine eigenen Freigaben bleiben bestehen.`}
                 </p>
 
                 {error && (

@@ -182,8 +182,8 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
 
                 {confirmRemove && (
                     <p className="text-xs text-muted-foreground">
-                        Geteilte Seiten dieser Person gehen an dich. Ihre privaten Seiten bleiben erhalten,
-                        sind aber nicht mehr sichtbar.
+                        Geteilte Seiten dieser Person gehen an dich, ihre Freigaben und öffentlichen Links
+                        darauf enden. Ihre privaten Seiten bleiben erhalten, sind aber nicht mehr sichtbar.
                     </p>
                 )}
 
@@ -192,7 +192,8 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                         {confirmLeave ? (
                             <>
                                 <p className="text-sm text-muted-foreground">
-                                    Deine Seiten im Bereich „Workspace“ gehen an den Owner. Deine privaten Seiten
+                                    Deine Seiten im Bereich „Workspace“ gehen an den Owner, deine Freigaben und
+                                    öffentlichen Links darauf enden. Deine privaten Seiten
                                     bleiben erhalten, du siehst sie aber erst wieder, wenn du erneut hinzugefügt
                                     wirst.
                                 </p>
