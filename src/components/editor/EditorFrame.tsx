@@ -1,0 +1,33 @@
+import type { ReactNode } from "react";
+
+type EditorFrameProps = {
+    /** Left part of the top bar: back button and path. */
+    topBarStart: ReactNode;
+    status?: ReactNode;
+    /** Right part of the top bar: page menu. */
+    topBarEnd?: ReactNode;
+    /** Hints between top bar and content, e.g. sync problems. */
+    notices?: ReactNode;
+    children: ReactNode;
+};
+
+/**
+ * Layout of an open page: a slim top bar and a narrow, centered column
+ * that scrolls with title and content. Kept out of the lazily loaded
+ * editor chunk so that loading states use the same frame.
+ */
+export function EditorFrame({ topBarStart, status, topBarEnd, notices, children }: EditorFrameProps) {
+    return (
+        <div className="flex h-full min-h-0 flex-col">
+            <div className="box-content flex h-11 shrink-0 items-center gap-2 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-3 text-sm">
+                <div className="flex min-w-0 flex-1 items-center gap-1">{topBarStart}</div>
+                {status && <div className="shrink-0 text-xs text-muted-foreground">{status}</div>}
+                {topBarEnd}
+            </div>
+            {notices}
+            <div className="min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
+                <div className="mx-auto w-full max-w-[860px] pt-8 pb-32 md:pt-16">{children}</div>
+            </div>
+        </div>
+    );
+}

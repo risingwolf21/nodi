@@ -136,3 +136,18 @@
 .bn-editor a {
     color: var(--brand);
 }
+
+/* Same side margin for page title and editor text (Paket 10). */
+:root {
+    --page-gutter: 1.25rem;
+}
+
+@media (min-width: 768px) {
+    :root {
+        --page-gutter: 54px;
+    }
+}
+
+.bn-container .bn-editor {
+    padding-inline: var(--page-gutter);
+}
