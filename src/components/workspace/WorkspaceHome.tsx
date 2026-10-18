@@ -69,7 +69,13 @@ export default function WorkspaceHome() {
         permanentlyDeletePage,
     } = usePages(workspaceId, user?.id);
 
-    const { pages: sharedPages, error: sharedPagesError } = useSharedPages(
+    const {
+        pages: sharedPages,
+        error: sharedPagesError,
+        fromCache: sharedPagesFromCache,
+        renamePage: renameSharedPage,
+        updatePage: updateSharedPage,
+    } = useSharedPages(
         user?.id,
         loading ? undefined : workspaces.map((workspace) => workspace.id),
     );
@@ -261,13 +267,14 @@ export default function WorkspaceHome() {
                             <PageView
                                 page={page}
                                 ancestors={ancestors}
-                                // Title, icon and width of a shared page belong to its workspace.
-                                readOnly={readOnly || sharedPage !== null}
+                                readOnly={readOnly || (sharedPage !== null && sharedPagesFromCache)}
+                                // Width, trash and sharing belong to the page's own workspace.
+                                showPageMenu={sharedPage === null}
                                 focusTitle={newPageId === page.id}
                                 onBack={closePage}
                                 onSelect={(id) => openPage(id)}
-                                onRename={renamePage}
-                                onUpdate={updatePage}
+                                onRename={sharedPage ? renameSharedPage : renamePage}
+                                onUpdate={sharedPage ? updateSharedPage : updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                             />
