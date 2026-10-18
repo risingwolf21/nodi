@@ -325,11 +325,13 @@ supabase/
                             # löschen nur Owner, Reparatur
                             # unsichtbarer Seiten (Bestandsdaten),
                             # Mitglieder und Bereiche (P12a),
-                            # Seitenbaum/Teilen gehärtet (P13a)
+                            # Seitenbaum/Teilen gehärtet (P13a),
+                            # Datenbanken (P14a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
-                            # Mitglieder und Bereiche (P12a), Härtung (P13a)
+                            # Mitglieder und Bereiche (P12a), Härtung (P13a),
+                            # Datenbanken (P14a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1142,6 +1144,50 @@ Arbeitspakete, je ein Pull Request:
     -   **13d Deploy-Gate:** Lint, Tests und Build vor `migrate` (geplant).
     -   **13e Aufräumen:** gemeinsamer Dialog, Doppel-Absenden, Doku
         (geplant).
+
+14. **Datenbanken wie Notion** (Nutzerwunsch 2026-10-18).
+    -   **Entschieden (Nutzer, 2026-10-18):** (1) Eigenschaften gibt es nur
+        an Einträgen einer Datenbank. (2) Eigenschaften (und Ansichten)
+        anlegen, ändern, löschen darf jeder mit Schreibrecht. (3) Ein
+        Eintrag ist eine Seite mit Eigenschaften (eigener Inhalt im
+        Editor). (4) Mehrere Ansichten wie bei Notion; im ersten Wurf
+        Tabelle, Board, Liste, Galerie, Feed, Kalender; „Karte“ heißt
+        Landkarte (Map) und kommt später. (5) Eigenschaften zuerst nur
+        online bearbeitbar; offline werden sie aus dem Cache angezeigt.
+    -   **Annahmen:** Zuerst Datenbanken als eigene Seite (inline im Text
+        später). Einträge haben im ersten Wurf keine eigenen Unterseiten
+        in der Oberfläche. Einen Eintrag anlegen braucht Internet (wie
+        neue Seiten, §2). Ansichten gelten für alle (wie bei Notion).
+    -   **Aufteilung:** 14a Datenbank, 14b Oberfläche: Datenbank anlegen,
+        Ansichts-Tabs, Tabelle (Werte bearbeiten, Spalten anlegen, Filter,
+        Sortierung), Eintrag mit Eigenschaftsleiste; 14c Board, Liste,
+        Galerie; 14d Feed, Kalender. Später: Landkarte (Orts-Eigenschaft,
+        Kartendienst wählen), Person, Dateien (Storage), Relation, Rollup,
+        Formel.
+    -   **Umsetzung 14a** (`20261018200000_databases.sql`):
+        -   `pages.kind` (`page`/`database`, unveränderlich) und
+            `pages.position` (manuelle Reihenfolge, Mittelwert zweier
+            Nachbarn). Einträge sind Unterseiten einer Datenbank; eine
+            Datenbank kann kein Eintrag sein (`22023`).
+        -   `database_properties` (Name, Typ, `options` als JSON-Objekt,
+            Reihenfolge) und `database_views` (Typ, `config` für Filter,
+            Sortierung, Gruppierung, sichtbare Eigenschaften). Lesen mit
+            `can_read_page`, Schreiben mit `can_edit_page` der Datenbank.
+            Eine neue Datenbank bekommt per Trigger die Ansicht „Tabelle“.
+        -   Typen: `text`, `number`, `checkbox`, `select`, `multi_select`,
+            `status`, `date` (`{start, end}`), `url` (nur http/https),
+            `email`, `created_time`, `last_edited_time` (berechnet, nicht
+            setzbar). Ein Typwechsel löscht die Werte der Eigenschaft.
+        -   `page_property_values` (je Eintrag und Eigenschaft ein Wert,
+            JSON `null` = geleert) nur über
+            `set_page_property(page, property, value, edited_at,
+            mutation_id)` → `(applied, stored_edited_at,
+            stored_mutation_id)`: LWW je Feld wie `save_page_document`
+            (Kappung auf `now()`, Gleichstand per Mutation-ID). Fehler:
+            `42501` keine Schreibrechte, `22023` falsche Eigenschaft oder
+            ungültiger Wert, `22004` Argument fehlt. Direkte Schreibrechte
+            sind entzogen.
+        -   pgTAP: `databases.test.sql`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
