@@ -252,6 +252,7 @@ src/
   index.css
   vite-env.d.ts
   components/
+    LoadErrorBoundary.tsx   # Fehler beim Nachladen: Hinweis + „Neu laden“
     auth/AuthForm.tsx
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
@@ -1082,8 +1083,11 @@ Noch nicht abschließend geprüft:
     Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
     Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
     (Workspace-Menü) erreichbar.
--   Ein Fehler beim Nachladen des Editor-Chunks (`lazy()`) hat noch
-    keine Error-Boundary.
+-   (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
+    der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt
+    `LoadErrorBoundary` ihn ab: Pfad und Zurück bleiben, Hinweis mit
+    „Neu laden“ (ein abgelehnter `import()` bleibt bis zum Neuladen
+    abgelehnt). Je Seite eine eigene Boundary (`key={page.id}`).
 -   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
     entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
     Apps älter als Paket 7 können erst nach Bestätigung des

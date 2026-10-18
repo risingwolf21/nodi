@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
+import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { RemoteRequestError } from "@/lib/request-errors";
 import { fetchPublicPage, type PublicPage as PublicPageData } from "./public-page";
 
@@ -85,15 +86,21 @@ export function PublicPage({ token }: { token: string }) {
                                 {state.page.title}
                             </h1>
                         </header>
-                        <Suspense
+                        <LoadErrorBoundary
                             fallback={
-                                <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                                    Inhalt wird geladen …
-                                </p>
+                                <LoadErrorNotice message="Der Inhalt konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
                             }
                         >
-                            <PublicDocument content={state.page.document} />
-                        </Suspense>
+                            <Suspense
+                                fallback={
+                                    <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                                        Inhalt wird geladen …
+                                    </p>
+                                }
+                            >
+                                <PublicDocument content={state.page.document} />
+                            </Suspense>
+                        </LoadErrorBoundary>
                     </>
                 )}
             </EditorFrame>

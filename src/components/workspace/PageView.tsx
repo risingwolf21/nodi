@@ -1,6 +1,7 @@
 import { Fragment, lazy, Suspense, useState } from "react";
 import { Check, ChevronLeft, FileText, MoreHorizontal } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
+import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import type { Page, PageSettings } from "@/features/pages/types";
@@ -147,24 +148,34 @@ export function PageView({
     );
 
     return (
-        <Suspense
+        <LoadErrorBoundary
+            key={page.id}
             fallback={
-                <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+                <EditorFrame topBarStart={topBarStart} fullWidth={page.full_width}>
                     {renderHeader(false)}
-                    <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                        Editor wird geladen …
-                    </p>
+                    <LoadErrorNotice message="Der Editor konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu. Gespeicherte Änderungen bleiben erhalten." />
                 </EditorFrame>
             }
         >
-            <BlockEditor
-                key={page.id}
-                pageId={page.id}
-                topBarStart={topBarStart}
-                topBarEnd={topBarEnd}
-                fullWidth={page.full_width}
-                renderHeader={renderHeader}
-            />
-        </Suspense>
+            <Suspense
+                fallback={
+                    <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+                        {renderHeader(false)}
+                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                            Editor wird geladen …
+                        </p>
+                    </EditorFrame>
+                }
+            >
+                <BlockEditor
+                    key={page.id}
+                    pageId={page.id}
+                    topBarStart={topBarStart}
+                    topBarEnd={topBarEnd}
+                    fullWidth={page.full_width}
+                    renderHeader={renderHeader}
+                />
+            </Suspense>
+        </LoadErrorBoundary>
     );
 }
