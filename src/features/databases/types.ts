@@ -84,6 +84,8 @@ export type ViewConfig = {
     hiddenPropertyIds: string[];
     /** Board: the select or status property whose options are the columns. */
     groupByPropertyId: string | null;
+    /** Calendar: the date property that places entries on days. */
+    datePropertyId: string | null;
 };
 
 export type DatabaseView = {
@@ -102,5 +104,7 @@ export type DatabaseData = {
     values: StoredPropertyValue[];
     /** Last change of an entry's text, per entry id ("Geändert am"). */
     documentEditedAt: Record<string, string>;
+    /** Start of an entry's text as plain text, per entry id (feed). */
+    documentPreview: Record<string, string>;
     canEdit: boolean;
 };

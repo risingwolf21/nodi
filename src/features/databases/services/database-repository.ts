@@ -1,6 +1,6 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
-import { parseProperties, parseValues, parseViews } from "../database-model";
+import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
 import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE = "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
@@ -9,6 +9,9 @@ export const DATABASE_OFFLINE_MESSAGE = "Offline: Die Datenbank kann erst wieder
 // read server rows and the cache alike.
 const PROPERTY_COLUMNS = "id,databaseId:database_id,name,type,options,position";
 const VIEW_COLUMNS = "id,databaseId:database_id,name,type,config,position";
+// The feed shows the start of each entry's text: only the first blocks are
+// sent, not whole documents.
+const PREVIEW_BLOCKS = ["block0:document->0", "block1:document->1", "block2:document->2"].join(",");
 
 type Response = {
     error: { message: string; code?: string } | null;
@@ -81,7 +84,7 @@ export const databaseRepository = {
                 .eq("pages.parent_id", databaseId),
             supabase
                 .from("page_documents")
-                .select("pageId:page_id,updatedAt:updated_at,pages!inner(parent_id)")
+                .select(`pageId:page_id,updatedAt:updated_at,${PREVIEW_BLOCKS},pages!inner(parent_id)`)
                 .eq("pages.parent_id", databaseId),
             supabase.rpc("can_edit_page", { target_page_id: databaseId }),
         ]);
@@ -92,6 +95,7 @@ export const databaseRepository = {
         }
 
         const documentEditedAt: Record<string, string> = {};
+        const documentPreview: Record<string, string> = {};
         const documentRows: unknown[] = documents.data ?? [];
         for (const row of documentRows) {
             if (
@@ -103,6 +107,13 @@ export const databaseRepository = {
                 typeof row.updatedAt === "string"
             ) {
                 documentEditedAt[row.pageId] = row.updatedAt;
+                const blocks = [
+                    "block0" in row ? row.block0 : null,
+                    "block1" in row ? row.block1 : null,
+                    "block2" in row ? row.block2 : null,
+                ];
+                const preview = previewText(blocks);
+                if (preview) documentPreview[row.pageId] = preview;
             }
         }
 
@@ -111,6 +122,7 @@ export const databaseRepository = {
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,
+            documentPreview,
             canEdit: canEdit.data === true,
         };
     },

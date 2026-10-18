@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { ArrowUpDown, Check, Columns3, Eye, EyeOff, Filter, Plus, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Check, Eye, EyeOff, Filter, Plus, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 import { Menu } from "@/components/ui/menu";
 import {
     FILTER_OPERATOR_LABELS,
-    canGroupBy,
     hasOptions,
     operatorNeedsValue,
     operatorsFor,
@@ -348,22 +347,35 @@ export function SortPanel({ config, properties, editable, onChange, onError }: P
     );
 }
 
-/** "Gruppieren" in a board's toolbar: which select or status property makes the columns. */
-export function GroupPanel({
-    config,
-    properties,
-    editable,
+/**
+ * Which property a view is built on: the columns of a board ("Gruppieren")
+ * or the dates of a calendar ("Datum").
+ */
+export function PropertyChoicePanel({
+    label,
+    icon: Icon,
+    emptyText,
+    choices,
     current,
-    onChange,
+    editable,
+    onChoose,
     onError,
-}: PanelProps & { current: DatabaseProperty | undefined }) {
+}: {
+    label: string;
+    icon: LucideIcon;
+    emptyText: string;
+    choices: DatabaseProperty[];
+    current: DatabaseProperty | undefined;
+    editable: boolean;
+    onChoose: (propertyId: string) => Promise<void>;
+    onError: (message: string) => void;
+}) {
     const [open, setOpen] = useState(false);
-    const choices = [...properties].sort((a, b) => a.position - b.position).filter((property) => canGroupBy(property.type));
 
     function choose(propertyId: string) {
         setOpen(false);
-        onChange({ ...config, groupByPropertyId: propertyId }).catch((err: unknown) =>
-            onError(err instanceof Error ? err.message : "Die Gruppierung konnte nicht gespeichert werden."),
+        onChoose(propertyId).catch((err: unknown) =>
+            onError(err instanceof Error ? err.message : "Die Ansicht konnte nicht gespeichert werden."),
         );
     }
 
@@ -371,31 +383,34 @@ export function GroupPanel({
         <div className="relative">
             <button
                 type="button"
-                aria-label="Gruppieren"
+                aria-label={label}
                 aria-expanded={open}
                 onClick={() => setOpen(true)}
                 className={toolbarButton}
             >
-                <Columns3 className="size-3.5" />
-                <span className="hidden sm:inline">Gruppieren{current ? `: ${current.name}` : ""}</span>
+                <Icon className="size-3.5" />
+                <span className="hidden sm:inline">
+                    {label}
+                    {current ? `: ${current.name}` : ""}
+                </span>
             </button>
-            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Gruppieren" className="w-60 p-1">
-                {choices.length === 0 && (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">Keine Auswahl- oder Status-Eigenschaft.</p>
-                )}
-                {choices.map((property) => (
-                    <button
-                        key={property.id}
-                        type="button"
-                        disabled={!editable}
-                        aria-pressed={property.id === current?.id}
-                        onClick={() => choose(property.id)}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-60 pointer-coarse:py-2.5"
-                    >
-                        <span className="min-w-0 flex-1 truncate">{property.name}</span>
-                        {property.id === current?.id && <Check className="size-4" aria-hidden="true" />}
-                    </button>
-                ))}
+            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label={label} className="w-60 p-1">
+                {choices.length === 0 && <p className="px-2 py-1 text-xs text-muted-foreground">{emptyText}</p>}
+                {[...choices]
+                    .sort((a, b) => a.position - b.position)
+                    .map((property) => (
+                        <button
+                            key={property.id}
+                            type="button"
+                            disabled={!editable}
+                            aria-pressed={property.id === current?.id}
+                            onClick={() => choose(property.id)}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-60 pointer-coarse:py-2.5"
+                        >
+                            <span className="min-w-0 flex-1 truncate">{property.name}</span>
+                            {property.id === current?.id && <Check className="size-4" aria-hidden="true" />}
+                        </button>
+                    ))}
             </Menu>
         </div>
     );

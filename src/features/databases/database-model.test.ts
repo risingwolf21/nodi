@@ -4,14 +4,18 @@ import {
     applyView,
     buildRows,
     EMPTY_VIEW_CONFIG,
+    dateProperty,
     formatValue,
     groupProperty,
     groupRows,
     matchesFilter,
+    monthGrid,
     parseCachedDatabase,
     parseProperties,
     parseViewConfig,
+    previewText,
     readValue,
+    rowsByDay,
     uniqueName,
     visibleProperties,
 } from "./database-model";
@@ -74,6 +78,7 @@ const data: DatabaseData = {
         { pageId: "c", propertyId: "status", value: "gone", updatedAt: "2026-10-06T10:00:00Z" },
     ],
     documentEditedAt: { b: "2026-10-09T10:00:00Z" },
+    documentPreview: { b: "Erste Zeile" },
     canEdit: true,
 };
 
@@ -175,6 +180,56 @@ describe("board", () => {
     });
 });
 
+describe("feed", () => {
+    it("shows the text of the first blocks, without empty blocks and tables", () => {
+        const blocks = [
+            { type: "heading", content: [{ type: "text", text: "Titel", styles: {} }] },
+            { type: "paragraph", content: [] },
+            { type: "table", content: { type: "tableContent", rows: [] } },
+            {
+                type: "paragraph",
+                content: [
+                    { type: "text", text: "Siehe ", styles: {} },
+                    { type: "link", href: "https://x.test", content: [{ type: "text", text: "Link", styles: {} }] },
+                ],
+            },
+            null,
+        ];
+        expect(previewText(blocks)).toBe("Titel\nSiehe Link");
+        expect(previewText([{ content: [{ type: "text", text: "x".repeat(400) }] }])).toHaveLength(282);
+    });
+});
+
+describe("calendar", () => {
+    it("starts weeks on Monday and covers the whole month", () => {
+        const weeks = monthGrid(2026, 9); // October 2026 starts on a Thursday.
+        expect(weeks[0]).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]);
+        expect(weeks.at(-1)?.at(-1)).toBe("2026-11-01");
+        expect(weeks).toHaveLength(5);
+        expect(monthGrid(2027, 1)).toHaveLength(4); // February 2027 starts on a Monday.
+    });
+
+    it("places entries on their days, ranges on every day", () => {
+        const rows = buildRows(entries, {
+            ...data,
+            values: [
+                { pageId: "a", propertyId: "due", value: { start: "2026-10-30", end: "2026-11-02" }, updatedAt: "" },
+                { pageId: "b", propertyId: "due", value: { start: "2026-10-31", end: null }, updatedAt: "" },
+            ],
+        });
+        const days = rowsByDay(rows, due);
+        expect([...days.keys()]).toEqual(["2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"]);
+        expect(days.get("2026-10-31")?.map((row) => row.page.id)).toEqual(["a", "b"]);
+    });
+
+    it("uses the chosen date property, otherwise the first", () => {
+        const start: DatabaseProperty = { ...due, id: "start", position: 0 };
+        expect(dateProperty([due, start], config())?.id).toBe("start");
+        expect(dateProperty([due, start], config({ datePropertyId: "due" }))?.id).toBe("due");
+        expect(dateProperty([status], config())).toBeUndefined();
+    });
+});
+
 describe("formatValue", () => {
     it("shows values in German", () => {
         expect(formatValue(estimate, 1234.5)).toBe("1.234,5");
@@ -196,6 +251,7 @@ describe("parsing", () => {
             filter: [],
             hiddenPropertyIds: ["estimate"],
             groupByPropertyId: null,
+            datePropertyId: null,
         });
     });
 
