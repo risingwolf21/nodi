@@ -867,6 +867,14 @@ Arbeitspakete, je ein Pull Request:
         Encryption at rest übernimmt die Plattform (Supabase/AWS,
         AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
         nur HTTPS-Endpunkte.
+    -   **Klartext in der Datenbank (Nutzerentscheidung 2026-10-18):**
+        Dokumente und Titel stehen lesbar in `page_documents`/`pages`.
+        RLS schützt vor anderen Nutzern, nicht vor Betreibern: Wer das
+        Supabase-Dashboard oder den Service-Role-Key nutzt, umgeht RLS
+        und kann Inhalte lesen; Encryption at rest ändert daran nichts.
+        Gewollt, wie bei Notion. Ausgleich: Dashboard-Zugang klein halten
+        (2FA) und in der Datenschutzerklärung offenlegen. Server- oder
+        Ende-zu-Ende-Verschlüsselung der Inhalte vorerst nicht.
     -   **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
         ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
     -   **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
