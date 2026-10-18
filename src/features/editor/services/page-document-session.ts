@@ -1,9 +1,8 @@
-import { RemoteRequestError } from "../document-sync";
+import { RemoteRequestError, type RequestFailureReason } from "@/lib/request-errors";
 import type {
     DocumentContent,
     LocalDocument,
     RemoteDocumentApi,
-    RequestFailureReason,
 } from "../types";
 import type { DocumentChanges } from "./document-changes";
 import type { LocalDocumentStore } from "./local-document-store";
@@ -27,7 +26,7 @@ export type PageDocumentSessionOptions = {
     store: LocalDocumentStore;
     remote: RemoteDocumentApi;
     changes: DocumentChanges;
-    sync: Pick<SyncEngine, "requestSync" | "retryNow" | "onFailure">;
+    sync: Pick<SyncEngine, "requestSync" | "retryNow" | "onFailure" | "addFlusher">;
     onStatus: (status: SessionStatus) => void;
     /** Stored content replaced what the editor shows (other device or tab). */
     onRemoteContent: (content: DocumentContent, supersededLocalEdit: boolean) => void;
@@ -102,6 +101,7 @@ export class PageDocumentSession {
                 if (changedPageId === pageId) void this.enqueue(() => this.adoptStoredVersion());
             }),
             sync.onFailure((failure) => this.showFailure(failure)),
+            sync.addFlusher(() => this.flush()),
         );
 
         if (!initial.synced) return sync.requestSync();

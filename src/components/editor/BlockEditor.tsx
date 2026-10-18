@@ -7,7 +7,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
-import { RemoteRequestError } from "@/features/editor/document-sync";
+import { RemoteRequestError } from "@/lib/request-errors";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import {

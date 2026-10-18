@@ -1,6 +1,6 @@
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RemoteRequestError } from "../document-sync";
+import { RemoteRequestError } from "@/lib/request-errors";
 import type { LocalDocument, RemoteDocument, RemoteDocumentApi, SaveOutcome } from "../types";
 import type { DocumentChanges } from "./document-changes";
 import { LocalDocumentStore } from "./local-document-store";

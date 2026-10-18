@@ -1,24 +1,7 @@
 import { supabase } from "@/lib/supabase";
-import {
-    classifyRequestError,
-    interpretSaveResult,
-    parseRemoteDocumentRow,
-    RemoteRequestError,
-} from "../document-sync";
+import { toRequestError } from "@/lib/request-errors";
+import { interpretSaveResult, parseRemoteDocumentRow } from "../document-sync";
 import type { RemoteDocumentApi } from "../types";
-
-type ResponseWithError = {
-    error: { message: string; code?: string } | null;
-    status: number;
-};
-
-function toRequestError({ error, status }: ResponseWithError): RemoteRequestError | null {
-    if (!error) return null;
-    return new RemoteRequestError(
-        classifyRequestError({ status, code: error.code }),
-        error.message,
-    );
-}
 
 export const remoteDocumentRepository: RemoteDocumentApi = {
     async fetch(pageId) {

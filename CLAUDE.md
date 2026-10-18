@@ -227,7 +227,7 @@ createRoot(document.getElementById('root')!).render(
 
 ### Bekannte Dateien
 
-Stand nach Paket 8:
+Stand nach Paket 9:
 
 ``` text
 .env.example
@@ -248,7 +248,11 @@ src/
     ui/                     # shadcn: button, card, input, label, separator
     workspace/WorkspaceHome.tsx   # lädt BlockEditor per lazy()
   features/
+    auth/
+      sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
+      SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
     editor/
+      components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
       types.ts              # Dokument-, Versions- und Sync-Typen
       document-sync.ts      # Validierung, LWW-Vergleich, Fehlerklassen
       services/
@@ -265,12 +269,17 @@ src/
       types.ts
       components/PageActionsDialog.tsx
       components/TrashView.tsx
-      hooks/usePages.ts
+      hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
+      hooks/useWorkspaces.ts
+      services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
-    auth-provider.tsx
-    supabase.ts
+    auth-provider.tsx       # inkl. Offline-Modus und Offline-Abmelden
+    remembered-account.ts   # id/E-Mail des Kontos (keine Tokens)
+    indexed-db.ts           # Verbindung, die ein Logout schließen kann
+    request-errors.ts       # Fehlerklassen offline/auth/temporär/dauerhaft
+    supabase.ts             # setzt `authStorageKey` ausdrücklich
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
 public/
@@ -341,15 +350,38 @@ Darstellung; Ablauf in `src/features/editor/services/`).
 -   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
     ohne Schreibrecht ist der Editor schreibgeschützt.
 
-### Noch offene Einschränkungen (Paket 9)
+### Offline-Start, Status und Logout (Paket 9)
 
-1.  Seitenbaum und Workspaces werden noch nicht gecacht; ein
-    Offline-Start zeigt daher keine Seiten.
-2.  Logout löscht die lokale Datenbank noch nicht und synchronisiert
-    vorher nicht gezielt (Policy §2). Die Engine stoppt beim Logout
-    nur ihre zeitgesteuerten Wiederholungen.
-3.  Kein gesamter Sync-Status (z. B. „3 Seiten nicht synchronisiert");
-    nur der Editor zeigt den Status der offenen Seite.
+-   **Seitenbaum und Workspaces:** je Konto in IndexedDB
+    `nodi-<userId>-tree` (eigene DB, damit die Dokument-DB kein
+    Schema-Upgrade braucht, das offene alte Tabs blockieren würden).
+    Der Cache antwortet zuerst, der Server ersetzt ihn. Ist der Server
+    nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
+    nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
+    lehnen Änderungen zusätzlich ab). `online` lädt neu.
+-   **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
+    Netz da, liefert `getSession()` keine Sitzung, obwohl sie
+    gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
+    ~30 s. Der `AuthProvider` merkt sich daher id und E-Mail des Kontos
+    (`nodi-account` in `localStorage`, keine Tokens) und startet damit
+    im Offline-Modus (`offline: true`): sofort, wenn der Browser
+    offline meldet, sonst nach 3 s. Eine spätere Antwort von Supabase
+    entscheidet (neue Sitzung oder Login). Bei `online` wird die
+    Erneuerung angestoßen.
+-   **Gesamtstatus:** Die Engine führt eine Übersicht (ungesyncte
+    Seiten, Grund des letzten Abbruchs), die Kopfzeile zeigt sie per
+    `useSyncExternalStore`, ab `sm` mit Grund und „Erneut versuchen“.
+    Ohne ausstehende Änderungen steht dort „Offline“, wenn Sitzung oder
+    Seitenbaum aus lokalen Daten stammen.
+-   **Logout (Policy §2):** offene Editoren speichern lokal, dann
+    `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
+    „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
+    `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
+    Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
+    Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
+    nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
+    Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
+    schließt sich bei `versionchange` endgültig).
 
 **Wichtig:** Die PWA-Cache-Funktion löst diese Probleme nicht.
 Offline-Dokumentbearbeitung braucht zusätzlich eine lokale Datenbank und
@@ -672,6 +704,7 @@ eine fachliche Entscheidung und nicht automatisch einzuführen.
 -   Supabase RLS bleibt maßgeblich für den Serverzugriff.
 -   Keine Auth-Tokens in eigenen IndexedDB-Tabellen duplizieren, sofern
     es keinen zwingenden Grund gibt.
+-   Umsetzung siehe §4 „Offline-Start, Status und Logout“.
 
 ## 9. GitHub Pages und Build
 
@@ -896,7 +929,13 @@ Noch nicht abschließend geprüft:
 -   Verschieben (`parent_id`-Update) prüft nicht, ob die neue
     Elternseite lesbar ist, und verhindert keine Zyklen. Die UI bietet
     Verschieben derzeit nicht an.
--   Auth-Verhalten bei Offline-Start, Token-Erneuerung und Logout.
+-   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
+    lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
+-   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
+    dauern (kein eigener Timeout).
+-   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
+    ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
+    bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 -   Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
     und 5 nur in Chromium mit Geräte-Emulation geprüft).
 -   Das Aktionsmenü im Seitenbaum schließt sich nicht bei Tipp
