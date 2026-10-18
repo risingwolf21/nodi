@@ -319,9 +319,11 @@ supabase/
                             # nur noch per RPC schreibbar (P8),
                             # pages.full_width (P10), Teilen und
                             # öffentliche Links (P11a), endgültig
-                            # löschen nur Owner
+                            # löschen nur Owner, Reparatur
+                            # unsichtbarer Seiten (Bestandsdaten)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
-                            # Seiteneinstellungen, Teilen, Löschrecht
+                            # Seiteneinstellungen, Teilen, Löschrecht,
+                            # Reparatur
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1063,9 +1065,14 @@ archivierten Elternseiten wieder her (Variante A, Nutzerentscheidung
 
 Noch nicht abschließend geprüft:
 
--   Bestandsdaten: Aktive Seiten, deren Elternseite archiviert ist
-    (durch den alten Bug entstanden), sind unsichtbar und würden beim
-    endgültigen Löschen der Elternseite mitgelöscht.
+-   (Behoben, `20261018140000_restore_archived_ancestors.sql`,
+    Nutzerentscheidung 2026-10-18) Aktive Seiten unter archivierten
+    Elternseiten (alter Papierkorb-Bug) waren unsichtbar und wären beim
+    endgültigen Löschen der Eltern mitgelöscht worden. Die Migration
+    stellt einmalig alle archivierten Vorfahren aktiver Seiten wieder
+    her, wie Variante A aus Paket 3. Die Funktion
+    `restore_archived_ancestors_of_active_pages()` bleibt für Wartung und
+    Tests (nicht per API aufrufbar).
 -   (Entschieden und umgesetzt, Nutzer 2026-10-18,
     `20261018150000_owner_only_permanent_delete.sql`) Endgültig löschen
     darf nur der Owner der Seite (Delete-Policy `owner_id = auth.uid()`).
