@@ -380,6 +380,10 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
     erst nach Serverbestätigung und nur, wenn die lokale Version noch
     dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+    Lokales Schreiben wartet nie auf das Netz (Paket 13b): Der Anstoß an
+    die Sync-Engine und die Abfrage einer neueren Version laufen außerhalb
+    der Warteschlange der Sitzung. Bis eine Änderung im Store liegt, gilt
+    sie als „Tippen gewinnt“ (auch gegen andere Tabs).
 -   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
     bilden die Warteschlange; sie übersteht Neustarts, weil sie in
     IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
@@ -401,7 +405,9 @@ Darstellung; Ablauf in `src/features/editor/services/`).
     kurzer Hinweis.
 -   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
     „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
-    Änderung bleibt lokal erhalten.
+    Änderung bleibt lokal erhalten. Scheitert nur das Laden einer
+    neueren Version, steht dort „Aktualisieren fehlgeschlagen“ (kein
+    Speicherfehler). Ein ungültiges Dokument vom Server ist dauerhaft.
 -   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
     schreiben ausstehende Änderungen sofort lokal und senden sie.
 -   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
@@ -791,10 +797,14 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 -   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
     **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
     `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
--   Ablauf des Deploys: **`migrate` → `build` → `deploy`**. Der Job
-    `migrate` verknüpft das Supabase-Projekt und führt
-    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt er
-    fehl, wird nicht gebaut und nicht deployt. Benötigte Secrets:
+-   Ablauf des Deploys (seit 13d): **`build` und `verify-database` →
+    `migrate` → `deploy`**. `build` führt Lint, Unit-Tests, den
+    Produktions-Build und die Prüfungen auf Base-Pfad und geheime
+    Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
+    frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
+    danach verknüpft `migrate` das Supabase-Projekt und führt
+    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+    Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
     `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
     `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
     (`cancel-in-progress: false`).
@@ -807,8 +817,9 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
     `db push` ab. Abhilfe lokal:
     `supabase migration repair --status applied <version>`.
 -   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
-    Push auf `master`: Lint, Build, Base-Pfad-Prüfung, alle Migrationen
-    auf frischer DB, `supabase db lint`, `supabase test db`.
+    Push auf `master`: Lint, Unit-Tests, Build, Prüfung von Base-Pfad,
+    PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
+    DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
@@ -1169,11 +1180,17 @@ Arbeitspakete, je ein Pull Request:
         -   Workspaces sind per API nicht mehr löschbar (die App bietet
             es nicht an; Kaskade hätte private Seiten anderer gelöscht).
         -   pgTAP: `page_tree_hardening.test.sql`.
-    -   **13b Editor-Speichern** unabhängig vom Netz (geplant).
-    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (geplant).
-    -   **13d Deploy-Gate:** Lint, Tests und Build vor `migrate` (geplant).
-    -   **13e Aufräumen:** gemeinsamer Dialog, Doppel-Absenden, Doku
-        (geplant).
+    -   **13b Editor-Speichern** unabhängig vom Netz: Lokales Speichern
+        wartet nicht mehr auf Sync oder Netz; eine Eingabe gilt als
+        „wird getippt“, bis sie lokal liegt; `WorkspaceHome` je Konto.
+    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (siehe §4,
+        `hooks/load-cache-then-server.ts`).
+    -   **13d Deploy-Gate:** `build` (Lint, Tests, Build, Bundle-Checks)
+        und `verify-database` (Migrationen, `db lint`, pgTAP) laufen vor
+        `migrate` und `deploy`.
+    -   **13e Aufräumen:** ein natives `<dialog>` für alle Modals
+        (`components/ui/dialog.tsx`), kein doppeltes Absenden bei „Neue
+        Seite“/„Workspace erstellen“, Papierkorb-Korrekturen, Doku.
 
 14. **Datenbanken wie Notion** (Nutzerwunsch 2026-10-18).
     -   **Entschieden (Nutzer, 2026-10-18):** (1) Eigenschaften gibt es nur
@@ -1339,7 +1356,9 @@ Noch nicht abschließend geprüft:
 -   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
     lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
 -   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
-    dauern (kein eigener Timeout).
+    dauern (kein eigener Timeout). Scheitert `signOut()`, läuft die
+    Sync-Engine weiter (13b). Was während des Abmeldens noch getippt
+    wird, kann verloren gehen (Editor ist dabei nicht gesperrt).
 -   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
     ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
     bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
