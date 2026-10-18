@@ -336,14 +336,20 @@ export function usePages(
                 );
             }
 
-            const { error: deleteError } = await supabase
+            // Only the owner may delete for good; RLS filters other
+            // deletes without an error, so the returned rows tell.
+            const { data: deletedRows, error: deleteError } = await supabase
                 .from("pages")
                 .delete()
                 .eq("workspace_id", workspaceId)
                 .eq("is_archived", true)
-                .eq("id", pageId);
+                .eq("id", pageId)
+                .select("id");
 
             if (deleteError) throw deleteError;
+            if (deletedRows.length === 0) {
+                throw new Error("Nur der Eigentümer kann diese Seite endgültig löschen.");
+            }
 
             const deletedIds = new Set(ids);
 
