@@ -1911,6 +1911,79 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         `mobile-keyboard.e2e.ts` (Touch-Emulation, nachgebautes
         `visualViewport`). Auf einem echten iPhone noch nicht geprüft.
 
+### Plan ab Paket 21 (Nutzer, 2026-10-19)
+
+Ziel: Ein vollständiger Notion-Export soll nach dem Import so funktionieren
+wie in Notion. Grundlage ist der echte Export des Nutzers (465 Dateien,
+34 Datenbanken). Reihenfolge nach seiner Priorität; je Paket ein PR (bei
+Bedarf a/b für Datenbank und Oberfläche). Versionsverlauf ist vorerst
+nicht gewünscht.
+
+- **Entschieden (Nutzer, 2026-10-19):** (1) Suche online als Volltext auf
+  dem Server über alle Seiten, offline über Titel und die lokal
+  gespeicherten Seiten. (2) Callouts bekommen einen eigenen Block wie in
+  Notion (Emoji, farbiger Hintergrund). (3) Am wichtigsten: Rollups,
+  Unterseiten in Einträgen, wiederkehrende Einträge, Vorlagen.
+
+21. **Import: neues Notion-Exportformat** (Fehler: Datenbank-Einträge
+    kommen als einzelne Seiten an). Befund im Export des Nutzers:
+    - Ordner tragen **keine ID** mehr: Unterseiten von `Aufgaben <id>.md`
+      liegen in `Aufgaben/`, Einträge von `Tasks <id>_all.csv` in `Tasks/`.
+      Der Import sucht bisher `Aufgaben <id>/`, findet nichts, und der Baum
+      zerfällt in lose Seiten.
+    - Datenbanken gibt es nur als `…_all.csv` (keine Ansichts-CSV).
+    - Eine ganzseitige Datenbank hat zusätzlich `Name <id>.md` mit
+      derselben ID; das ist die Datenbank selbst, keine eigene Seite.
+    - Die CSV enthält **keine** Verknüpfungen, Rollups und Formeln. Sie
+      stehen nur in den Eigenschaftszeilen der Eintragsseiten
+      („Workout: Titel (../Workouts/….md)“, „Volume: 175“).
+    - Eingebettete Ansichten sind Kopien in der obersten Ebene
+      (`Untitled 8fe7-1f36_all.csv`: erste und letzte vier Zeichen der
+      Datenbank-ID); darunter stehen im Text „filters:“ (nicht lesbar) und
+      „sort:“ (lesbar, z. B. „Status: ascending“).
+    - Neue Datumsformate: „September 20, 2026 8:30 (GMT+2)“,
+      „09/09/2026 8:00 AM (GMT+2)“, Zeitraum „… 7:20 (GMT+2) → 16:00“.
+    - Kleinere Punkte: Titel mit Zeilenumbruch, Dateinamen mit Klammern,
+      Datenbanken in Einträgen (Paket 23), Callouts als `<aside>`
+      (Paket 22), Link-Ziele außerhalb des Exports (Hinweis).
+    - **Umfang:** Baum für beide Formate (Ordner mit und ohne ID),
+      Datenbank-Seite = Datenbank, Einträge aus `Name/`, Eigenschaften
+      aus CSV **und** Eintragsseiten (Verknüpfungen werden echte
+      Verknüpfungen, Rollup-/Formelwerte feste Werte), eingebettete
+      Ansichten werden Datenbank-Blöcke auf die echte Datenbank mit der
+      Sortierung, „filters:/sort:“-Zeilen verschwinden aus dem Text. Test
+      mit einem Ausschnitt des echten Formats (ohne persönliche Inhalte).
+    - **Nicht möglich:** Filter der Ansichten, Formel-Ausdrücke,
+      Seiten-Icons und Titelbilder (nicht im Export).
+22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
+    „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
+23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
+    Unterseiten und Datenbanken (Seitenleiste, Eintrag, Verschieben;
+    `move_page` erlaubt dann Seiten mit Unterseiten als Eintrag). Import
+    übernimmt sie statt sie zu überspringen.
+24. **Rollups:** Eigenschaftstyp „Rollup“ (Verknüpfung, Eigenschaft der
+    Ziel-Datenbank, Funktion: Anzahl, Summe, Durchschnitt, Min/Max,
+    Anzeigen …), berechnet in der App wie Formeln. Import: Rollup- und
+    Formelwerte bleiben feste Werte; die Rechnung legt man einmal neu an.
+25. **Wiederkehrende Einträge:** Eintrag als Wiederholung („täglich“,
+    „wöchentlich am …“), neue Einträge entstehen automatisch.
+    Offen: auf dem Server (zeitgesteuert) oder beim Öffnen der App.
+26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
+    Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
+27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
+    lokal; Suchfeld in der Seitenleiste und Tastenkürzel.
+28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
+    Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
+    exportierte Seiten echte Seitenlinks.
+29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
+    Dateien & Medien im Datei-Speicher (Paket 15).
+30. **Favoriten, Titelbilder, Emoji-Suche.**
+31. **Kommentare** an Seiten und Textstellen.
+32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
+    Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
+    und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,
+    Button-Eigenschaft.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
