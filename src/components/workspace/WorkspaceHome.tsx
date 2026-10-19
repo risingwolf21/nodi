@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,8 @@ export default function WorkspaceHome() {
     const sharedPage = sharedPages.find((item) => item.id === pageId) ?? null;
     const page = pages.find((item) => item.id === pageId) ?? sharedPage;
     const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
+    // Database blocks in a text may show databases shared from elsewhere.
+    const knownPages = useMemo(() => [...pages, ...sharedPages], [pages, sharedPages]);
 
     // Sends edits that are still waiting, also those of pages not open now.
     const userId = user?.id;
@@ -321,6 +323,7 @@ export default function WorkspaceHome() {
                                 onCreateEntry={sharedPage ? undefined : createEntry}
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
+                                knownPages={knownPages}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">

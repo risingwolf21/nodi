@@ -133,6 +133,12 @@ export type DatabaseView = {
     position: number;
 };
 
+/**
+ * A "Datenbank" block in a page's text (package 19c): it shows a database
+ * with views of its own (`block_views`), not the database's views.
+ */
+export type DatabaseBlockRef = { pageId: string; blockId: string };
+
 /** Everything of a database except its entries (those are pages). */
 export type DatabaseData = {
     properties: DatabaseProperty[];

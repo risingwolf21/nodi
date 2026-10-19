@@ -44,6 +44,9 @@ export type FakeView = {
     position: number;
 };
 
+/** Views of a "Datenbank" block in a page's text (package 19c). */
+export type FakeBlockView = FakeView & { pageId: string; blockId: string };
+
 export type FakeValue = { pageId: string; propertyId: string; value: unknown; updatedAt: string };
 
 /** One call of the RPC set_page_property, as the app sent it. */
@@ -63,6 +66,7 @@ export type FakeBackend = {
     pages: FakePage[];
     properties: FakeProperty[];
     views: FakeView[];
+    blockViews: FakeBlockView[];
     values: FakeValue[];
     previews: FakePreview[];
     /** Every set_page_property call, oldest first. */
@@ -110,6 +114,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         pages: [],
         properties: [],
         views: [],
+        blockViews: [],
         values: [],
         previews: [],
         propertyCalls: [],
@@ -409,6 +414,42 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         }
         if (method === "DELETE") {
             backend.views = backend.views.filter((item) => item.id !== idFilter());
+            return json([{ id: idFilter() }]);
+        }
+    }
+    if (path === "/rest/v1/block_views") {
+        if (method === "GET") {
+            return json(
+                backend.blockViews.filter(
+                    (view) =>
+                        `eq.${view.databaseId}` === query.get("database_id") &&
+                        `eq.${view.pageId}` === query.get("page_id") &&
+                        `eq.${view.blockId}` === query.get("block_id"),
+                ),
+            );
+        }
+        if (method === "POST") {
+            const body = requestBody(route);
+            const view: FakeBlockView = {
+                id: crypto.randomUUID(),
+                databaseId: text(body, "database_id"),
+                pageId: text(body, "page_id"),
+                blockId: text(body, "block_id"),
+                name: text(body, "name"),
+                type: text(body, "type"),
+                config: typeof body.config === "object" && body.config !== null ? { ...body.config } : {},
+                position: Number(body.position),
+            };
+            backend.blockViews.push(view);
+            return json([view], 201);
+        }
+        if (method === "PATCH") {
+            const view = backend.blockViews.find((item) => item.id === idFilter());
+            if (view) Object.assign(view, requestBody(route));
+            return json(view ? [view] : []);
+        }
+        if (method === "DELETE") {
+            backend.blockViews = backend.blockViews.filter((item) => item.id !== idFilter());
             return json([{ id: idFilter() }]);
         }
     }

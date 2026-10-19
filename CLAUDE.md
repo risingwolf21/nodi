@@ -271,6 +271,8 @@ src/
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
+    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c)
+    editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -298,6 +300,7 @@ src/
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
       components/CalendarView.tsx    # Monatskalender (14d)
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
+      components/DatabaseBlockContent.tsx # Datenbank als Block im Text: Auswahl, eigene Ansichten (19c)
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
@@ -1829,6 +1832,35 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         Löschen mit `can_edit_page` der Seite (`42501` per RLS).
       - Nur eine neue Tabelle (rückwärtskompatibel).
       - pgTAP: `block_views.test.sql`.
+    - **Umsetzung 19c** (nur Frontend, keine Migration):
+      - Editor-Schema `components/editor/editor-schema.tsx`: BlockNotes
+        Blöcke plus `database` (`props.databaseId`, kein Inhalt).
+        `DocumentContent` ist an dieses Schema gebunden; Editor und
+        öffentliche Ansicht nutzen es.
+      - Slash-Menü „/Datenbank“ (Gruppe „Datenbanken“) fügt den Block ein;
+        er fragt zuerst, welche Datenbank des Workspace er zeigt (Suche).
+        Ohne Schreibrecht steht dort nur ein Hinweis.
+      - Der Block (`DatabaseBlock`, Inhalt nachgeladen im
+        Datenbank-Chunk: `DatabaseBlockContent`) zeigt Titel (öffnet die
+        Datenbank) und `DatabaseView` mit den Ansichten des Blocks.
+        Kontext aus der App per `DatabaseBlockContext` (bekannte Seiten,
+        Datenbanken, Öffnen, Einträge anlegen und umbenennen).
+      - Ansichten des Blocks: `useDatabase(…, block)` liest und schreibt
+        `block_views` statt `database_views`. Ohne eigene Ansichten zeigt
+        der Block eine Tabelle, die erst bei der ersten Änderung
+        gespeichert wird (Lesen schreibt nichts). Ansichten ändern darf,
+        wer die Seite bearbeiten darf; Werte, Eigenschaften und Einträge
+        wie auf der Datenbank-Seite.
+      - Offline: Cache je Block (`database-block:<page>:<block>` in
+        `nodi-<userId>-tree`), nur lesbar.
+      - Fehlt die Datenbank (Papierkorb, gelöscht, nicht freigegeben),
+        steht ein Hinweis da. Die öffentliche Ansicht zeigt statt der
+        Datenbank einen Hinweis (Einträge sind nicht veröffentlicht).
+      - Achtung: App-Versionen vor 19c kennen den Block nicht und können
+        Seiten mit Datenbank-Block nicht öffnen; installierte Apps nach
+        dem Update-Hinweis aktualisieren.
+      - Tests: Playwright `database-block.e2e.ts` (Fake `block_views`);
+        zusätzlich gegen die lokale Supabase geprüft.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

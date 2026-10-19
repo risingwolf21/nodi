@@ -15,7 +15,7 @@ import {
     placeProperty,
     visibleProperties,
 } from "../database-model";
-import { useDatabase, type NewEntryValue } from "../hooks/useDatabase";
+import { useDatabase, type DatabaseBlockOptions, type NewEntryValue } from "../hooks/useDatabase";
 import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
 import { BoardView } from "./BoardView";
 import { CalendarView } from "./CalendarView";
@@ -51,6 +51,8 @@ type DatabaseViewProps = {
     onRenameEntry: (pageId: string, title: string) => Promise<void>;
     /** Databases of the workspace a relation can point to; undefined: no new relations here. */
     databases?: Page[];
+    /** Shown as a block in a page: the block's own views (package 19c). */
+    block?: DatabaseBlockOptions;
 };
 
 function ViewTab({
@@ -145,6 +147,7 @@ export function DatabaseView({
     onCreateEntry,
     onRenameEntry,
     databases,
+    block,
 }: DatabaseViewProps) {
     const {
         data,
@@ -161,7 +164,7 @@ export function DatabaseView({
         deleteView,
         setValue,
         createEntry,
-    } = useDatabase(database.id, userId, onCreateEntry);
+    } = useDatabase(database.id, userId, onCreateEntry, block);
     const [activeViewId, setActiveViewId] = useState("");
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
@@ -171,6 +174,8 @@ export function DatabaseView({
     const views = useMemo(() => [...(data?.views ?? [])].sort((a, b) => a.position - b.position), [data]);
     const activeView = views.find((view) => view.id === activeViewId) ?? views[0];
     const editable = !readOnly && !fromCache && data?.canEdit === true;
+    // A block's views change with its page, the database's own with the database.
+    const viewsEditable = block ? !readOnly && !fromCache && block.canEditViews : editable;
 
     const rows = useMemo(
         () => (data && activeView ? applyView(buildRows(entries, data), activeView.config, data.properties) : []),
@@ -228,7 +233,7 @@ export function DatabaseView({
                             key={view.id}
                             view={view}
                             active={view.id === activeView?.id}
-                            editable={editable}
+                            editable={viewsEditable}
                             canDelete={views.length > 1}
                             onSelect={() => setActiveViewId(view.id)}
                             onRename={(name) => run(updateView(view.id, { name }))}
@@ -236,7 +241,7 @@ export function DatabaseView({
                         />
                     ))}
                 </div>
-                {editable && (
+                {viewsEditable && (
                     <div className="relative shrink-0">
                         <button
                             type="button"
@@ -269,7 +274,7 @@ export function DatabaseView({
                                 emptyText="Keine Auswahl- oder Status-Eigenschaft."
                                 choices={data.properties.filter((property) => canGroupBy(property.type))}
                                 current={boardGroup}
-                                editable={editable}
+                                editable={viewsEditable}
                                 onChoose={(groupByPropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
                                 }
@@ -283,7 +288,7 @@ export function DatabaseView({
                                 emptyText="Keine Orts-Eigenschaft."
                                 choices={data.properties.filter((property) => property.type === "place")}
                                 current={mapPlace}
-                                editable={editable}
+                                editable={viewsEditable}
                                 onChoose={(placePropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, placePropertyId } })
                                 }
@@ -297,7 +302,7 @@ export function DatabaseView({
                                 emptyText="Keine Datums-Eigenschaft."
                                 choices={data.properties.filter((property) => property.type === "date")}
                                 current={calendarDate}
-                                editable={editable}
+                                editable={viewsEditable}
                                 onChoose={(datePropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, datePropertyId } })
                                 }
@@ -307,21 +312,21 @@ export function DatabaseView({
                         <FilterPanel
                             config={activeView.config}
                             properties={data.properties}
-                            editable={editable}
+                            editable={viewsEditable}
                             onChange={(config) => updateView(activeView.id, { config })}
                             onError={report}
                         />
                         <SortPanel
                             config={activeView.config}
                             properties={data.properties}
-                            editable={editable}
+                            editable={viewsEditable}
                             onChange={(config) => updateView(activeView.id, { config })}
                             onError={report}
                         />
                         <PropertiesPanel
                             config={activeView.config}
                             properties={data.properties}
-                            editable={editable}
+                            editable={viewsEditable}
                             onChange={(config) => updateView(activeView.id, { config })}
                             onError={report}
                         />
