@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
+import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu, isTouchDevice } from "@blocknote/core";
 import {
+    FormattingToolbarController,
     getDefaultReactSlashMenuItems,
+    MobileFormattingToolbarController,
     SuggestionMenuController,
     useCreateBlockNote,
     useEditorChange,
+    useEditorState,
+    useVirtualKeyboard,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
@@ -87,6 +91,26 @@ function statusText(status: SessionStatus): string {
         case "loadFailed":
             return "Aktualisieren fehlgeschlagen";
     }
+}
+
+/**
+ * On phones BlockNote pins its toolbar above the keyboard as long as the
+ * editor has focus. Here it appears only while text is selected (decision
+ * of the user, package 20), so typing keeps the room; formatting otherwise
+ * goes through "/" and Markdown shortcuts.
+ */
+function SelectionFormattingToolbar() {
+    // Keeps BlockNote's keyboard detection running from the start: it has to
+    // see the full height before the keyboard opens.
+    useVirtualKeyboard();
+    const textSelected = useEditorState({
+        on: "selection",
+        selector: ({ editor }) => {
+            const selection = editor.prosemirrorState.selection;
+            return !selection.empty && selection.$from.parent.isTextblock;
+        },
+    });
+    return textSelected ? <MobileFormattingToolbarController /> : null;
 }
 
 function loadErrorMessage(error: unknown): string {
@@ -268,7 +292,10 @@ function EditorContent({
                     theme={{ light: editorTheme, dark: editorTheme }}
                     editable={canEdit !== false}
                     slashMenu={false}
+                    formattingToolbar={false}
                 >
+                    {/* Elsewhere the toolbar floats at the selection, as before. */}
+                    {isTouchDevice() ? <SelectionFormattingToolbar /> : <FormattingToolbarController />}
                     <SuggestionMenuController
                         triggerCharacter="/"
                         getItems={(query) =>

@@ -367,6 +367,7 @@ src/
     supabase.ts             # setzt `authStorageKey` ausdrücklich
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
+    virtual-keyboard.ts     # Bildschirmtastatur erkennen, sichtbarer Bereich (20)
 public/
   favicon.svg               # App-Icon (abgerundet), Quelle für pwa-*.png
   icons/                    # pwa-192, pwa-512, maskable-512, apple-touch-icon-180
@@ -1879,6 +1880,37 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         Playwright `notion-import.e2e.ts`; zusätzlich ein Export mit
         Datenbank in einer Seite gegen die lokale Supabase importiert.
 
+20. **Tippen auf dem Handy** (Nutzerwunsch 2026-10-19): Auf dem iPhone
+    sah die Formatierungsleiste beim Schreiben seltsam aus und sprang;
+    über der Tastatur blieb wenig Platz.
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Die Formatierungsleiste
+      erscheint auf Touch-Geräten nur bei markiertem Text (sonst „/“ und
+      Markdown-Kürzel). (2) Die obere Leiste einer Seite wird auf dem Handy
+      ausgeblendet, solange die Tastatur offen ist. (3) Der iOS-Balken mit
+      ˄ ˅ „Fertig“ über der Tastatur gehört zu Safari; eine Web-App kann ihn
+      nicht ausblenden.
+    - **Umsetzung** (nur Frontend, keine Migration):
+      - Ursache: iOS verkleinert bei offener Tastatur nur den sichtbaren
+        Bereich (`visualViewport`), nicht die Seite; die App (`h-svh`) war
+        höher als sichtbar und wurde beim Tippen verschoben. BlockNote
+        (0.56) heftet auf Touch-Geräten seine Leiste bei Fokus immer über
+        die Tastatur, mit Safe-Area-Lücke darunter und Nachzieh-Animation.
+      - `lib/virtual-keyboard.ts`: erkennt die Tastatur (sichtbare Höhe
+        mehr als 150 px unter der größten bei dieser Breite, nicht
+        gezoomt, nur Touch) und setzt `<html data-keyboard-open>` sowie
+        `--keyboard-viewport-top/-height`; gestartet in `WorkspaceHome`.
+      - `index.css`: Mit offener Tastatur ist die App (`.nodi-app-viewport`)
+        fest auf den sichtbaren Bereich gesetzt; unter `md` ist die obere
+        Leiste (`.nodi-page-top-bar`) ausgeblendet. BlockNotes Leiste ohne
+        Safe-Area-Abstand und ohne Animation.
+      - `BlockEditor`: `formattingToolbar={false}`; auf Touch-Geräten
+        `MobileFormattingToolbarController` nur bei Textauswahl, sonst wie
+        bisher `FormattingToolbarController`. `useVirtualKeyboard` läuft ab
+        dem Öffnen, damit BlockNote die volle Höhe kennt.
+      - Tests: Vitest `virtual-keyboard.test.ts`, Playwright
+        `mobile-keyboard.e2e.ts` (Touch-Emulation, nachgebautes
+        `visualViewport`). Auf einem echten iPhone noch nicht geprüft.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1937,8 +1969,9 @@ Noch nicht abschließend geprüft:
 - Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
   ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
   bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
-- Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
-  und 5 nur in Chromium mit Geräte-Emulation geprüft).
+- Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4,
+  5 und 20 nur in Chromium mit Geräte-Emulation geprüft; die Tastatur
+  in Paket 20 über ein nachgebautes `visualViewport`).
 - (Behoben, 19a) Papierkorb und Wiederherstellen schickten alle IDs eines
   Seitenbaums in einer URL (`id=in.(…)`); ab etwa 300 Seiten (Notion-Import)
   antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs

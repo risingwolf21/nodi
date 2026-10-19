@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { trackVirtualKeyboard } from "@/lib/virtual-keyboard";
 import { PageActionsDialog, type PageActionMode } from "@/features/pages/components/PageActionsDialog";
 import { ShareDialog } from "@/features/pages/components/ShareDialog";
 import { MembersDialog } from "@/features/pages/components/MembersDialog";
@@ -120,6 +121,9 @@ export default function WorkspaceHome() {
         return () => engine.stop();
     }, [userId]);
 
+    // On phones the app fits the area above the keyboard (package 20).
+    useEffect(() => trackVirtualKeyboard(), []);
+
     // Revoked shares: the local copies go at the next contact with the server.
     useEffect(() => {
         if (!userId) return;
@@ -222,7 +226,7 @@ export default function WorkspaceHome() {
     const visibleError = error || workspacesError || pagesError || sharedPagesError;
 
     return (
-        <main className="flex h-svh bg-background">
+        <main className="nodi-app-viewport flex h-svh bg-background">
             {workspaces.length === 0 ? (
                 !workspacesError && (
                     <div className="flex flex-1 items-center justify-center p-6">
