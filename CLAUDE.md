@@ -137,6 +137,7 @@ haben kann.
   - `npm run lint` → `eslint .`
   - `npm run preview` → `vite preview`
   - `npm test` → `vitest run` (seit Paket 3)
+  - `npm run test:e2e` → `playwright test` (Browser-Tests)
   - `npm run format` → `prettier --write .`, `npm run format:check` →
     `prettier --check .` (seit dem Clean-Code-Paket)
 - Runtime-Abhängigkeiten umfassen unter anderem:
@@ -152,6 +153,8 @@ haben kann.
 - Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
   (devDependencies), `workbox-window` (dependency).
 - Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
+- `@playwright/test` `1.63.0` (devDependency, exakt gepinnt; die CI
+  installiert den passenden Chromium).
 - Prettier `3.9.9` (devDependency, exakt gepinnt, damit sich die
   Formatierung nicht mit einem Update ändert). `.prettierrc.json`: 4
   Leerzeichen, doppelte Anführungszeichen, Semikolons, Zeilenbreite 120;
@@ -347,6 +350,7 @@ src/
 public/
   favicon.svg               # App-Icon (abgerundet), Quelle für pwa-*.png
   icons/                    # pwa-192, pwa-512, maskable-512, apple-touch-icon-180
+e2e/                        # Playwright: *.e2e.ts, fake-supabase.ts, test.ts
 design/
   icon-full-bleed.svg       # Quelle für maskable- und apple-touch-Icon
   README.md                 # wie die PNGs erzeugt werden
@@ -840,8 +844,8 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 - `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
   Push auf `master`: Lint, Formatierung (`npm run format:check`),
   Unit-Tests, Build (mit Platzhalterwerten für Supabase), Prüfung von Base-Pfad,
-  PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
-  DB, `supabase db lint`, `supabase test db`.
+  PWA-Dateien und Bundle (`sb_secret_`), Browser-Tests (Playwright), alle
+  Migrationen auf frischer DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
@@ -855,6 +859,16 @@ Frontend-Unit-Tests mit Vitest (`npm test`), Testdateien liegen als
 `*.test.ts` neben dem getesteten Modul. Reine Logik (z. B.
 `src/features/pages/page-hierarchy.ts`) wird ohne React und Supabase
 getestet.
+
+Browser-Tests mit Playwright (`npm run test:e2e`) unter `e2e/*.e2e.ts`:
+Sie bauen die App mit Platzhalterwerten (`dist-e2e/`), starten
+`vite preview` und beantworten alle Supabase-Anfragen aus einem
+Speicher-Fake (`e2e/fake-supabase.ts`), ebenso Kacheln und Nominatim.
+Kein echter Server, keine Secrets. `e2e/test.ts` lässt jeden Test bei
+einem unbehandelten Fehler auf der Seite scheitern. Keine Wiederholungen
+(`retries: 0`): ein wackeliger Test ist ein Fehler. Neue Abläufe der
+Oberfläche bekommen hier einen Test. Lokal mit einem vorinstallierten
+Chromium anderer Version: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=<Pfad>`.
 
 Mindestens prüfen:
 
