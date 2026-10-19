@@ -340,6 +340,7 @@ src/
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
+      components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -1776,6 +1777,28 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         Verknüpfungen auf der Gegenseite gelöst; `position` wird `null`.
       - pgTAP: `move_page.test.sql`.
       - Die Oberfläche folgt in 18b.
+    - **Umsetzung 18b** (nur Frontend, keine Migration):
+      - `moveProblem` (`page-hierarchy.ts`) prüft dieselben Regeln wie
+        `move_page` (nicht in sich selbst/Unterseiten, Datenbank/Seite
+        mit Unterseiten nicht als Eintrag, schon dort, Bereichswechsel nur
+        Owner); die Rechte aufs Ziel prüft der Server.
+      - `usePages.movePage(page, {parentId} | {section})`: RPC, die Seite
+        hängt sofort am neuen Platz, danach lädt der Baum vom Server neu
+        (Bereich und Owner im Unterbaum, Position als Eintrag).
+      - „Verschieben nach …“ im Seitenmenü und im Menü der Baumzeile
+        (`MovePageDialog`): Suche, Bereiche „Workspace/Privat (oberste
+        Ebene)“, Seiten und Datenbanken mit Pfad; ungültige Ziele sind
+        deaktiviert (Grund im Tooltip). Wechselt der Bereich, kommt eine
+        Rückfrage wie bei „In Privat verschieben“. Bei einem Eintrag steht
+        der Hinweis, dass Eigenschaften und Verknüpfungen außerhalb der
+        Datenbank entfallen. Nicht für geteilte Seiten anderer Workspaces.
+      - Ziehen in der Seitenleiste (Maus, HTML-Drag-and-Drop): auf eine
+        Seite oder Datenbank = darunter bzw. als Eintrag, auf den Titel
+        „Workspace“/„Privat“ = oberste Ebene. Nur gültige Ziele werden
+        hervorgehoben; in einen anderen Bereich öffnet sich die
+        Rückfrage. Auf Touch-Geräten verschiebt man über das Menü.
+      - Noch nicht: Reihenfolge unter Geschwistern per Ziehen (Seiten
+        stehen nach Erstellung), Verschieben in andere Workspaces.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
@@ -1837,8 +1860,8 @@ Noch nicht abschließend geprüft:
   bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 - Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
   und 5 nur in Chromium mit Geräte-Emulation geprüft).
-- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Verschieben per
-  Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
+- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
+  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
   Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts

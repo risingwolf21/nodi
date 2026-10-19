@@ -105,3 +105,40 @@ export function pagesInSection(pages: Page[], section: Page["visibility"]): Page
 
     return pages.filter((page) => rootOf(page).visibility === section);
 }
+
+/** Where a page moves to: below another page, or to the top of a section (package 18). */
+export type MoveTarget = { parentId: string } | { section: Page["visibility"] };
+
+/**
+ * Why a page cannot move there (German, for the user), or null. The same
+ * rules as the server's move_page, so the app offers only what works;
+ * rights on the target are checked by the server.
+ */
+export function moveProblem(page: Page, target: MoveTarget, pages: Page[], userId: string | undefined): string | null {
+    const parent = "parentId" in target ? pages.find((item) => item.id === target.parentId) : undefined;
+    if ("parentId" in target) {
+        if (!parent) return "Dieses Ziel gibt es nicht mehr.";
+        if (collectDescendantIds(page.id, pages).includes(parent.id)) {
+            return "Eine Seite kann nicht in sich selbst oder ihre Unterseiten verschoben werden.";
+        }
+        if (parent.kind === "database" && page.kind === "database") {
+            return "Eine Datenbank kann kein Eintrag einer anderen Datenbank werden.";
+        }
+        if (parent.kind === "database" && pages.some((item) => item.parent_id === page.id)) {
+            return "Eine Seite mit Unterseiten kann kein Eintrag werden.";
+        }
+    }
+
+    const currentParentId = page.parent_id;
+    const samePlace =
+        "parentId" in target
+            ? currentParentId === target.parentId
+            : currentParentId === null && page.visibility === target.section;
+    if (samePlace) return "Die Seite liegt schon dort.";
+
+    const section = parent ? parent.visibility : "section" in target ? target.section : page.visibility;
+    if (section !== page.visibility && page.owner_id !== userId) {
+        return "Nur wem die Seite gehört, kann sie in einen anderen Bereich verschieben.";
+    }
+    return null;
+}

@@ -3,6 +3,7 @@ import { ChevronRight, FileText, MoreHorizontal, Plus, Table2 } from "lucide-rea
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { displayTitle } from "./page-display";
+import type { TreeDragAndDrop } from "./PageTree";
 import type { Page } from "./types";
 
 type PageTreeItemProps = {
@@ -15,6 +16,8 @@ type PageTreeItemProps = {
     onAddChild: (parentId: string) => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
+    onMove?: (page: Page) => void;
+    dragAndDrop?: TreeDragAndDrop;
 };
 
 // Indentation per tree level, in pixels.
@@ -33,21 +36,49 @@ export function PageTreeItem({
     onAddChild,
     onRename,
     onArchive,
+    onMove,
+    dragAndDrop,
 }: PageTreeItemProps) {
     const children = pages.filter((item) => item.parent_id === page.id);
     const [expanded, setExpanded] = useState(true);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [dropHere, setDropHere] = useState(false);
+    const accepts = () =>
+        dragAndDrop?.draggedId !== null &&
+        dragAndDrop?.draggedId !== page.id &&
+        dragAndDrop?.canDrop({ parentId: page.id }) === true;
     const hasChildren = children.length > 0;
     const selected = selectedPageId === page.id;
 
     return (
         <div>
             <div
+                draggable={dragAndDrop !== undefined}
+                onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", displayTitle(page));
+                    dragAndDrop?.start(page.id);
+                }}
+                onDragEnd={() => dragAndDrop?.end()}
+                onDragOver={(event) => {
+                    if (!accepts()) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropHere(true);
+                }}
+                onDragLeave={() => setDropHere(false)}
+                onDrop={(event) => {
+                    event.preventDefault();
+                    setDropHere(false);
+                    if (accepts()) dragAndDrop?.drop({ parentId: page.id });
+                }}
                 className={cn(
                     "group flex h-7 items-center gap-0.5 rounded-md pr-1 text-sm pointer-coarse:h-10",
                     selected
                         ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/70",
+                    dropHere && "ring-2 ring-brand",
+                    dragAndDrop?.draggedId === page.id && "opacity-50",
                 )}
                 style={{ paddingLeft: 4 + depth * INDENT }}
             >
@@ -102,6 +133,16 @@ export function PageTreeItem({
                                 >
                                     Umbenennen
                                 </MenuItem>
+                                {onMove && (
+                                    <MenuItem
+                                        onSelect={() => {
+                                            setMenuOpen(false);
+                                            onMove(page);
+                                        }}
+                                    >
+                                        Verschieben nach …
+                                    </MenuItem>
+                                )}
                                 <MenuItem
                                     destructive
                                     onSelect={() => {
@@ -146,6 +187,8 @@ export function PageTreeItem({
                         onAddChild={onAddChild}
                         onRename={onRename}
                         onArchive={onArchive}
+                        onMove={onMove}
+                        dragAndDrop={dragAndDrop}
                     />
                 ))}
         </div>

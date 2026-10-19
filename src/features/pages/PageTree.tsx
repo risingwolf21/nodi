@@ -1,5 +1,15 @@
+import type { MoveTarget } from "./page-hierarchy";
 import { PageTreeItem } from "./PageTreeItem";
 import type { Page } from "./types";
+
+/** Dragging pages in the sidebar (mouse); the sidebar decides what may be dropped where. */
+export type TreeDragAndDrop = {
+    draggedId: string | null;
+    canDrop: (target: MoveTarget) => boolean;
+    start: (pageId: string) => void;
+    end: () => void;
+    drop: (target: MoveTarget) => void;
+};
 
 type PageTreeProps = {
     pages: Page[];
@@ -10,6 +20,9 @@ type PageTreeProps = {
     onAddChild: (parentId: string) => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
+    /** "Verschieben nach …"; undefined: not offered. */
+    onMove?: (page: Page) => void;
+    dragAndDrop?: TreeDragAndDrop;
     emptyText?: string;
 };
 
@@ -21,6 +34,8 @@ export function PageTree({
     onAddChild,
     onRename,
     onArchive,
+    onMove,
+    dragAndDrop,
     emptyText = "Noch keine Seiten",
 }: PageTreeProps) {
     const rootPages = pages.filter((page) => page.parent_id === null);
@@ -43,6 +58,8 @@ export function PageTree({
                     onAddChild={onAddChild}
                     onRename={onRename}
                     onArchive={onArchive}
+                    onMove={onMove}
+                    dragAndDrop={dragAndDrop}
                 />
             ))}
         </>
