@@ -5,6 +5,7 @@
 // date format and relations as "Title (Path.md)".
 import { OPTION_COLORS } from "@/features/databases/database-model";
 import type { DateValue, NumberFormat, OptionColor, PropertyOption } from "@/features/databases/types";
+import { resolveExportPath } from "./notion-export";
 
 /** Property types a column can become; Notion's other types arrive as text. */
 export type ImportedType =
@@ -72,6 +73,16 @@ export function parseCsv(text: string): string[][] {
     // A leading byte order mark (TextDecoder removes it, other readers may not).
     if (rows[0]?.[0]) rows[0][0] = rows[0][0].replace(/^\uFEFF/, "");
     return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""));
+}
+
+/**
+ * The pages a relation cell links ("Bericht (Aufgaben%20…/Bericht%20….md), …"),
+ * as paths in the export, resolved from the CSV's folder.
+ */
+export function relationLinks(cell: string, csvPath: string): string[] {
+    return [...cell.matchAll(/\(([^()]*\.md)\)/gi)].flatMap(
+        (match) => resolveExportPath(csvPath, match[1])?.normalize("NFC") ?? [],
+    );
 }
 
 /** "Bericht (Aufgaben%20…/Bericht%20….md)" → "Bericht": relations and links to pages. */

@@ -3,7 +3,15 @@ import type { DocumentContent } from "@/features/editor/types";
 import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
 import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
 import { rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
-import { cleanCell, columnValue, inferColumn, parseCsv, stripPropertyLines, type ImportedColumn } from "./notion-csv";
+import {
+    cleanCell,
+    columnValue,
+    inferColumn,
+    parseCsv,
+    relationLinks,
+    stripPropertyLines,
+    type ImportedColumn,
+} from "./notion-csv";
 import {
     planNotionImport,
     resolveExportPath,
@@ -22,6 +30,13 @@ export type ImportDependencies = {
     markdownToBlocks(markdown: string): unknown[];
     addProperty(databaseId: string, property: NewProperty): Promise<{ id: string }>;
     setValue(pageId: string, propertyId: string, value: unknown): Promise<void>;
+    /** Both sides of a relation (the server keeps the other side's values equal). */
+    addRelation(
+        databaseId: string,
+        name: string,
+        targetDatabaseId: string,
+        pairedName: string,
+    ): Promise<{ propertyId: string }>;
     /** The views of a database; a new one has the server's "Tabelle". */
     listViews(databaseId: string): Promise<{ id: string; position: number }[]>;
     updateView(viewId: string, changes: ViewChanges): Promise<unknown>;
@@ -47,6 +62,27 @@ export type ImportSummary = {
 };
 
 const decoder = new TextDecoder();
+
+// The server's limit for one relation value (package 17d).
+const MAX_RELATION_ENTRIES = 100;
+
+type ImportedDatabase = {
+    /** `Title <id>.csv` in the export. */
+    path: string;
+    id: string;
+    title: string;
+    /** The entry of each CSV row, in order. */
+    rowPageIds: string[];
+};
+
+type RelationColumn = {
+    database: ImportedDatabase;
+    name: string;
+    /** The linked database in the export. */
+    targetPath: string;
+    /** Linked entry files, per CSV row. */
+    links: string[][];
+};
 
 const text = (value: string) => ({ type: "text" as const, text: value, styles: {} });
 
@@ -131,6 +167,70 @@ export async function importNotionExport(
 
     const csvHeader = (path: string) => parseCsv(decoder.decode(archive.get(path)))[0] ?? [];
 
+    // Relations link entries of databases of this export; they are created
+    // after all databases, when the linked entries exist.
+    const databaseOfEntry = new Map<string, string>();
+    for (const item of plan.items) {
+        if (item.kind === "database") for (const path of item.entryPaths) databaseOfEntry.set(path, item.path);
+    }
+    const importedDatabases = new Map<string, ImportedDatabase>();
+    const relationColumns: RelationColumn[] = [];
+    const pageIdOfEntry = new Map<string, string>();
+
+    /** A column whose cells only link entries of one database of the export is a relation to it. */
+    const relationTarget = (cells: string[], csvPath: string): Pick<RelationColumn, "targetPath" | "links"> | null => {
+        const links = cells.map((cell) => relationLinks(cell, csvPath));
+        const filled = cells.flatMap((cell, row) => (cell.trim() ? [links[row]] : []));
+        if (filled.length === 0 || filled.some((rowLinks) => rowLinks.length === 0)) return null;
+        const targets = new Set(links.flat().map((path) => databaseOfEntry.get(path)));
+        const [targetPath] = targets;
+        return targets.size === 1 && typeof targetPath === "string" ? { targetPath, links } : null;
+    };
+
+    const importRelations = async () => {
+        const done = new Set<RelationColumn>();
+        for (const column of relationColumns) {
+            if (done.has(column)) continue;
+            done.add(column);
+            const target = importedDatabases.get(column.targetPath);
+            if (!target) {
+                summary.problems.push(
+                    `${column.database.title}: Verknüpfung „${column.name}“ nicht übernommen (die verknüpfte Datenbank wurde nicht importiert)`,
+                );
+                continue;
+            }
+            // Notion exports both sides of a two-way relation: the other one becomes the paired property.
+            const partner = relationColumns.find(
+                (other) =>
+                    !done.has(other) &&
+                    other.database.path === column.targetPath &&
+                    other.targetPath === column.database.path,
+            );
+            if (partner) done.add(partner);
+            const { propertyId } = await dependencies.addRelation(
+                column.database.id,
+                column.name,
+                target.id,
+                partner?.name ?? column.database.title,
+            );
+            // The links of both columns, set on this side only: the server links the other side.
+            const linked = new Map<string, Set<string>>();
+            const addLink = (from: string | undefined, to: string | undefined) => {
+                if (!from || !to) return;
+                linked.set(from, (linked.get(from) ?? new Set()).add(to));
+            };
+            for (const [row, links] of column.links.entries()) {
+                for (const path of links) addLink(column.database.rowPageIds[row], pageIdOfEntry.get(path));
+            }
+            for (const [row, links] of partner?.links.entries() ?? []) {
+                for (const path of links) addLink(pageIdOfEntry.get(path), partner?.database.rowPageIds[row]);
+            }
+            for (const [pageId, ids] of linked) {
+                await dependencies.setValue(pageId, propertyId, [...ids].slice(0, MAX_RELATION_ENTRIES));
+            }
+        }
+    };
+
     /**
      * The export has no views. The exported view's CSV shows which properties
      * it showed; the others are hidden. A board (status or select) and a
@@ -141,12 +241,13 @@ export async function importNotionExport(
         databaseId: string,
         header: string[],
         columns: ImportedColumn[],
-        propertyIds: string[],
+        // null: a relation, created later.
+        propertyIds: (string | null)[],
     ) => {
         const viewHeader = planned.dataPath === planned.path ? null : csvHeader(planned.path);
         const shown = viewHeader && new Set(viewHeader.map((name) => name.trim()));
         const hiddenPropertyIds = shown
-            ? propertyIds.filter((_, index) => !shown.has((header[index + 1] ?? "").trim()))
+            ? propertyIds.flatMap((id, index) => (id && !shown.has((header[index + 1] ?? "").trim()) ? [id] : []))
             : [];
         const config = { ...EMPTY_VIEW_CONFIG, hiddenPropertyIds };
 
@@ -154,10 +255,8 @@ export async function importNotionExport(
         if (table && hiddenPropertyIds.length > 0) await dependencies.updateView(table.id, { config });
         let position = (table?.position ?? 0) + 1;
 
-        const firstOf = (type: ImportedColumn["type"]) => {
-            const index = columns.findIndex((column) => column.type === type);
-            return index === -1 ? null : propertyIds[index];
-        };
+        const firstOf = (type: ImportedColumn["type"]) =>
+            propertyIds.find((id, index) => id !== null && columns[index].type === type) ?? null;
         const groupBy = firstOf("status") ?? firstOf("select");
         if (groupBy) {
             const view = { ...config, groupByPropertyId: groupBy };
@@ -182,8 +281,28 @@ export async function importNotionExport(
                 rows.map((row) => cleanCell(row[index + 1] ?? "")),
             ),
         );
-        const propertyIds: string[] = [];
+        const relations = header.slice(1).map((_, index) =>
+            relationTarget(
+                rows.map((row) => row[index + 1] ?? ""),
+                planned.dataPath,
+            ),
+        );
+        const imported: ImportedDatabase = {
+            path: planned.path,
+            id: database.id,
+            title: planned.title,
+            rowPageIds: [],
+        };
+        importedDatabases.set(planned.path, imported);
+
+        const propertyIds: (string | null)[] = [];
         for (const [position, column] of columns.entries()) {
+            const relation = relations[position];
+            if (relation) {
+                relationColumns.push({ database: imported, name: column.name, ...relation });
+                propertyIds.push(null);
+                continue;
+            }
             const property = await dependencies.addProperty(database.id, {
                 name: column.name,
                 type: column.type,
@@ -217,10 +336,16 @@ export async function importNotionExport(
             if (dependencies.signal?.aborted) return;
             report(`${planned.title}: Eintrag ${index + 1} von ${entries.length}`);
             const page = await dependencies.createPage(entry.title, database.id);
+            // Rows first, in their order: relations find their entries by row.
+            if (index < rows.length) imported.rowPageIds.push(page.id);
+            if (entry.path) pageIdOfEntry.set(entry.path, page.id);
             await Promise.all(
                 columns.flatMap((column, columnIndex) => {
+                    const propertyId = propertyIds[columnIndex];
                     const value = columnValue(column, cleanCell(entry.cells[columnIndex] ?? ""));
-                    return value === undefined ? [] : [dependencies.setValue(page.id, propertyIds[columnIndex], value)];
+                    return value === undefined || !propertyId
+                        ? []
+                        : [dependencies.setValue(page.id, propertyId, value)];
                 }),
             );
             if (entry.path) {
@@ -263,6 +388,8 @@ export async function importNotionExport(
             summary.pages += 1;
         }
 
+        if (relationColumns.length > 0) dependencies.onProgress?.({ done: total, total, title: "Verknüpfungen" });
+        await importRelations();
         dependencies.onProgress?.({ done: total, total, title: "" });
         await dependencies.saveDocument(root.id, rootDocument(summary));
     } catch (error) {
