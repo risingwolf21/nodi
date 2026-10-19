@@ -1639,6 +1639,24 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         mit denselben ausgeblendeten Eigenschaften.
         `databaseRepository.listViews` findet die vom Server angelegte
         Tabelle.
+    - **Umsetzung 17b** (nur Frontend, keine Migration):
+      - `DatabaseProperty.numberFormat` (`number`, `percent`, `euro`,
+        `dollar`, `pound`, `franc`, `yen`); auf dem Server in
+        `options.format` (das JSON-Objekt erlaubt beliebige Schlüssel; die
+        App liest nur bekannte Formate, unbekannte gelten als „Zahl“). Ein
+        Typwechsel setzt `options` neu und damit das Format zurück.
+      - Gespeichert bleibt die reine Zahl; das Format betrifft nur die
+        Anzeige (`formatValue`, Intl `de-DE`, Währungen mit zwei
+        Nachkommastellen). Prozent wie Notion: 0,15 wird „15 %“; Eingabe,
+        Filter, Sortierung und Formeln sehen die Zahl.
+      - Spaltenmenü der Tabelle: Abschnitt „Zahlenformat“ bei
+        Zahl-Eigenschaften.
+      - Import: Zahlen mit Tausendertrennern, Dezimalkomma (je Spalte:
+        „12,5“ oder „1.234,56“ → Komma; „1,234“ bleibt Tausender),
+        Währungssymbolen (€, $, £, CHF, ¥, auch EUR/USD/…) und Prozent
+        (Wert / 100). Haben alle Werte dasselbe Symbol, bekommt die
+        Eigenschaft dieses Format. Leerzeichen zwischen Ziffern
+        (Telefonnummern) sind keine Zahl.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

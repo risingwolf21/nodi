@@ -78,6 +78,28 @@ describe("inferColumn", () => {
         expect(columnValue(progress, "Done")).toBe(progress.options[2].id);
     });
 
+    it("reads numbers with separators, currencies and percent", () => {
+        const euro = inferColumn("Budget", ["€1,234.50", "€12", ""]);
+        expect(euro).toMatchObject({ type: "number", numberFormat: "euro", decimalComma: false });
+        expect(columnValue(euro, "€1,234.50")).toBe(1234.5);
+
+        const german = inferColumn("Preis", ["1.234,56 €", "12,5 €"]);
+        expect(german).toMatchObject({ type: "number", numberFormat: "euro", decimalComma: true });
+        expect(columnValue(german, "1.234,56 €")).toBe(1234.56);
+
+        const percent = inferColumn("Fortschritt", ["15%", "33.3%"]);
+        expect(percent.numberFormat).toBe("percent");
+        expect(columnValue(percent, "33.3%")).toBe(0.333);
+
+        expect(inferColumn("Menge", ["1,234", "-5"])).toMatchObject({ numberFormat: "number", decimalComma: false });
+        expect(columnValue(inferColumn("Menge", ["1,234"]), "1,234")).toBe(1234);
+        // Mixed symbols: a plain number.
+        expect(inferColumn("Betrag", ["$5", "€5"]).numberFormat).toBe("number");
+        // Phone numbers and dates are no numbers.
+        expect(inferColumn("Telefon", ["0170 1234567", "030 123456"]).type).toBe("text");
+        expect(inferColumn("Tag", ["19.10.2026"]).type).toBe("date");
+    });
+
     it("reads day-first dates when a day is above 12", () => {
         const column = inferColumn("Datum", ["05/10/2026", "19/10/2026"]);
         expect(column).toMatchObject({ type: "date", dayFirst: true });

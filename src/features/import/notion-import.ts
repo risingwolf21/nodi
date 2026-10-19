@@ -188,6 +188,9 @@ export async function importNotionExport(
                 name: column.name,
                 type: column.type,
                 options: column.options,
+                ...(column.type === "number" && column.numberFormat !== "number"
+                    ? { numberFormat: column.numberFormat }
+                    : {}),
                 position,
             });
             propertyIds.push(property.id);

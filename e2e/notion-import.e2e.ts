@@ -122,7 +122,7 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
             // Notion writes a byte order mark and CRLF; the second file has all properties.
             [`Aufgaben ${TASKS}.csv`]: strToU8("\uFEFFName,Status\r\nTickets,Offen\r\n"),
             [`Aufgaben ${TASKS}_all.csv`]: strToU8(
-                '\uFEFFName,Status,Erledigt,Fällig\r\nTickets,Offen,Yes,"October 19, 2026"\r\nHotel,Offen,No,\r\n',
+                '\uFEFFName,Status,Erledigt,Fällig,Budget\r\nTickets,Offen,Yes,"October 19, 2026","€1,200.50"\r\nHotel,Offen,No,,€80\r\n',
             ),
             [`Aufgaben ${TASKS}/Tickets ${DAY}.md`]: strToU8(
                 "# Tickets\n\nStatus: Offen\nErledigt: Yes\nFällig: October 19, 2026\n\nOnline kaufen.",
@@ -138,9 +138,11 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
         ["Status", "status"],
         ["Erledigt", "checkbox"],
         ["Fällig", "date"],
+        ["Budget", "number"],
     ]);
     // The exported view showed only the status; board and calendar are derived.
-    const [status, done, due] = backend.properties.map((property) => property.id);
+    const [status, done, due, budget] = backend.properties.map((property) => property.id);
+    expect(backend.properties[3].options).toEqual({ format: "euro" });
     expect(
         backend.views.map(({ name, type, config }) => [
             name,
@@ -150,9 +152,9 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
             config.datePropertyId ?? null,
         ]),
     ).toEqual([
-        ["Tabelle", "table", [done, due], null, null],
-        ["Board", "board", [done, due], status, null],
-        ["Kalender", "calendar", [done, due], null, due],
+        ["Tabelle", "table", [done, due, budget], null, null],
+        ["Board", "board", [done, due, budget], status, null],
+        ["Kalender", "calendar", [done, due, budget], null, due],
     ]);
     const entries = backend.pages.filter((item) => item.parent_id === database?.id);
     expect(entries.map(({ title, position }) => [title, position])).toEqual([

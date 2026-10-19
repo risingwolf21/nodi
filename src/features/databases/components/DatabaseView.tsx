@@ -437,6 +437,7 @@ export function DatabaseView({
                     }}
                     onEditFormula={setFormulaPropertyId}
                     onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
+                    onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
                     onChangePropertyType={(propertyId, type) =>
                         updateProperty(propertyId, { type, options: defaultOptions(type) })
                     }
