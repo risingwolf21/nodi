@@ -350,12 +350,13 @@ supabase/
                             # unsichtbarer Seiten (Bestandsdaten),
                             # Mitglieder und Bereiche (P12a),
                             # Seitenbaum/Teilen gehärtet (P13a),
-                            # Datenbanken (P14a), Orte und Landkarte (P14e)
+                            # Datenbanken (P14a), Orte und Landkarte (P14e),
+                            # Formeln (P14f)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
-                            # Datenbanken (P14a), Orte (P14e)
+                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1353,6 +1354,25 @@ Arbeitspakete, je ein Pull Request:
             aus, statt die ganze Datenbank abzulehnen.
         -   Noch nicht: Marker gruppieren bei vielen Einträgen, Einträge
             auf der Karte verschieben, Kacheln offline.
+    -   **Formeln (Nutzerentscheidung 2026-10-19):** Schreibweise wie Notion
+        (`prop("Preis") * prop("Menge")`, englische Funktionsnamen).
+        Grundumfang: Rechnen, Vergleiche, `and`/`or`/`not`, `if`, Text
+        (`concat`, `length`, `upper`, `lower`, `contains`, `replace`), Zahlen
+        (`round`, `abs`, `min`, `max`, `floor`, `ceil`), `empty`, `format`,
+        `toNumber`, Datum (`now`, `dateAdd`, `dateBetween`, `formatDate`);
+        Formeln dürfen andere Formeln verwenden. Berechnet wird in der App
+        (auch offline, kein `eval`). Aufteilung: 14f-a Datenbank, 14f-b
+        Oberfläche mit Formel-Engine.
+    -   **Umsetzung 14f-a** (`20261019090000_formula_property.sql`):
+        -   Eigenschaftstyp `formula`; der Ausdruck steht in
+            `options.expression` (Text bis 2000 Zeichen oder noch leer,
+            Check-Constraint, `23514`). Werte gibt es nicht:
+            `set_page_property` lehnt jeden Wert ab (`22023`), wie bei den
+            berechneten Zeit-Eigenschaften.
+        -   Die Migration erweitert nur die erlaubten Werte
+            (rückwärtskompatibel; die App ab 14e lässt den unbekannten Typ
+            aus).
+        -   pgTAP: `database_formulas.test.sql`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
