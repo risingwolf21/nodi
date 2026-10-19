@@ -10,7 +10,12 @@ import { readExportArchive } from "../read-archive";
 
 type NotionImportDialogProps = {
     /** A private page of the current workspace (usePages.createPage). */
-    createPage: (title: string, parentId: string | null, kind?: "page" | "database") => Promise<{ id: string }>;
+    createPage: (
+        title: string,
+        parentId: string | null,
+        kind?: "page" | "database",
+        id?: string,
+    ) => Promise<{ id: string }>;
     onOpen: (pageId: string) => void;
     onClose: () => void;
 };
@@ -68,7 +73,7 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
             setValue,
             listViews: (databaseId) => databaseRepository.listViews(databaseId),
             updateView: (viewId, changes) => databaseRepository.updateView(viewId, changes),
-            addView: (databaseId, view) => databaseRepository.addView(databaseId, view),
+            addView: (databaseId, view, block) => databaseRepository.addView(databaseId, view, block),
             addRelation: (databaseId, name, targetId, pairedName) =>
                 databaseRepository.addRelation(databaseId, name, targetId, pairedName),
             signal: cancel.current.signal,

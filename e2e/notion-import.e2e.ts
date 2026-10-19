@@ -177,6 +177,41 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
     await expect(page.getByText("Tickets", { exact: true })).toBeVisible();
 });
 
+test("Eine Datenbank in einer Notion-Seite wird zum Datenbank-Block mit ihren Ansichten", async ({ page, context }) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    const project = `Projekt ${ROME}`;
+    await chooseArchive(
+        page,
+        zipSync({
+            [`${project}.md`]: strToU8(
+                `# Projekt\n\nAlle Aufgaben:\n\n[Aufgaben](Projekt%20${ROME}/Aufgaben%20${TASKS}.csv)`,
+            ),
+            [`${project}/Aufgaben ${TASKS}.csv`]: strToU8("Name,Status\nTickets,Offen\nHotel,Erledigt\n"),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText(/1 von 1 Datenbank/)).toBeVisible();
+
+    const database = backend.pages.find((item) => item.title === "Aufgaben");
+    const projectPage = backend.pages.find((item) => item.title === "Projekt");
+    expect(database?.parent_id).toBe(projectPage?.id);
+    // The block has the database's views (table and board), its own copies.
+    expect(backend.blockViews.map(({ pageId, databaseId, type }) => [pageId, databaseId, type])).toEqual([
+        [projectPage?.id, database?.id, "table"],
+        [projectPage?.id, database?.id, "board"],
+    ]);
+
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+    await page.getByRole("button", { name: "Projekt", exact: true }).click();
+    const editor = page.locator(".bn-editor");
+    await expect(editor).toContainText("Alle Aufgaben:");
+    await expect(editor.getByRole("cell", { name: "Tickets" })).toBeVisible();
+    await editor.getByRole("tab", { name: "Board" }).click();
+    await expect(editor.getByText("Hotel", { exact: true })).toBeVisible();
+});
+
 test("Notion-Relationen zwischen zwei Datenbanken werden zur Verknüpfung", async ({ page, context }) => {
     const backend = createBackend();
     await openApp(page, context, backend);
