@@ -39,6 +39,7 @@ export function ListView({ rows, properties, editable, onOpenEntry, onCreateEntr
                                         key={property.id}
                                         property={property}
                                         value={row.values[property.id] ?? null}
+                                        error={row.errors[property.id]}
                                     />
                                 ))}
                             </span>

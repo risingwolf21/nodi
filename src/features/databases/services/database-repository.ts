@@ -47,7 +47,7 @@ function requireRow<T>(rows: T[] | null): T {
 const optionsColumn = (options: PropertyOption[]) => ({ options });
 
 export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position">;
-export type PropertyChanges = Partial<Pick<DatabaseProperty, "name" | "type" | "options" | "position">>;
+export type PropertyChanges = Partial<Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula">>;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
 
@@ -144,10 +144,13 @@ export const databaseRepository = {
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, ...rest } = changes;
+        const { options, formula, ...rest } = changes;
+        // The server keeps a formula's expression in options as well.
+        const column =
+            formula !== undefined ? { expression: formula } : options ? optionsColumn(options) : undefined;
         const response = await supabase
             .from("database_properties")
-            .update(options ? { ...rest, options: optionsColumn(options) } : rest)
+            .update(column ? { ...rest, options: column } : rest)
             .eq("id", propertyId)
             .select(PROPERTY_COLUMNS);
         const failure = databaseError(response, "Die Eigenschaft konnte nicht geändert werden.");

@@ -21,6 +21,7 @@ import { BoardView } from "./BoardView";
 import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
+import { FormulaEditor } from "./FormulaEditor";
 import { GalleryView } from "./GalleryView";
 import { ListView } from "./ListView";
 import { MapView } from "./MapView";
@@ -157,6 +158,7 @@ export function DatabaseView({
     const [activeViewId, setActiveViewId] = useState("");
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
+    const [formulaPropertyId, setFormulaPropertyId] = useState("");
     const [addViewOpen, setAddViewOpen] = useState(false);
     const creatingEntry = useRef(false);
 
@@ -192,6 +194,7 @@ export function DatabaseView({
     }
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
+    const formulaProperty = data.properties.find((property) => property.id === formulaPropertyId && property.type === "formula");
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
@@ -428,8 +431,11 @@ export function DatabaseView({
                     onSetValue={setValue}
                     onCreateOption={addOption}
                     onAddProperty={async (type) => {
-                        await addProperty(type);
+                        const property = await addProperty(type);
+                        // A new formula needs its expression first.
+                        if (type === "formula") setFormulaPropertyId(property.id);
                     }}
+                    onEditFormula={setFormulaPropertyId}
                     onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
                     onChangePropertyType={(propertyId, type) =>
                         updateProperty(propertyId, { type, options: defaultOptions(type) })
@@ -444,6 +450,16 @@ export function DatabaseView({
                     }
                     onDeleteProperty={deleteProperty}
                     onError={report}
+                />
+            )}
+
+            {formulaProperty && (
+                <FormulaEditor
+                    property={formulaProperty}
+                    data={data}
+                    sample={rows[0]?.page ?? entries[0]}
+                    onClose={() => setFormulaPropertyId("")}
+                    onSave={(formula) => updateProperty(formulaProperty.id, { formula })}
                 />
             )}
 

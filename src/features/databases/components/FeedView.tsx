@@ -61,6 +61,7 @@ export function FeedView({ rows, properties, previews, editable, onOpenEntry, on
                                             key={property.id}
                                             property={property}
                                             value={row.values[property.id] ?? null}
+                                            error={row.errors[property.id]}
                                         />
                                     ))}
                                 </span>

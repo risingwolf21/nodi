@@ -1,5 +1,7 @@
 import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
+import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
+import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
 import {
     TITLE_FIELD,
     type DatabaseData,
@@ -30,6 +32,7 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "url",
     "email",
     "place",
+    "formula",
     "created_time",
     "last_edited_time",
 ];
@@ -45,6 +48,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     url: "URL",
     email: "E-Mail",
     place: "Ort",
+    formula: "Formel",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
@@ -81,7 +85,7 @@ export function hasOptions(type: PropertyType): boolean {
 
 /** Computed by the app, not set by hand. */
 export function isComputed(type: PropertyType): boolean {
-    return type === "created_time" || type === "last_edited_time";
+    return type === "created_time" || type === "last_edited_time" || type === "formula";
 }
 
 /** A new status property starts like Notion's. */
@@ -151,6 +155,13 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
             throw new Error(INVALID_DATA);
         }
         if (!isPropertyType(row.type)) return [];
+        // The server keeps the expression in options, the cache next to them.
+        const expression =
+            typeof row.formula === "string"
+                ? row.formula
+                : isObject(row.options) && typeof row.options.expression === "string"
+                  ? row.options.expression
+                  : "";
         return [{
             id: row.id,
             databaseId: row.databaseId,
@@ -158,6 +169,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
             type: row.type,
             options: parseOptions(row.options),
             position: numberOrZero(row.position),
+            ...(row.type === "formula" ? { formula: expression } : {}),
         }];
     });
 }
@@ -340,6 +352,7 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
             return isDateValue(raw) ? { start: raw.start, end: typeof raw.end === "string" ? raw.end : null } : null;
         case "place":
             return isPlaceValue(raw) ? { lat: raw.lat, lng: raw.lng, label: raw.label || null } : null;
+        case "formula":
         case "created_time":
         case "last_edited_time":
             return null;
@@ -350,6 +363,8 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
 export type DatabaseRow = {
     page: Page;
     values: Record<string, PropertyValue>;
+    /** Formulas that could not be computed: the message per property id. */
+    errors: Record<string, string>;
     createdAt: string;
     lastEditedAt: string;
 };
@@ -358,7 +373,136 @@ function latest(times: string[]): string {
     return times.reduce((newest, time) => (time > newest ? time : newest), "");
 }
 
+// ---------------------------------------------------------------------------
+// Formulas (package 14f): computed for every entry when the rows are built.
+
+/** prop("Name") is the title of the entry, unless a property has that name. */
+const TITLE_PROPERTY_NAME = "Name";
+
+type CompiledFormula = { node: FormulaNode } | { error: string };
+
+/** A formula that depends on itself, directly or through other formulas. */
+class FormulaCycleError extends FormulaError {}
+
+function compileFormula(expression: string): CompiledFormula {
+    try {
+        return { node: parseFormula(expression) };
+    } catch (err) {
+        if (err instanceof FormulaError) return { error: err.message };
+        throw err;
+    }
+}
+
+/** "YYYY-MM-DD" is a local calendar day; anything else a point in time. */
+function toDate(value: string): Date | null {
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    const date = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** A value as formulas see it: numbers and checkboxes as such, dates as dates, the rest as its text. */
+function formulaInput(property: DatabaseProperty, value: PropertyValue): FormulaValue {
+    if (value === null) return null;
+    switch (property.type) {
+        case "number":
+            return typeof value === "number" ? value : null;
+        case "checkbox":
+            return value === true;
+        case "date":
+            return isDateValue(value) ? toDate(value.start) : null;
+        case "created_time":
+        case "last_edited_time":
+            return typeof value === "string" ? toDate(value) : null;
+        default:
+            return formatValue(property, value) || null;
+    }
+}
+
+/** A result as views show, sort and filter it; a date keeps its time only if it has one. */
+function formulaOutput(value: FormulaValue): PropertyValue {
+    if (!(value instanceof Date)) return value;
+    const midnight = value.getHours() === 0 && value.getMinutes() === 0 && value.getSeconds() === 0;
+    return { start: midnight ? localDay(value) : value.toISOString(), end: null };
+}
+
+type FormulaSetup = {
+    formulas: DatabaseProperty[];
+    compiled: Map<string, CompiledFormula>;
+    byName: Map<string, DatabaseProperty>;
+    now: Date;
+};
+
+function setUpFormulas(properties: DatabaseProperty[]): FormulaSetup {
+    const formulas = properties.filter((property) => property.type === "formula");
+    const byName = new Map<string, DatabaseProperty>();
+    for (const property of [...properties].sort((a, b) => a.position - b.position)) {
+        if (!byName.has(property.name)) byName.set(property.name, property);
+    }
+    return {
+        formulas,
+        compiled: new Map(formulas.map((property) => [property.id, compileFormula(property.formula ?? "")])),
+        byName,
+        now: new Date(),
+    };
+}
+
+/** Results of all formulas of one entry; formulas may use other formulas. */
+function computeFormulas(page: Page, values: Record<string, PropertyValue>, setup: FormulaSetup) {
+    const results = new Map<string, FormulaValue>();
+    const errors: Record<string, string> = {};
+    const active = new Set<string>();
+
+    const compute = (property: DatabaseProperty): FormulaValue => {
+        if (results.has(property.id)) return results.get(property.id) ?? null;
+        if (errors[property.id]) throw new FormulaError(errors[property.id]);
+        if (active.has(property.id)) {
+            throw new FormulaCycleError(`Zirkelbezug: „${property.name}“ verwendet sich selbst.`);
+        }
+        active.add(property.id);
+        try {
+            const compiled = setup.compiled.get(property.id);
+            if (!compiled || "error" in compiled) throw new FormulaError(compiled?.error ?? NO_FORMULA_MESSAGE);
+            const result = evaluateFormula(compiled.node, { now: setup.now, prop: lookup });
+            results.set(property.id, result);
+            return result;
+        } catch (err) {
+            if (err instanceof FormulaError && !errors[property.id]) errors[property.id] = err.message;
+            throw err;
+        } finally {
+            active.delete(property.id);
+        }
+    };
+
+    function lookup(name: string): FormulaValue {
+        const property = setup.byName.get(name);
+        if (!property) {
+            if (name === TITLE_PROPERTY_NAME) return page.title || null;
+            throw new FormulaError(`Die Eigenschaft „${name}“ gibt es nicht.`);
+        }
+        if (property.type !== "formula") return formulaInput(property, values[property.id] ?? null);
+        try {
+            return compute(property);
+        } catch (err) {
+            // A cycle is the problem of every formula in it; other errors stay with their formula.
+            if (err instanceof FormulaCycleError || !(err instanceof FormulaError)) throw err;
+            throw new FormulaError(`Die Formel „${name}“ hat einen Fehler.`);
+        }
+    }
+
+    const output: Record<string, PropertyValue> = {};
+    for (const property of setup.formulas) {
+        try {
+            output[property.id] = formulaOutput(compute(property));
+        } catch (err) {
+            if (!(err instanceof FormulaError)) throw err;
+            output[property.id] = null;
+        }
+    }
+    return { values: output, errors };
+}
+
 export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
+    const formulaSetup = setUpFormulas(data.properties);
     const storedByEntry = new Map<string, StoredPropertyValue[]>();
     for (const stored of data.values) {
         const list = storedByEntry.get(stored.pageId) ?? [];
@@ -379,12 +523,19 @@ export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
                 values[property.id] = page.created_at || null;
             } else if (property.type === "last_edited_time") {
                 values[property.id] = lastEditedAt || null;
-            } else {
+            } else if (property.type !== "formula") {
                 const raw = stored.find((value) => value.propertyId === property.id)?.value;
                 values[property.id] = readValue(property, raw);
             }
         }
-        return { page, values, createdAt: page.created_at, lastEditedAt };
+        const formulas = computeFormulas(page, values, formulaSetup);
+        return {
+            page,
+            values: { ...values, ...formulas.values },
+            errors: formulas.errors,
+            createdAt: page.created_at,
+            lastEditedAt,
+        };
     });
 }
 
@@ -401,6 +552,18 @@ const dateTimeFormat = new Intl.DateTimeFormat("de-DE", {
 });
 const numberFormat = new Intl.NumberFormat("de-DE");
 const coordinateFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 5 });
+
+const formulaNumberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 10 });
+
+/** A formula result: its type shows only at runtime. */
+function formatFormulaResult(value: PropertyValue): string {
+    if (typeof value === "number") return formulaNumberFormat.format(value);
+    if (typeof value === "boolean") return value ? "Ja" : "Nein";
+    if (isDateValue(value)) {
+        return value.start.includes("T") ? dateTimeFormat.format(new Date(value.start)) : formatDay(value.start);
+    }
+    return typeof value === "string" ? value : "";
+}
 
 /** "48,13720; 11,57560"-style text for a point without an address. */
 function formatCoordinates(place: PlaceValue): string {
@@ -432,6 +595,8 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return isDateValue(value) ? [value.start, value.end].filter(Boolean).map((day) => formatDay(day ?? "")).join(" – ") : "";
         case "place":
             return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
+        case "formula":
+            return formatFormulaResult(value);
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? dateTimeFormat.format(new Date(value)) : "";
@@ -470,6 +635,8 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
         case "multi_select":
         case "place":
             return ["contains", "isEmpty", "isNotEmpty"];
+        case "formula":
+            return ["contains", "equals", "notEquals", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"];
         case "date":
         case "created_time":
         case "last_edited_time":
@@ -496,9 +663,16 @@ function isEmptyValue(value: PropertyValue): boolean {
     return value === null || value === false || (Array.isArray(value) && value.length === 0);
 }
 
+/** Formulas filter by what they return: numbers and dates as such, the rest as text. */
+function formulaFilterType(value: PropertyValue): "number" | "date" | "formula" {
+    if (typeof value === "number") return "number";
+    if (isDateValue(value)) return "date";
+    return "formula";
+}
+
 export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: DatabaseProperty | undefined): boolean {
     const value = fieldValue(row, rule.propertyId);
-    const type = rule.propertyId === TITLE_FIELD ? "text" : property?.type;
+    const type = rule.propertyId === TITLE_FIELD ? "text" : property?.type === "formula" ? formulaFilterType(value) : property?.type;
     // A rule for a deleted property does not hide anything.
     if (!type) return true;
     const needle = rule.value.trim().toLocaleLowerCase("de");
@@ -547,8 +721,13 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
         return rule.operator === "contains" ? Array.isArray(value) && value.includes(rule.value) : true;
     }
 
-    // A place is found by its address (or coordinates) like text.
-    const shown = type === "place" && property ? formatValue(property, value) : typeof value === "string" ? value : "";
+    // A place is found by its address (or coordinates), a formula by its shown result, like text.
+    const shown =
+        (type === "place" || type === "formula") && property
+            ? formatValue(property, value)
+            : typeof value === "string"
+              ? value
+              : "";
     const text = shown.toLocaleLowerCase("de");
     if (rule.operator === "contains") return text.includes(needle);
     if (rule.operator === "equals") return text === needle;
