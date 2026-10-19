@@ -29,13 +29,13 @@ export function EditorFrame({
 }: EditorFrameProps) {
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <div className="box-content flex h-11 shrink-0 items-center gap-2 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-3 text-sm">
+            <div className="nodi-page-top-bar box-content flex h-11 shrink-0 items-center gap-2 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-3 text-sm">
                 <div className="flex min-w-0 flex-1 items-center gap-1">{topBarStart}</div>
                 {status && <div className="shrink-0 text-xs text-muted-foreground">{status}</div>}
                 {topBarEnd}
             </div>
             {notices}
-            <div className="min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
+            <div className="nodi-page-scroll min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
                 <div className={cn("mx-auto w-full pt-8 pb-32 md:pt-16", fullWidth ? "max-w-none" : "max-w-[860px]")}>
                     {children}
                 </div>

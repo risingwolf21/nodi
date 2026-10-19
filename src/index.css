@@ -152,6 +152,39 @@
     padding-inline: var(--page-gutter);
 }
 
+/*
+ * Typing on a phone (package 20): the app fits the area above the keyboard
+ * (`lib/virtual-keyboard.ts`), so iOS does not pan it around, and the top
+ * bar of a page makes room while typing.
+ */
+html[data-keyboard-open] .nodi-app-viewport {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--keyboard-viewport-top, 0px);
+    height: var(--keyboard-viewport-height, 100svh);
+}
+
+@media (max-width: 767px) {
+    html[data-keyboard-open] .nodi-page-top-bar {
+        display: none;
+    }
+
+    html[data-keyboard-open] .nodi-page-scroll {
+        padding-top: env(safe-area-inset-top);
+    }
+}
+
+/*
+ * BlockNote's toolbar above the keyboard: the keyboard covers the home
+ * indicator, so no safe-area gap below it, and it moves with the keyboard
+ * instead of trailing behind while iOS scrolls. `body` outranks the
+ * library rule, which loads later with the editor.
+ */
+body .bn-mobile-formatting-toolbar {
+    padding-bottom: 0;
+    transition: none;
+}
+
 /* Map markers (package 14e): SVG attributes cannot use var(), CSS can. */
 .nodi-map-marker {
     stroke: var(--background);
