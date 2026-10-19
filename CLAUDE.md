@@ -384,14 +384,15 @@ supabase/
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
-                            # Verknüpfungen (P17d), Verschieben (P18a)
+                            # Verknüpfungen (P17d), Verschieben (P18a),
+                            # Ansichten je Block (P19b)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
                             # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
                             # Dateien (P15a), Verknüpfungen (P17d),
-                            # Verschieben (P18a)
+                            # Verschieben (P18a), Ansichten je Block (P19b)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1799,6 +1800,35 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         Rückfrage. Auf Touch-Geräten verschiebt man über das Menü.
       - Noch nicht: Reihenfolge unter Geschwistern per Ziehen (Seiten
         stehen nach Erstellung), Verschieben in andere Workspaces.
+
+19. **Notion-Import nachbessern, Datenbank-Ansichten in Seiten**
+    (Nutzerwunsch 2026-10-19): Ein großer Import ließ sich nicht in den
+    Papierkorb legen, Ansichten von Datenbanken in Seiten fehlten, und
+    bestehende Datenbanken sollen sich in eine Seite einbinden lassen.
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Ein Block „Datenbank“ im
+      Text zeigt eine bestehende Datenbank mit **eigenen Ansichten je
+      Block** (wie verknüpfte Ansichten in Notion): Typ, Filter,
+      Sortierung und sichtbare Eigenschaften des Blocks ändern die
+      Ansichten der Datenbank nicht. (2) Der Import legt diese Blöcke
+      künftig an; bestehende Importe werden nicht umgebaut (der Nutzer
+      löscht seinen Import und importiert neu).
+    - **Aufteilung:** 19a Papierkorb für große Bäume (Fehlerbehebung),
+      19b Datenbank (Ansichten je Block), 19c Block „Datenbank“ im
+      Editor, 19d Import erzeugt die Blöcke.
+    - **Umsetzung 19b** (`20261019200000_block_views.sql`):
+      - Tabelle `block_views`: Seite (`page_id`), Block im Dokument
+        (`block_id`, die BlockNote-ID, 1–100 Zeichen), gezeigte
+        Datenbank (`database_id`, muss eine Datenbank sein, `22023`),
+        Name, Typ (wie `database_views`), `config` (JSON-Objekt),
+        `position`. Löschen der Seite oder der Datenbank löscht die
+        Zeilen mit; Ansichten eines aus dem Text entfernten Blocks
+        bleiben bis dahin liegen (der Server liest keine Dokumente).
+      - Lesen mit `can_read_page` auf Seite **und** Datenbank (die
+        Ansicht zeigt deren Daten). Anlegen und Ändern mit
+        `can_edit_page` der Seite und `can_read_page` der Datenbank,
+        Löschen mit `can_edit_page` der Seite (`42501` per RLS).
+      - Nur eine neue Tabelle (rückwärtskompatibel).
+      - pgTAP: `block_views.test.sql`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
