@@ -3,14 +3,19 @@ import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-rea
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
-import { DatabaseView } from "@/features/databases/components/DatabaseView";
-import { PropertyBar } from "@/features/databases/components/PropertyBar";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { displayTitle } from "@/features/pages/page-display";
 import type { Page, PageSection, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
+// Databases come in their own chunk, loaded with the first database or entry.
+const DatabaseView = lazy(() =>
+    import("@/features/databases/components/DatabaseView").then((module) => ({ default: module.DatabaseView })),
+);
+const PropertyBar = lazy(() =>
+    import("@/features/databases/components/PropertyBar").then((module) => ({ default: module.PropertyBar })),
+);
 
 type PageViewProps = {
     page: Page;
@@ -115,55 +120,56 @@ export function PageView({
         </>
     );
 
-    const topBarEnd = readOnly || !showPageMenu ? null : (
-        <div className="relative shrink-0">
-            <button
-                type="button"
-                aria-label="Seitenmenü"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-                <MoreHorizontal className="size-5" />
-            </button>
-            <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
-                {onShare && (
-                    <MenuItem
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onShare(page);
-                        }}
-                    >
-                        Teilen
-                    </MenuItem>
-                )}
-                {onMoveSection && (
-                    <MenuItem
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
-                        }}
-                    >
-                        {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
-                    </MenuItem>
-                )}
-                <MenuItem onSelect={toggleFullWidth}>
-                    <span className="flex-1">Volle Breite</span>
-                    {page.full_width && <Check className="size-4 text-brand" />}
-                </MenuItem>
-                <div className="my-1 border-t" />
-                <MenuItem
-                    destructive
-                    onSelect={() => {
-                        setMenuOpen(false);
-                        onArchive(page);
-                    }}
+    const topBarEnd =
+        readOnly || !showPageMenu ? null : (
+            <div className="relative shrink-0">
+                <button
+                    type="button"
+                    aria-label="Seitenmenü"
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((open) => !open)}
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
-                    In den Papierkorb
-                </MenuItem>
-            </Menu>
-        </div>
-    );
+                    <MoreHorizontal className="size-5" />
+                </button>
+                <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                    {onShare && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onShare(page);
+                            }}
+                        >
+                            Teilen
+                        </MenuItem>
+                    )}
+                    {onMoveSection && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
+                            }}
+                        >
+                            {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
+                        </MenuItem>
+                    )}
+                    <MenuItem onSelect={toggleFullWidth}>
+                        <span className="flex-1">Volle Breite</span>
+                        {page.full_width && <Check className="size-4 text-brand" />}
+                    </MenuItem>
+                    <div className="my-1 border-t" />
+                    <MenuItem
+                        destructive
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onArchive(page);
+                        }}
+                    >
+                        In den Papierkorb
+                    </MenuItem>
+                </Menu>
+            </div>
+        );
 
     const renderHeader = (canEdit: boolean) => (
         <>
@@ -180,7 +186,22 @@ export function PageView({
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
             />
             {database && (
-                <PropertyBar entry={page} databaseId={database.id} userId={userId} readOnly={readOnly || !canEdit} />
+                // Its own boundary: the editor's fallback shows this header again.
+                <LoadErrorBoundary
+                    key={page.id}
+                    fallback={
+                        <LoadErrorNotice message="Die Eigenschaften konnten nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                    }
+                >
+                    <Suspense fallback={null}>
+                        <PropertyBar
+                            entry={page}
+                            databaseId={database.id}
+                            userId={userId}
+                            readOnly={readOnly || !canEdit}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             )}
         </>
     );
@@ -190,15 +211,30 @@ export function PageView({
         return (
             <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
                 {renderHeader(!readOnly)}
-                <DatabaseView
-                    database={page}
-                    entries={entries}
-                    userId={userId}
-                    readOnly={readOnly}
-                    onOpenEntry={onSelect}
-                    onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
-                    onRenameEntry={onRename}
-                />
+                <LoadErrorBoundary
+                    key={page.id}
+                    fallback={
+                        <LoadErrorNotice message="Die Datenbank konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                    }
+                >
+                    <Suspense
+                        fallback={
+                            <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                                Datenbank wird geladen …
+                            </p>
+                        }
+                    >
+                        <DatabaseView
+                            database={page}
+                            entries={entries}
+                            userId={userId}
+                            readOnly={readOnly}
+                            onOpenEntry={onSelect}
+                            onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
+                            onRenameEntry={onRename}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             </EditorFrame>
         );
     }
@@ -217,9 +253,7 @@ export function PageView({
                 fallback={
                     <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
                         {renderHeader(false)}
-                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                            Editor wird geladen …
-                        </p>
+                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">Editor wird geladen …</p>
                     </EditorFrame>
                 }
             >

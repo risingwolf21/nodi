@@ -8,9 +8,9 @@ const { memberErrorMessage, parseMembers, workspaceMembers } = await import("./w
 
 describe("parseMembers", () => {
     it("reads the rows of list_workspace_members", () => {
-        expect(
-            parseMembers([{ user_id: "u1", email: "a@nodi.test", role: "owner", joined_at: "x" }]),
-        ).toEqual([{ userId: "u1", email: "a@nodi.test", role: "owner" }]);
+        expect(parseMembers([{ user_id: "u1", email: "a@nodi.test", role: "owner", joined_at: "x" }])).toEqual([
+            { userId: "u1", email: "a@nodi.test", role: "owner" },
+        ]);
     });
 
     it("rejects unexpected rows instead of skipping them", () => {
@@ -23,8 +23,12 @@ describe("memberErrorMessage", () => {
     it("explains the server's error codes in German", () => {
         expect(memberErrorMessage("add", "P0002", false)).toBe("Es gibt kein Konto mit dieser E-Mail-Adresse.");
         expect(memberErrorMessage("leave", "22023", false)).toBe("Als Owner kannst du den Workspace nicht verlassen.");
-        expect(memberErrorMessage("remove", "42501", false)).toBe("Nur der Owner des Workspace kann Mitglieder verwalten.");
-        expect(memberErrorMessage("add", "", true)).toBe("Mitglieder lassen sich nur mit Internetverbindung verwalten.");
+        expect(memberErrorMessage("remove", "42501", false)).toBe(
+            "Nur der Owner des Workspace kann Mitglieder verwalten.",
+        );
+        expect(memberErrorMessage("add", "", true)).toBe(
+            "Mitglieder lassen sich nur mit Internetverbindung verwalten.",
+        );
     });
 });
 

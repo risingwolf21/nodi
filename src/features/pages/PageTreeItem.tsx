@@ -59,9 +59,7 @@ export function PageTreeItem({
                     onClick={() => setExpanded((value) => !value)}
                     className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent disabled:opacity-0 pointer-coarse:size-8"
                 >
-                    <ChevronRight
-                        className={cn("size-3.5 transition-transform", expanded && "rotate-90")}
-                    />
+                    <ChevronRight className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
                 </button>
 
                 <button

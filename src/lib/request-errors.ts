@@ -42,8 +42,5 @@ type ResponseWithError = {
 /** Turns a failed postgrest-js response into a classified error. */
 export function toRequestError({ error, status }: ResponseWithError): RemoteRequestError | null {
     if (!error) return null;
-    return new RemoteRequestError(
-        classifyRequestError({ status, code: error.code }),
-        error.message,
-    );
+    return new RemoteRequestError(classifyRequestError({ status, code: error.code }), error.message);
 }

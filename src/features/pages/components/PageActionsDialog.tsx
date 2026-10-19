@@ -1,4 +1,3 @@
-
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -16,14 +15,7 @@ type PageActionsDialogProps = {
     onArchived: (archivedIds: string[]) => void;
 };
 
-export function PageActionsDialog({
-    page,
-    mode,
-    onClose,
-    onRename,
-    onArchive,
-    onArchived,
-}: PageActionsDialogProps) {
+export function PageActionsDialog({ page, mode, onClose, onRename, onArchive, onArchived }: PageActionsDialogProps) {
     const [title, setTitle] = useState(page.title);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -45,11 +37,7 @@ export function PageActionsDialog({
             await onRename(page.id, normalizedTitle);
             onClose();
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Die Seite konnte nicht umbenannt werden.",
-            );
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht umbenannt werden.");
         } finally {
             setLoading(false);
         }
@@ -65,9 +53,7 @@ export function PageActionsDialog({
             onClose();
         } catch (err) {
             setError(
-                err instanceof Error
-                    ? err.message
-                    : "Die Seite konnte nicht in den Papierkorb verschoben werden.",
+                err instanceof Error ? err.message : "Die Seite konnte nicht in den Papierkorb verschoben werden.",
             );
         } finally {
             setLoading(false);
@@ -82,13 +68,11 @@ export function PageActionsDialog({
             busy={loading}
         >
             <h2 id="page-action-title" className="text-lg font-semibold">
-                {mode === "rename"
-                    ? "Seite umbenennen"
-                    : "Seite in den Papierkorb verschieben?"}
+                {mode === "rename" ? "Seite umbenennen" : "Seite in den Papierkorb verschieben?"}
             </h2>
 
             {mode === "rename" ? (
-                <form onSubmit={handleRename} className="space-y-4">
+                <form onSubmit={(event) => void handleRename(event)} className="space-y-4">
                     <Input
                         value={title}
                         onChange={(event) => setTitle(event.target.value)}
@@ -105,12 +89,7 @@ export function PageActionsDialog({
                     )}
 
                     <div className="flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                            disabled={loading}
-                        >
+                        <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
                             Abbrechen
                         </Button>
                         <Button type="submit" disabled={loading}>
@@ -121,9 +100,8 @@ export function PageActionsDialog({
             ) : (
                 <>
                     <p className="text-sm text-muted-foreground">
-                        „{page.title}“ und alle Unterseiten werden in den
-                        Papierkorb verschoben. Die gespeicherten Inhalte
-                        bleiben erhalten und können wiederhergestellt werden.
+                        „{page.title}“ und alle Unterseiten werden in den Papierkorb verschoben. Die gespeicherten
+                        Inhalte bleiben erhalten und können wiederhergestellt werden.
                     </p>
 
                     {error && (
@@ -133,12 +111,7 @@ export function PageActionsDialog({
                     )}
 
                     <div className="flex justify-end gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                            disabled={loading}
-                        >
+                        <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
                             Abbrechen
                         </Button>
                         <Button

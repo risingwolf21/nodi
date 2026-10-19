@@ -16,7 +16,9 @@ type GalleryViewProps = {
 export function GalleryView({ rows, properties, editable, onOpenEntry, onCreateEntry }: GalleryViewProps) {
     return (
         <div className="px-[var(--page-gutter)]">
-            {rows.length === 0 && <p className="pb-3 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>}
+            {rows.length === 0 && (
+                <p className="pb-3 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>
+            )}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
                 {rows.map((row) => (
                     <EntryCard

@@ -118,7 +118,9 @@ export function FormulaEditor({ property, data, sample, onClose, onSave }: Formu
                         <span className="font-medium">{preview.text || "leer"}</span>
                     </>
                 ) : (
-                    <span className="text-muted-foreground">Die Formel ist gültig. Ein Ergebnis gibt es mit dem ersten Eintrag.</span>
+                    <span className="text-muted-foreground">
+                        Die Formel ist gültig. Ein Ergebnis gibt es mit dem ersten Eintrag.
+                    </span>
                 )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -156,8 +158,8 @@ export function FormulaEditor({ property, data, sample, onClose, onSave }: Formu
                 </section>
             </div>
             <p className="text-xs text-muted-foreground">
-                Rechnen mit + − * / % ^, vergleichen mit == != &lt; &gt; &lt;= &gt;=, verknüpfen mit and, or, not. Text in
-                Anführungszeichen; + hängt Texte aneinander.
+                Rechnen mit + − * / % ^, vergleichen mit == != &lt; &gt; &lt;= &gt;=, verknüpfen mit and, or, not. Text
+                in Anführungszeichen; + hängt Texte aneinander.
             </p>
             {error && (
                 <p role="alert" className="text-sm text-destructive">

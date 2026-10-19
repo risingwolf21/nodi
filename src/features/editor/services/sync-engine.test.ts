@@ -3,12 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalDocument, RemoteDocumentApi, SaveOutcome } from "../types";
 import type { DocumentChanges } from "./document-changes";
 import { LocalDocumentStore } from "./local-document-store";
-import {
-    SYNC_MAX_ATTEMPTS,
-    SYNC_RETRY_BASE_MS,
-    SyncEngine,
-    type SyncFailure,
-} from "./sync-engine";
+import { SYNC_MAX_ATTEMPTS, SYNC_RETRY_BASE_MS, SyncEngine, type SyncFailure } from "./sync-engine";
 
 const otherDeviceId = "00000000-0000-4000-8000-0000000000ff";
 
@@ -235,9 +230,7 @@ describe("SyncEngine", () => {
     it("stores pending edits of open editors before syncing everything", async () => {
         const remote = createRemote();
         const engine = createEngine(remote);
-        engine.addFlusher(() =>
-            store.putLocalEdit(unsynced("page-1", "00000000-0000-4000-8000-000000000001")),
-        );
+        engine.addFlusher(() => store.putLocalEdit(unsynced("page-1", "00000000-0000-4000-8000-000000000001")));
 
         const remaining = await engine.syncAll();
 

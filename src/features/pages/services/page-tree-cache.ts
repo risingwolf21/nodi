@@ -21,9 +21,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 /** Also used for server answers; null means the data is not valid. */
 export function parseWorkspaces(value: unknown): Workspace[] | null {
     if (!Array.isArray(value)) return null;
-    const valid = value.every(
-        (item) => isObject(item) && typeof item.id === "string" && typeof item.name === "string",
-    );
+    const valid = value.every((item) => isObject(item) && typeof item.id === "string" && typeof item.name === "string");
     return valid ? value.map(({ id, name }: Workspace) => ({ id, name })) : null;
 }
 
@@ -82,11 +80,8 @@ export class PageTreeCache {
     private readonly connection: DatabaseConnection;
 
     constructor(userId: string, factory: IDBFactory = indexedDB) {
-        this.connection = new DatabaseConnection(
-            factory,
-            pageTreeDatabaseName(userId),
-            DATABASE_VERSION,
-            (database) => database.createObjectStore(SNAPSHOTS),
+        this.connection = new DatabaseConnection(factory, pageTreeDatabaseName(userId), DATABASE_VERSION, (database) =>
+            database.createObjectStore(SNAPSHOTS),
         );
     }
 

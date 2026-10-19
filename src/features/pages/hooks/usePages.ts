@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
@@ -87,10 +86,7 @@ type UsePagesResult = {
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
 };
 
-export function usePages(
-    workspaceId: string,
-    userId: string | undefined,
-): UsePagesResult {
+export function usePages(workspaceId: string, userId: string | undefined): UsePagesResult {
     const [pages, setPages] = useState<Page[]>([]);
     const [archivedPages, setArchivedPages] = useState<Page[]>([]);
     const [loading, setLoading] = useState(false);
@@ -197,13 +193,15 @@ export function usePages(
     }, [fromCache, workspaceId]);
 
     /** The workspace switched while a change was on its way. */
-    const switchedSince = useCallback(
-        (calledFor: string) => shownWorkspaceRef.current !== calledFor,
-        [],
-    );
+    const switchedSince = useCallback((calledFor: string) => shownWorkspaceRef.current !== calledFor, []);
 
     const createPage = useCallback(
-        async (title: string, parentId: string | null, section: PageSection, kind: PageKind = "page"): Promise<Page> => {
+        async (
+            title: string,
+            parentId: string | null,
+            section: PageSection,
+            kind: PageKind = "page",
+        ): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
@@ -238,19 +236,17 @@ export function usePages(
 
             setError("");
 
-            const response = await supabase
-                .from("pages")
-                .insert({
-                    id: createdPage.id,
-                    workspace_id: workspaceId,
-                    owner_id: userId,
-                    created_by: userId,
-                    title: normalizedTitle,
-                    visibility,
-                    parent_id: parentId,
-                    kind,
-                    position,
-                });
+            const response = await supabase.from("pages").insert({
+                id: createdPage.id,
+                workspace_id: workspaceId,
+                owner_id: userId,
+                created_by: userId,
+                title: normalizedTitle,
+                visibility,
+                parent_id: parentId,
+                kind,
+                position,
+            });
 
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
             if (failure) throw failure;
@@ -326,11 +322,7 @@ export function usePages(
             if (switchedSince(workspaceId)) return;
 
             setPages((current) =>
-                current.map((page) =>
-                    page.id === pageId
-                        ? { ...page, title: normalizedTitle }
-                        : page,
-                ),
+                current.map((page) => (page.id === pageId ? { ...page, title: normalizedTitle } : page)),
             );
         },
         [workspaceId, pages, requireOnline, switchedSince],
@@ -353,9 +345,7 @@ export function usePages(
             if ((response.data ?? []).length === 0) throw new Error(NO_EDIT_RIGHT_MESSAGE);
             if (switchedSince(workspaceId)) return;
 
-            setPages((current) =>
-                current.map((page) => (page.id === pageId ? { ...page, ...settings } : page)),
-            );
+            setPages((current) => current.map((page) => (page.id === pageId ? { ...page, ...settings } : page)));
         },
         [workspaceId, requireOnline, switchedSince],
     );
@@ -388,14 +378,9 @@ export function usePages(
             if (!archivedIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
             if (switchedSince(workspaceId)) return [...archivedIds];
 
-            setPages((current) =>
-                current.filter((page) => !archivedIds.has(page.id)),
-            );
+            setPages((current) => current.filter((page) => !archivedIds.has(page.id)));
 
-            setArchivedPages((current) => [
-                ...current,
-                ...pages.filter((page) => archivedIds.has(page.id)),
-            ]);
+            setArchivedPages((current) => [...current, ...pages.filter((page) => archivedIds.has(page.id))]);
 
             return [...archivedIds];
         },
@@ -428,22 +413,14 @@ export function usePages(
             if (!restoredIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
             if (switchedSince(workspaceId)) return [...restoredIds];
 
-            setArchivedPages((current) =>
-                current.filter((page) => !restoredIds.has(page.id)),
-            );
+            setArchivedPages((current) => current.filter((page) => !restoredIds.has(page.id)));
 
-            setPages((current) => [
-                ...current,
-                ...archivedPages.filter((page) =>
-                    restoredIds.has(page.id),
-                ),
-            ]);
+            setPages((current) => [...current, ...archivedPages.filter((page) => restoredIds.has(page.id))]);
 
             return [...restoredIds];
         },
         [archivedPages, workspaceId, requireOnline, switchedSince],
     );
-
 
     const permanentlyDeletePage = useCallback(
         async (pageId: string): Promise<string[]> => {
@@ -453,9 +430,7 @@ export function usePages(
             const ids = collectDescendantIds(pageId, archivedPages);
 
             if (!archivedPages.some((page) => page.id === pageId)) {
-                throw new Error(
-                    "Nur archivierte Seiten können endgültig gelöscht werden.",
-                );
+                throw new Error("Nur archivierte Seiten können endgültig gelöscht werden.");
             }
 
             // Only the owner may delete for good; RLS filters other
@@ -477,15 +452,12 @@ export function usePages(
 
             const deletedIds = new Set(ids);
 
-            setArchivedPages((current) =>
-                current.filter((page) => !deletedIds.has(page.id)),
-            );
+            setArchivedPages((current) => current.filter((page) => !deletedIds.has(page.id)));
 
             return ids;
         },
         [archivedPages, workspaceId, requireOnline, switchedSince],
     );
-
 
     return {
         pages: showsCurrentWorkspace ? pages : [],

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { CalendarDays, Columns3, LayoutGrid, List, Map as MapIcon, MapPin, Plus, Rss, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import type { Page } from "@/features/pages/types";
@@ -15,8 +15,8 @@ import {
     placeProperty,
     visibleProperties,
 } from "../database-model";
-import { useDatabase } from "../hooks/useDatabase";
-import type { DatabaseView as DatabaseViewModel, PropertyValue, ViewType } from "../types";
+import { useDatabase, type NewEntryValue } from "../hooks/useDatabase";
+import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
 import { BoardView } from "./BoardView";
 import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -95,7 +95,9 @@ function ViewTab({
                 }}
                 className={cn(
                     "flex h-8 items-center gap-1.5 border-b-2 px-2 text-sm pointer-coarse:h-10",
-                    active ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
+                    active
+                        ? "border-foreground font-medium"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
             >
                 <Icon className="size-3.5" aria-hidden="true" />
@@ -154,13 +156,13 @@ export function DatabaseView({
         updateView,
         deleteView,
         setValue,
-    } = useDatabase(database.id, userId);
+        createEntry,
+    } = useDatabase(database.id, userId, onCreateEntry);
     const [activeViewId, setActiveViewId] = useState("");
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
     const [formulaPropertyId, setFormulaPropertyId] = useState("");
     const [addViewOpen, setAddViewOpen] = useState(false);
-    const creatingEntry = useRef(false);
 
     const views = useMemo(() => [...(data?.views ?? [])].sort((a, b) => a.position - b.position), [data]);
     const activeView = views.find((view) => view.id === activeViewId) ?? views[0];
@@ -194,24 +196,21 @@ export function DatabaseView({
     }
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
-    const formulaProperty = data.properties.find((property) => property.id === formulaPropertyId && property.type === "formula");
+    const formulaProperty = data.properties.find(
+        (property) => property.id === formulaPropertyId && property.type === "formula",
+    );
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
 
     // Views other than the table open a new entry at once (like Notion); a
     // board column or a calendar day also sets its value.
-    async function createAndOpenEntry(initial?: { propertyId: string; value: PropertyValue }) {
-        if (!onCreateEntry || creatingEntry.current) return;
-        creatingEntry.current = true;
+    async function createAndOpenEntry(initial?: NewEntryValue) {
         try {
-            const pageId = await onCreateEntry();
-            if (initial && initial.value !== null) await setValue(pageId, initial.propertyId, initial.value);
-            onOpenEntry(pageId);
+            const pageId = await createEntry(initial);
+            if (pageId) onOpenEntry(pageId);
         } catch (err) {
             report(err instanceof Error ? err.message : "Der Eintrag konnte nicht angelegt werden.");
-        } finally {
-            creatingEntry.current = false;
         }
     }
 
@@ -398,7 +397,8 @@ export function DatabaseView({
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={
                         onCreateEntry && calendarDate
-                            ? (day) => createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
+                            ? (day) =>
+                                  createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
                             : undefined
                     }
                     onAddDateProperty={async () => {

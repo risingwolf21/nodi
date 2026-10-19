@@ -48,8 +48,12 @@ export function MapView({
                     <button
                         type="button"
                         onClick={() =>
-                            onAddPlaceProperty().catch((err: unknown) =>
-                                onError(err instanceof Error ? err.message : "Die Eigenschaft konnte nicht angelegt werden."),
+                            void onAddPlaceProperty().catch((err: unknown) =>
+                                onError(
+                                    err instanceof Error
+                                        ? err.message
+                                        : "Die Eigenschaft konnte nicht angelegt werden.",
+                                ),
                             )
                         }
                         className="mt-2 flex h-8 items-center gap-1.5 rounded border px-2 text-foreground hover:bg-accent/60"

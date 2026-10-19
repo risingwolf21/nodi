@@ -1,12 +1,6 @@
 import { forgetSyncEngine, syncEngineFor } from "@/features/editor/services/account-sync";
-import {
-    closeLocalDocumentStore,
-    localDatabaseName,
-} from "@/features/editor/services/local-document-store";
-import {
-    closePageTreeCache,
-    pageTreeDatabaseName,
-} from "@/features/pages/services/page-tree-cache";
+import { closeLocalDocumentStore, localDatabaseName } from "@/features/editor/services/local-document-store";
+import { closePageTreeCache, pageTreeDatabaseName } from "@/features/pages/services/page-tree-cache";
 import { deleteDatabase } from "@/lib/indexed-db";
 
 /**
@@ -22,10 +16,7 @@ export function syncBeforeSignOut(userId: string): Promise<number> {
  * delete this account's local data on this device. If signing out fails,
  * nothing is deleted.
  */
-export async function signOutAndDeleteLocalData(
-    userId: string,
-    signOut: () => Promise<void>,
-): Promise<void> {
+export async function signOutAndDeleteLocalData(userId: string, signOut: () => Promise<void>): Promise<void> {
     const engine = syncEngineFor(userId);
     engine.stop();
     try {

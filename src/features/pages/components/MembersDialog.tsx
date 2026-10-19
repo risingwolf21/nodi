@@ -42,7 +42,8 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
             },
             (err: unknown) => {
                 // members stays unknown: no owner or member actions on a guess.
-                if (active) setError(err instanceof Error ? err.message : "Die Mitglieder konnten nicht geladen werden.");
+                if (active)
+                    setError(err instanceof Error ? err.message : "Die Mitglieder konnten nicht geladen werden.");
             },
         );
 
@@ -96,13 +97,13 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                     Mitglieder von „{workspaceName}“
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                    Mitglieder sehen und bearbeiten alle Seiten im Bereich „Workspace“. Private Seiten
-                    sieht nur, wem sie gehören.
+                    Mitglieder sehen und bearbeiten alle Seiten im Bereich „Workspace“. Private Seiten sieht nur, wem
+                    sie gehören.
                 </p>
             </div>
 
             {isOwner && (
-                <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
+                <form onSubmit={(event) => void invite(event)} className="flex flex-col gap-2 sm:flex-row">
                     <Input
                         type="email"
                         aria-label="E-Mail-Adresse"
@@ -148,13 +149,12 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                         <li key={member.userId} className="flex flex-wrap items-center gap-2 py-2">
                             <span className="min-w-0 basis-full truncate text-sm sm:basis-0 sm:flex-1">
                                 {member.email}
-                                {member.userId === userId && (
-                                    <span className="text-muted-foreground"> (du)</span>
-                                )}
+                                {member.userId === userId && <span className="text-muted-foreground"> (du)</span>}
                             </span>
                             <span className="text-xs text-muted-foreground">{ROLE_LABELS[member.role]}</span>
-                            {isOwner && member.role !== "owner" && (
-                                confirmRemove === member.userId ? (
+                            {isOwner &&
+                                member.role !== "owner" &&
+                                (confirmRemove === member.userId ? (
                                     <Button
                                         type="button"
                                         variant="destructive"
@@ -175,8 +175,7 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                                     >
                                         Entfernen
                                     </Button>
-                                )
-                            )}
+                                ))}
                         </li>
                     ))}
                 </ul>
@@ -184,8 +183,8 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
 
             {confirmRemove && (
                 <p className="text-xs text-muted-foreground">
-                    Geteilte Seiten dieser Person gehen an dich, ihre Freigaben und öffentlichen Links
-                    darauf enden. Ihre privaten Seiten bleiben erhalten, sind aber nicht mehr sichtbar.
+                    Geteilte Seiten dieser Person gehen an dich, ihre Freigaben und öffentlichen Links darauf enden.
+                    Ihre privaten Seiten bleiben erhalten, sind aber nicht mehr sichtbar.
                 </p>
             )}
 
@@ -194,10 +193,9 @@ export function MembersDialog({ workspaceId, workspaceName, userId, onClose, onL
                     {confirmLeave ? (
                         <>
                             <p className="text-sm text-muted-foreground">
-                                Deine Seiten im Bereich „Workspace“ gehen an den Owner, deine Freigaben und
-                                öffentlichen Links darauf enden. Deine privaten Seiten
-                                bleiben erhalten, du siehst sie aber erst wieder, wenn du erneut hinzugefügt
-                                wirst.
+                                Deine Seiten im Bereich „Workspace“ gehen an den Owner, deine Freigaben und öffentlichen
+                                Links darauf enden. Deine privaten Seiten bleiben erhalten, du siehst sie aber erst
+                                wieder, wenn du erneut hinzugefügt wirst.
                             </p>
                             <div className="flex justify-end gap-2">
                                 <Button

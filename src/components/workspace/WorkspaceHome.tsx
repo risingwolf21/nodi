@@ -15,6 +15,7 @@ import type { Page, PageKind, PageSection } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
+import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
@@ -25,16 +26,6 @@ import { PageView } from "./PageView";
 
 const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
-
-// Open pages are history entries (without URL change), so the browser and
-// Android back button return to the previous page or the page list.
-const HISTORY_PAGE_KEY = "nodiPageId";
-
-function pageIdFromHistory(state: unknown): string {
-    if (typeof state !== "object" || state === null || !(HISTORY_PAGE_KEY in state)) return "";
-    const pageId = state[HISTORY_PAGE_KEY];
-    return typeof pageId === "string" ? pageId : "";
-}
 
 /** Local copies of pages that are no longer readable go at the next contact with the server. */
 function cleanUpRevokedCopies(userId: string): void {
@@ -56,18 +47,14 @@ export default function WorkspaceHome() {
         createWorkspace: createNewWorkspace,
         reload: reloadWorkspaces,
     } = useWorkspaces(user?.id);
-    const [pageId, setPageId] = useState("");
-    // A page created just now: its title gets the focus.
-    const [newPageId, setNewPageId] = useState("");
+    const { pageId, newPageId, openPage, closePage } = usePageNavigation();
     const [workspaceName, setWorkspaceName] = useState("");
     const [creatingWorkspace, setCreatingWorkspace] = useState(false);
     // Repeated taps on "Neue Seite" while one is being created add nothing.
     const creatingPage = useRef(false);
     const [error, setError] = useState("");
     const [signOutStep, setSignOutStep] = useState<
-        | { kind: "idle" }
-        | { kind: "syncing" }
-        | { kind: "confirm"; unsyncedPages: number }
+        { kind: "idle" } | { kind: "syncing" } | { kind: "confirm"; unsyncedPages: number }
     >({ kind: "idle" });
 
     const {
@@ -90,10 +77,7 @@ export default function WorkspaceHome() {
         fromCache: sharedPagesFromCache,
         renamePage: renameSharedPage,
         updatePage: updateSharedPage,
-    } = useSharedPages(
-        user?.id,
-        loading ? undefined : workspaces.map((workspace) => workspace.id),
-    );
+    } = useSharedPages(user?.id, loading ? undefined : workspaces.map((workspace) => workspace.id));
 
     const [activePageAction, setActivePageAction] = useState<{
         page: Page;
@@ -131,31 +115,6 @@ export default function WorkspaceHome() {
         window.addEventListener("online", deleteRevoked);
         return () => window.removeEventListener("online", deleteRevoked);
     }, [userId]);
-
-    useEffect(() => {
-        // An entry left from before a reload would reopen a stale page.
-        if (pageIdFromHistory(history.state)) history.replaceState(null, "");
-
-        const followHistory = (event: PopStateEvent) => setPageId(pageIdFromHistory(event.state));
-        window.addEventListener("popstate", followHistory);
-        return () => window.removeEventListener("popstate", followHistory);
-    }, []);
-
-    function openPage(nextPageId: string, { isNew = false } = {}) {
-        setNewPageId(isNew ? nextPageId : "");
-        if (nextPageId === pageId) return;
-
-        history.pushState({ [HISTORY_PAGE_KEY]: nextPageId }, "");
-        setPageId(nextPageId);
-    }
-
-    function closePage() {
-        if (pageIdFromHistory(history.state)) {
-            history.back();
-        } else {
-            setPageId("");
-        }
-    }
 
     // The open page belongs to the previous workspace; its history entry
     // would reopen it when switching back.
@@ -242,7 +201,7 @@ export default function WorkspaceHome() {
                                 <CardTitle>Deinen Workspace erstellen</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <form onSubmit={createWorkspace} className="space-y-4">
+                                <form onSubmit={(event) => void createWorkspace(event)} className="space-y-4">
                                     <Input
                                         aria-label="Name des Workspace"
                                         value={workspaceName}
@@ -322,7 +281,9 @@ export default function WorkspaceHome() {
                                         : undefined
                                 }
                                 userId={user?.id}
-                                entries={(sharedPage ? sharedPages : pages).filter((item) => item.parent_id === page.id)}
+                                entries={(sharedPage ? sharedPages : pages).filter(
+                                    (item) => item.parent_id === page.id,
+                                )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
                             />

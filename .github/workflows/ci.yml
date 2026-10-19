@@ -34,6 +34,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Check formatting
+        run: npm run format:check
+
       - name: Unit tests
         run: npm test
 
@@ -66,6 +69,40 @@ jobs:
         run: |
           ! grep -rlE "sb_secret_[A-Za-z0-9_-]{16,}" dist \
             || (echo "Ein geheimer Supabase-Schlüssel steht im Bundle" && exit 1)
+
+  # Browser tests against a production build with a fake Supabase backend
+  # (e2e/fake-supabase.ts): no real server, no secrets.
+  e2e:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   database:
     name: Database migrations & tests

@@ -13,11 +13,5 @@ export default function PublicDocument({ content }: { content: DocumentContent }
         initialContent: content.length > 0 ? content : undefined,
     });
 
-    return (
-        <BlockNoteView
-            editor={editor}
-            editable={false}
-            theme={{ light: editorTheme, dark: editorTheme }}
-        />
-    );
+    return <BlockNoteView editor={editor} editable={false} theme={{ light: editorTheme, dark: editorTheme }} />;
 }

@@ -9,7 +9,11 @@ export function nextPosition(siblings: Page[]): number {
 /** An entry of a database; unlike other pages it may have an empty title. */
 export function isDatabaseEntry(pageId: string, pages: Page[]): boolean {
     const parentId = pages.find((page) => page.id === pageId)?.parent_id;
-    return parentId !== undefined && parentId !== null && pages.some((page) => page.id === parentId && page.kind === "database");
+    return (
+        parentId !== undefined &&
+        parentId !== null &&
+        pages.some((page) => page.id === parentId && page.kind === "database")
+    );
 }
 
 /**
@@ -29,9 +33,7 @@ export function collectDescendantIds(pageId: string, pages: Page[]): string[] {
 
         ids.add(id);
 
-        pages
-            .filter((page) => page.parent_id === id)
-            .forEach((child) => collect(child.id));
+        pages.filter((page) => page.parent_id === id).forEach((child) => collect(child.id));
     }
 
     collect(pageId);
@@ -43,10 +45,7 @@ export function collectDescendantIds(pageId: string, pages: Page[]): string[] {
  * Archived ancestors of a page, nearest first. Stops at the first ancestor
  * that is not in `archivedPages`, i.e. one that is still active.
  */
-export function findArchivedAncestors(
-    pageId: string,
-    archivedPages: Page[],
-): Page[] {
+export function findArchivedAncestors(pageId: string, archivedPages: Page[]): Page[] {
     return findAncestors(pageId, archivedPages);
 }
 
@@ -76,10 +75,7 @@ export function findAncestors(pageId: string, pages: Page[]): Page[] {
  * page visible in the tree and attached to its parent; a restored page under
  * an archived parent would be hidden and deleted with that parent.
  */
-export function collectRestoreIds(
-    pageId: string,
-    archivedPages: Page[],
-): string[] {
+export function collectRestoreIds(pageId: string, archivedPages: Page[]): string[] {
     const ids = new Set(collectDescendantIds(pageId, archivedPages));
 
     for (const ancestor of findArchivedAncestors(pageId, archivedPages)) {

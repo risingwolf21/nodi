@@ -35,9 +35,23 @@ const status: DatabaseProperty = {
     ],
     position: 1,
 };
-const estimate: DatabaseProperty = { id: "estimate", databaseId: "db", name: "Aufwand", type: "number", options: [], position: 2 };
+const estimate: DatabaseProperty = {
+    id: "estimate",
+    databaseId: "db",
+    name: "Aufwand",
+    type: "number",
+    options: [],
+    position: 2,
+};
 const due: DatabaseProperty = { id: "due", databaseId: "db", name: "Fällig", type: "date", options: [], position: 3 };
-const done: DatabaseProperty = { id: "done", databaseId: "db", name: "Fertig", type: "checkbox", options: [], position: 4 };
+const done: DatabaseProperty = {
+    id: "done",
+    databaseId: "db",
+    name: "Fertig",
+    type: "checkbox",
+    options: [],
+    position: 4,
+};
 const edited: DatabaseProperty = {
     id: "edited",
     databaseId: "db",
@@ -72,7 +86,12 @@ const data: DatabaseData = {
     values: [
         { pageId: "a", propertyId: "status", value: "done", updatedAt: "2026-10-05T10:00:00Z" },
         { pageId: "a", propertyId: "estimate", value: 3, updatedAt: "2026-10-05T10:00:00Z" },
-        { pageId: "a", propertyId: "due", value: { start: "2026-10-20", end: null }, updatedAt: "2026-10-05T10:00:00Z" },
+        {
+            pageId: "a",
+            propertyId: "due",
+            value: { start: "2026-10-20", end: null },
+            updatedAt: "2026-10-05T10:00:00Z",
+        },
         { pageId: "b", propertyId: "status", value: "todo", updatedAt: "2026-10-04T10:00:00Z" },
         { pageId: "b", propertyId: "estimate", value: 8, updatedAt: "2026-10-04T10:00:00Z" },
         { pageId: "b", propertyId: "done", value: true, updatedAt: "2026-10-04T10:00:00Z" },
@@ -141,7 +160,9 @@ describe("matchesFilter", () => {
     const [a, b, c] = buildRows(entries, data);
 
     it("filters text, options, dates and emptiness", () => {
-        expect(matchesFilter(a, { propertyId: TITLE_FIELD, operator: "contains", value: "angebot" }, undefined)).toBe(true);
+        expect(matchesFilter(a, { propertyId: TITLE_FIELD, operator: "contains", value: "angebot" }, undefined)).toBe(
+            true,
+        );
         expect(matchesFilter(b, { propertyId: "status", operator: "equals", value: "done" }, status)).toBe(false);
         expect(matchesFilter(a, { propertyId: "due", operator: "before", value: "2026-10-21" }, due)).toBe(true);
         expect(matchesFilter(c, { propertyId: "status", operator: "isEmpty", value: "" }, status)).toBe(true);
@@ -205,7 +226,15 @@ describe("feed", () => {
 describe("calendar", () => {
     it("starts weeks on Monday and covers the whole month", () => {
         const weeks = monthGrid(2026, 9); // October 2026 starts on a Thursday.
-        expect(weeks[0]).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]);
+        expect(weeks[0]).toEqual([
+            "2026-09-28",
+            "2026-09-29",
+            "2026-09-30",
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-03",
+            "2026-10-04",
+        ]);
         expect(weeks.at(-1)?.at(-1)).toBe("2026-11-01");
         expect(weeks).toHaveLength(5);
         expect(monthGrid(2027, 1)).toHaveLength(4); // February 2027 starts on a Monday.
@@ -233,12 +262,24 @@ describe("calendar", () => {
 });
 
 describe("places", () => {
-    const place: DatabaseProperty = { id: "place", databaseId: "db", name: "Ort", type: "place", options: [], position: 6 };
+    const place: DatabaseProperty = {
+        id: "place",
+        databaseId: "db",
+        name: "Ort",
+        type: "place",
+        options: [],
+        position: 6,
+    };
     const placeData: DatabaseData = {
         ...data,
         properties: [place],
         values: [
-            { pageId: "a", propertyId: "place", value: { lat: 48.1372, lng: 11.5756, label: "Marienplatz, München" }, updatedAt: "" },
+            {
+                pageId: "a",
+                propertyId: "place",
+                value: { lat: 48.1372, lng: 11.5756, label: "Marienplatz, München" },
+                updatedAt: "",
+            },
             { pageId: "b", propertyId: "place", value: { lat: 52.52, lng: 13.405, label: null }, updatedAt: "" },
             { pageId: "c", propertyId: "place", value: { lat: 120, lng: 0 }, updatedAt: "" },
         ],
@@ -286,7 +327,12 @@ describe("formulas", () => {
 
     it("computes from other properties, the title and other formulas", () => {
         const total = formula("total", "Gesamt", 'prop("Aufwand") * 100', 10);
-        const label = formula("label", "Beschriftung", 'prop("Name") + ": " + prop("Gesamt") + " € (" + prop("Status") + ")"', 11);
+        const label = formula(
+            "label",
+            "Beschriftung",
+            'prop("Name") + ": " + prop("Gesamt") + " € (" + prop("Status") + ")"',
+            11,
+        );
         const [a, b] = rowsWith(label, total);
         expect(a.values.total).toBe(300);
         expect(a.values.label).toBe("Angebot schreiben: 300 € (Erledigt)");
@@ -346,7 +392,10 @@ describe("parsing", () => {
     it("reads view settings leniently", () => {
         expect(
             parseViewConfig({
-                sort: [{ propertyId: "status", direction: "sideways" }, { propertyId: "status", direction: "asc" }],
+                sort: [
+                    { propertyId: "status", direction: "sideways" },
+                    { propertyId: "status", direction: "asc" },
+                ],
                 filter: [{ propertyId: "x", operator: "explodes", value: "" }],
                 hiddenPropertyIds: ["estimate", 7],
             }),
@@ -368,7 +417,14 @@ describe("parsing", () => {
 
     it("reads the server's options object and the cached list alike", () => {
         const [fromServer] = parseProperties([
-            { id: "p", databaseId: "db", name: "X", type: "select", options: { options: [{ id: "o", name: "O", color: "red" }] }, position: 1 },
+            {
+                id: "p",
+                databaseId: "db",
+                name: "X",
+                type: "select",
+                options: { options: [{ id: "o", name: "O", color: "red" }] },
+                position: 1,
+            },
         ]);
         const [fromCache] = parseProperties([{ ...fromServer }]);
         expect(fromCache.options).toEqual([{ id: "o", name: "O", color: "red" }]);
@@ -386,6 +442,8 @@ describe("helpers", () => {
     });
 
     it("hides properties of a view and keeps the order", () => {
-        expect(visibleProperties([due, status], config({ hiddenPropertyIds: ["due"] })).map((p) => p.id)).toEqual(["status"]);
+        expect(visibleProperties([due, status], config({ hiddenPropertyIds: ["due"] })).map((p) => p.id)).toEqual([
+            "status",
+        ]);
     });
 });

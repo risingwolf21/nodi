@@ -17,8 +17,7 @@ const PERMISSION_LABELS: Record<SharePermission, string> = {
     edit: "Kann bearbeiten",
 };
 
-const selectClass =
-    "h-9 rounded-md border bg-background px-2 text-sm disabled:opacity-50 pointer-coarse:h-10";
+const selectClass = "h-9 rounded-md border bg-background px-2 text-sm disabled:opacity-50 pointer-coarse:h-10";
 
 function PermissionSelect({
     value,
@@ -107,7 +106,9 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
             },
             (err: unknown) => {
                 if (!active) return;
-                setLinkLoadError(err instanceof Error ? err.message : "Der öffentliche Link konnte nicht geladen werden.");
+                setLinkLoadError(
+                    err instanceof Error ? err.message : "Der öffentliche Link konnte nicht geladen werden.",
+                );
             },
         );
 
@@ -163,7 +164,7 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
                 </p>
             </div>
 
-            <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
+            <form onSubmit={(event) => void invite(event)} className="flex flex-col gap-2 sm:flex-row">
                 <Input
                     type="email"
                     aria-label="E-Mail-Adresse"
@@ -219,9 +220,7 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
                                     label={`Rolle von ${share.email}`}
                                     value={share.permission}
                                     disabled={busy}
-                                    onChange={(next) =>
-                                        void run(() => pageSharing.share(page.id, share.email, next))
-                                    }
+                                    onChange={(next) => void run(() => pageSharing.share(page.id, share.email, next))}
                                 />
                                 <Button
                                     type="button"

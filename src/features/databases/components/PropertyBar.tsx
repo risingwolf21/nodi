@@ -17,7 +17,10 @@ type PropertyBarProps = {
 
 /** The properties of an entry, between its title and its text (like Notion). */
 export function PropertyBar({ entry, databaseId, userId, readOnly }: PropertyBarProps) {
-    const { data, error, fromCache, addProperty, updateProperty, addOption, setValue } = useDatabase(databaseId, userId);
+    const { data, error, fromCache, addProperty, updateProperty, addOption, setValue } = useDatabase(
+        databaseId,
+        userId,
+    );
     const [actionError, setActionError] = useState("");
     const [formulaPropertyId, setFormulaPropertyId] = useState("");
 
@@ -32,7 +35,9 @@ export function PropertyBar({ entry, databaseId, userId, readOnly }: PropertyBar
     const editable = !readOnly && !fromCache && data.canEdit;
     const [row] = buildRows([entry], data);
     const properties = [...data.properties].sort((a, b) => a.position - b.position);
-    const formulaProperty = properties.find((property) => property.id === formulaPropertyId && property.type === "formula");
+    const formulaProperty = properties.find(
+        (property) => property.id === formulaPropertyId && property.type === "formula",
+    );
 
     return (
         <section aria-label="Eigenschaften" className="mb-6 space-y-0.5 border-b px-[var(--page-gutter)] pb-4">
@@ -92,4 +97,3 @@ export function PropertyBar({ entry, databaseId, userId, readOnly }: PropertyBar
         </section>
     );
 }
-

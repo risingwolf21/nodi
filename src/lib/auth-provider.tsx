@@ -1,8 +1,4 @@
-import {
-    useEffect,
-    useState,
-    type ReactNode,
-} from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 import { authStorageKey, supabase } from "@/lib/supabase";
 import { AuthContext, type Account } from "./auth-context";
@@ -40,26 +36,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               )
             : null;
 
-        supabase.auth.getSession().then(({ data, error }) => {
+        const stopWaiting = () => {
             answered = true;
             if (offlineStart) clearTimeout(offlineStart);
-            if (!active) return;
+        };
 
-            if (data.session) {
-                rememberAccount(toAccount(data.session));
-                setOfflineAccount(null);
-            } else if (error && isAuthRetryableFetchError(error)) {
-                // The session is still stored; supabase-js renews it once the
-                // network is back. Until then the app works with local data.
+        supabase.auth
+            .getSession()
+            .then(({ data, error }) => {
+                stopWaiting();
+                if (!active) return;
+
+                if (data.session) {
+                    rememberAccount(toAccount(data.session));
+                    setOfflineAccount(null);
+                } else if (error && isAuthRetryableFetchError(error)) {
+                    // The session is still stored; supabase-js renews it once the
+                    // network is back. Until then the app works with local data.
+                    setOfflineAccount(remembered);
+                } else {
+                    if (error) console.error("Could not load auth session:", error);
+                    setOfflineAccount(null);
+                }
+
+                setSession(data.session);
+                setLoading(false);
+            })
+            .catch((err: unknown) => {
+                // Unexpected (storage, a bug in the client): without an
+                // answer the app would stay at "loading". Like a missing
+                // network: local data of a remembered account, else login.
+                stopWaiting();
+                if (!active) return;
+                console.error("Could not load auth session:", err);
                 setOfflineAccount(remembered);
-            } else {
-                if (error) console.error("Could not load auth session:", error);
-                setOfflineAccount(null);
-            }
-
-            setSession(data.session);
-            setLoading(false);
-        });
+                setLoading(false);
+            });
 
         const {
             data: { subscription },
@@ -101,6 +113,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener("online", renew);
     }, [offlineAccount]);
 
+    async function signIn(email: string, password: string) {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+    }
+
+    async function signUp(email: string, password: string) {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        // Without a session the address still has to be confirmed.
+        return { needsConfirmation: !data.session };
+    }
+
     async function signOut() {
         const { error } = await supabase.auth.signOut();
 
@@ -129,6 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 user,
                 offline: !session && offlineAccount !== null,
                 loading,
+                signIn,
+                signUp,
                 signOut,
             }}
         >

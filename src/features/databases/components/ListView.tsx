@@ -47,7 +47,9 @@ export function ListView({ rows, properties, editable, onOpenEntry, onCreateEntr
                     </li>
                 ))}
             </ul>
-            {rows.length === 0 && <p className="py-3 pl-1 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>}
+            {rows.length === 0 && (
+                <p className="py-3 pl-1 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>
+            )}
             {editable && onCreateEntry && (
                 <button
                     type="button"

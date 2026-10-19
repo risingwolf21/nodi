@@ -17,10 +17,7 @@ const failureHints: Record<RequestFailureReason, string> = {
 
 /** Account-wide sync state, also for pages that are not open. */
 export function SyncStatusIndicator({ engine, offline }: SyncStatusIndicatorProps) {
-    const { unsyncedPages, failure } = useSyncExternalStore(
-        engine.subscribeOverview,
-        engine.getOverview,
-    );
+    const { unsyncedPages, failure } = useSyncExternalStore(engine.subscribeOverview, engine.getOverview);
 
     if (unsyncedPages === 0) {
         return offline ? (

@@ -1,6 +1,4 @@
-import {
-    createContext
-} from "react";
+import { createContext } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 /** The signed-in account; also known offline, when no session is usable. */
@@ -18,9 +16,9 @@ type AuthContextValue = {
      */
     offline: boolean;
     loading: boolean;
+    signIn: (email: string, password: string) => Promise<void>;
+    signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
     signOut: () => Promise<void>;
 };
 
-export const AuthContext = createContext<AuthContextValue | undefined>(
-    undefined,
-);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
