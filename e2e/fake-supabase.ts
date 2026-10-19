@@ -413,9 +413,14 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         return route.fulfill({ status: 200, contentType: "image/png", body: file, headers: CORS });
     }
 
-    // Documents: the feed asks for the first blocks; a page's own text is empty.
+    // Documents: the feed asks for the first blocks; a page's own text is what
+    // the test saved, else empty. The version is old: a local copy always wins.
     if (path === "/rest/v1/page_documents") {
-        return json(query.get("select")?.includes("block0") ? backend.previews : []);
+        if (query.get("select")?.includes("block0")) return json(backend.previews);
+        const saved = backend.savedDocuments.get(query.get("page_id")?.replace("eq.", "") ?? "");
+        return json(
+            saved ? [{ document: saved, client_updated_at: "2026-01-01T00:00:00Z", last_mutation_id: null }] : [],
+        );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
 

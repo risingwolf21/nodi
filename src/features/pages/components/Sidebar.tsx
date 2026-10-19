@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
+import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree } from "../PageTree";
@@ -27,6 +27,7 @@ type SidebarProps = {
     /** `section` is used for root pages; subpages take their parent's. */
     onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
     onOpenMembers: () => void;
+    onImportNotion: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
@@ -63,6 +64,7 @@ export function Sidebar({
     onSelect,
     onCreatePage,
     onOpenMembers,
+    onImportNotion,
     onRename,
     onArchive,
     onRestore,
@@ -120,6 +122,17 @@ export function Sidebar({
                         >
                             <Users className="size-4" />
                             Mitglieder
+                        </MenuItem>
+                    )}
+                    {!readOnly && workspace && (
+                        <MenuItem
+                            onSelect={() => {
+                                setWorkspaceMenuOpen(false);
+                                onImportNotion();
+                            }}
+                        >
+                            <FileInput className="size-4" />
+                            Aus Notion importieren
                         </MenuItem>
                     )}
                     {accountEmail && <p className="truncate px-2 py-1 text-xs text-muted-foreground">{accountEmail}</p>}
