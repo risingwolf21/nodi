@@ -82,7 +82,13 @@ type UsePagesResult = {
     fromCache: boolean;
     /** A subpage takes the section of its parent; `section` is for root pages. */
     /** Below a database the page is an entry; it may have an empty title. */
-    createPage: (title: string, parentId: string | null, section: PageSection, kind?: PageKind) => Promise<Page>;
+    createPage: (
+        title: string,
+        parentId: string | null,
+        section: PageSection,
+        kind?: PageKind,
+        id?: string,
+    ) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
@@ -93,6 +99,36 @@ type UsePagesResult = {
     restorePage: (pageId: string) => Promise<string[]>;
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
 };
+
+// The ids go into the URL (`id=in.(…)`); a few hundred make it too long
+// (414, e.g. a Notion import in the trash). Whole trees go in parts.
+const IDS_PER_REQUEST = 100;
+
+/**
+ * Moves pages to or out of the trash, in parts. Returns what the server
+ * changed (RLS leaves pages without edit rights out) and the first failure.
+ */
+async function setArchived(
+    workspaceId: string,
+    ids: string[],
+    archived: boolean,
+    failureMessage: string,
+): Promise<{ changedIds: Set<string>; failure: Error | null }> {
+    const changedIds = new Set<string>();
+    for (let start = 0; start < ids.length; start += IDS_PER_REQUEST) {
+        const response = await supabase
+            .from("pages")
+            .update({ is_archived: archived })
+            .eq("workspace_id", workspaceId)
+            .in("id", ids.slice(start, start + IDS_PER_REQUEST))
+            .eq("is_archived", !archived)
+            .select("id");
+        const failure = pageChangeError(response, failureMessage);
+        if (failure) return { changedIds, failure };
+        for (const row of response.data ?? []) changedIds.add(row.id);
+    }
+    return { changedIds, failure: null };
+}
 
 export function usePages(workspaceId: string, userId: string | undefined): UsePagesResult {
     const [pages, setPages] = useState<Page[]>([]);
@@ -217,6 +253,8 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             parentId: string | null,
             section: PageSection,
             kind: PageKind = "page",
+            // Known before the page exists, e.g. for links to it (Notion import).
+            id: string = crypto.randomUUID(),
         ): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
@@ -240,7 +278,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 : null;
 
             const createdPage: Page = {
-                id: crypto.randomUUID(),
+                id,
                 title: normalizedTitle,
                 parent_id: parentId,
                 owner_id: userId,
@@ -426,26 +464,21 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 throw new Error("Die Seite wurde nicht gefunden.");
             }
 
-            const response = await supabase
-                .from("pages")
-                .update({ is_archived: true })
-                .eq("workspace_id", workspaceId)
-                .in("id", ids)
-                .eq("is_archived", false)
-                .select("id");
-
-            const failure = pageChangeError(response, "Die Seite konnte nicht in den Papierkorb verschoben werden.");
+            const { changedIds: archivedIds, failure } = await setArchived(
+                workspaceId,
+                ids,
+                true,
+                "Die Seite konnte nicht in den Papierkorb verschoben werden.",
+            );
+            // What the server changed before a failure is shown as well.
+            if (!switchedSince(workspaceId)) {
+                setPages((current) => current.filter((page) => !archivedIds.has(page.id)));
+                setArchivedPages((current) => [...current, ...pages.filter((page) => archivedIds.has(page.id))]);
+            }
             if (failure) throw failure;
 
             // Only what the server changed; subpages without edit rights stay.
-            const archivedIds = new Set((response.data ?? []).map((row) => row.id));
             if (!archivedIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
-            if (switchedSince(workspaceId)) return [...archivedIds];
-
-            setPages((current) => current.filter((page) => !archivedIds.has(page.id)));
-
-            setArchivedPages((current) => [...current, ...pages.filter((page) => archivedIds.has(page.id))]);
-
             return [...archivedIds];
         },
         [pages, archivedPages, workspaceId, requireOnline, switchedSince],
@@ -462,25 +495,19 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 throw new Error("Die archivierte Seite wurde nicht gefunden.");
             }
 
-            const response = await supabase
-                .from("pages")
-                .update({ is_archived: false })
-                .eq("workspace_id", workspaceId)
-                .in("id", ids)
-                .eq("is_archived", true)
-                .select("id");
-
-            const failure = pageChangeError(response, "Die Seite konnte nicht wiederhergestellt werden.");
+            const { changedIds: restoredIds, failure } = await setArchived(
+                workspaceId,
+                ids,
+                false,
+                "Die Seite konnte nicht wiederhergestellt werden.",
+            );
+            if (!switchedSince(workspaceId)) {
+                setArchivedPages((current) => current.filter((page) => !restoredIds.has(page.id)));
+                setPages((current) => [...current, ...archivedPages.filter((page) => restoredIds.has(page.id))]);
+            }
             if (failure) throw failure;
 
-            const restoredIds = new Set((response.data ?? []).map((row) => row.id));
             if (!restoredIds.has(pageId)) throw new Error(NO_EDIT_RIGHT_MESSAGE);
-            if (switchedSince(workspaceId)) return [...restoredIds];
-
-            setArchivedPages((current) => current.filter((page) => !restoredIds.has(page.id)));
-
-            setPages((current) => [...current, ...archivedPages.filter((page) => restoredIds.has(page.id))]);
-
             return [...restoredIds];
         },
         [archivedPages, workspaceId, requireOnline, switchedSince],

@@ -7,13 +7,22 @@ type JsonObject = Record<string, unknown>;
 export type LinkTarget =
     | { kind: "web" }
     | { kind: "page" }
-    | { kind: "database" }
+    /** `databaseId` of the imported database; null when it is not imported. */
+    | { kind: "database"; databaseId: string | null }
     | { kind: "file"; path: string }
     | { kind: "missing"; path: string };
 
 export type UploadResult = { reference: string } | { error: string };
 
-export type RewriteResult = { blocks: JsonObject[]; files: number; problems: string[] };
+/** A "Datenbank" block made from a link (package 19d); it gets the database's views. */
+export type DatabaseBlockLink = { blockId: string; databaseId: string };
+
+export type RewriteResult = {
+    blocks: JsonObject[];
+    files: number;
+    problems: string[];
+    databaseBlocks: DatabaseBlockLink[];
+};
 
 const FILE_BLOCKS = new Set(["image", "file", "video", "audio"]);
 
@@ -27,9 +36,11 @@ function note(text: string): JsonObject {
 
 /**
  * Turns the parsed Markdown of an exported page into Nodi blocks: images
- * and attachments of the export are uploaded and referenced, links to
- * other exported pages become plain text (their pages exist in the tree),
- * links to the web stay. Problems are reported, nothing is dropped silently.
+ * and attachments of the export are uploaded and referenced, a link to an
+ * imported database on its own becomes a "Datenbank" block (as Notion shows
+ * a database in a page), links to other exported pages become plain text
+ * (their pages exist in the tree), links to the web stay. Problems are
+ * reported, nothing is dropped silently.
  */
 export async function rewriteImportedBlocks(
     blocks: readonly unknown[],
@@ -38,6 +49,7 @@ export async function rewriteImportedBlocks(
 ): Promise<RewriteResult> {
     let files = 0;
     const problems: string[] = [];
+    const databaseBlocks: DatabaseBlockLink[] = [];
 
     const uploadAs = async (path: string, type: string, original: JsonObject): Promise<JsonObject> => {
         const result = await upload(path);
@@ -90,8 +102,8 @@ export async function rewriteImportedBlocks(
         return content;
     };
 
-    // A paragraph that is only a link to a file of the export is an attachment.
-    const attachmentLink = (block: JsonObject): string | null => {
+    // A paragraph that is only a link: an attachment or a database of the export.
+    const onlyLink = (block: JsonObject): LinkTarget | null => {
         if (block.type !== "paragraph" || !Array.isArray(block.content)) return null;
         const meaningful = block.content.filter(
             (item) => !(isObject(item) && item.type === "text" && typeof item.text === "string" && !item.text.trim()),
@@ -100,8 +112,7 @@ export async function rewriteImportedBlocks(
         if (meaningful.length !== 1 || !isObject(only) || only.type !== "link" || typeof only.href !== "string") {
             return null;
         }
-        const target = classify(only.href);
-        return target.kind === "file" ? target.path : null;
+        return classify(only.href);
     };
 
     const rewriteBlock = async (value: unknown): Promise<JsonObject[]> => {
@@ -121,8 +132,16 @@ export async function rewriteImportedBlocks(
             return [block];
         }
 
-        const attachment = attachmentLink(block);
-        if (attachment) return [await uploadAs(attachment, isImagePath(attachment) ? "image" : "file", block)];
+        const link = onlyLink(block);
+        if (link?.kind === "file") return [await uploadAs(link.path, isImagePath(link.path) ? "image" : "file", block)];
+        if (link?.kind === "database" && link.databaseId) {
+            // A fixed id: the block's views are stored under it.
+            const blockId = crypto.randomUUID();
+            databaseBlocks.push({ blockId, databaseId: link.databaseId });
+            return [
+                { id: blockId, type: "database", props: { databaseId: link.databaseId }, children: block.children },
+            ];
+        }
 
         return [{ ...block, content: rewriteContent(block.content) }];
     };
@@ -134,5 +153,5 @@ export async function rewriteImportedBlocks(
         return result;
     };
 
-    return { blocks: await rewriteAll(blocks), files, problems };
+    return { blocks: await rewriteAll(blocks), files, problems, databaseBlocks };
 }

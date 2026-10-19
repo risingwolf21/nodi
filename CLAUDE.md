@@ -271,6 +271,8 @@ src/
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
+    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c)
+    editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -298,6 +300,7 @@ src/
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
       components/CalendarView.tsx    # Monatskalender (14d)
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
+      components/DatabaseBlockContent.tsx # Datenbank als Block im Text: Auswahl, eigene Ansichten (19c)
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
@@ -384,14 +387,15 @@ supabase/
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
-                            # Verknüpfungen (P17d), Verschieben (P18a)
+                            # Verknüpfungen (P17d), Verschieben (P18a),
+                            # Ansichten je Block (P19b)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
                             # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
                             # Dateien (P15a), Verknüpfungen (P17d),
-                            # Verschieben (P18a)
+                            # Verschieben (P18a), Ansichten je Block (P19b)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1800,6 +1804,81 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
       - Noch nicht: Reihenfolge unter Geschwistern per Ziehen (Seiten
         stehen nach Erstellung), Verschieben in andere Workspaces.
 
+19. **Notion-Import nachbessern, Datenbank-Ansichten in Seiten**
+    (Nutzerwunsch 2026-10-19): Ein großer Import ließ sich nicht in den
+    Papierkorb legen, Ansichten von Datenbanken in Seiten fehlten, und
+    bestehende Datenbanken sollen sich in eine Seite einbinden lassen.
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Ein Block „Datenbank“ im
+      Text zeigt eine bestehende Datenbank mit **eigenen Ansichten je
+      Block** (wie verknüpfte Ansichten in Notion): Typ, Filter,
+      Sortierung und sichtbare Eigenschaften des Blocks ändern die
+      Ansichten der Datenbank nicht. (2) Der Import legt diese Blöcke
+      künftig an; bestehende Importe werden nicht umgebaut (der Nutzer
+      löscht seinen Import und importiert neu).
+    - **Aufteilung:** 19a Papierkorb für große Bäume (Fehlerbehebung),
+      19b Datenbank (Ansichten je Block), 19c Block „Datenbank“ im
+      Editor, 19d Import erzeugt die Blöcke.
+    - **Umsetzung 19b** (`20261019200000_block_views.sql`):
+      - Tabelle `block_views`: Seite (`page_id`), Block im Dokument
+        (`block_id`, die BlockNote-ID, 1–100 Zeichen), gezeigte
+        Datenbank (`database_id`, muss eine Datenbank sein, `22023`),
+        Name, Typ (wie `database_views`), `config` (JSON-Objekt),
+        `position`. Löschen der Seite oder der Datenbank löscht die
+        Zeilen mit; Ansichten eines aus dem Text entfernten Blocks
+        bleiben bis dahin liegen (der Server liest keine Dokumente).
+      - Lesen mit `can_read_page` auf Seite **und** Datenbank (die
+        Ansicht zeigt deren Daten). Anlegen und Ändern mit
+        `can_edit_page` der Seite und `can_read_page` der Datenbank,
+        Löschen mit `can_edit_page` der Seite (`42501` per RLS).
+      - Nur eine neue Tabelle (rückwärtskompatibel).
+      - pgTAP: `block_views.test.sql`.
+    - **Umsetzung 19c** (nur Frontend, keine Migration):
+      - Editor-Schema `components/editor/editor-schema.tsx`: BlockNotes
+        Blöcke plus `database` (`props.databaseId`, kein Inhalt).
+        `DocumentContent` ist an dieses Schema gebunden; Editor und
+        öffentliche Ansicht nutzen es.
+      - Slash-Menü „/Datenbank“ (Gruppe „Datenbanken“) fügt den Block ein;
+        er fragt zuerst, welche Datenbank des Workspace er zeigt (Suche).
+        Ohne Schreibrecht steht dort nur ein Hinweis.
+      - Der Block (`DatabaseBlock`, Inhalt nachgeladen im
+        Datenbank-Chunk: `DatabaseBlockContent`) zeigt Titel (öffnet die
+        Datenbank) und `DatabaseView` mit den Ansichten des Blocks.
+        Kontext aus der App per `DatabaseBlockContext` (bekannte Seiten,
+        Datenbanken, Öffnen, Einträge anlegen und umbenennen).
+      - Ansichten des Blocks: `useDatabase(…, block)` liest und schreibt
+        `block_views` statt `database_views`. Ohne eigene Ansichten zeigt
+        der Block eine Tabelle, die erst bei der ersten Änderung
+        gespeichert wird (Lesen schreibt nichts). Ansichten ändern darf,
+        wer die Seite bearbeiten darf; Werte, Eigenschaften und Einträge
+        wie auf der Datenbank-Seite.
+      - Offline: Cache je Block (`database-block:<page>:<block>` in
+        `nodi-<userId>-tree`), nur lesbar.
+      - Fehlt die Datenbank (Papierkorb, gelöscht, nicht freigegeben),
+        steht ein Hinweis da. Die öffentliche Ansicht zeigt statt der
+        Datenbank einen Hinweis (Einträge sind nicht veröffentlicht).
+      - Achtung: App-Versionen vor 19c kennen den Block nicht und können
+        Seiten mit Datenbank-Block nicht öffnen; installierte Apps nach
+        dem Update-Hinweis aktualisieren.
+      - Tests: Playwright `database-block.e2e.ts` (Fake `block_views`);
+        zusätzlich gegen die lokale Supabase geprüft.
+    - **Umsetzung 19d** (nur Frontend, keine Migration):
+      - Der Import vergibt die IDs der Datenbanken vorab
+        (`createPage(…, id)`): Der Text einer Seite wird gespeichert, bevor
+        die Datenbanken darunter angelegt sind.
+      - Ein Absatz, der nur aus einem Link auf eine importierte Datenbank
+        besteht (`….csv`), wird zum Block „Datenbank“ (feste Block-ID).
+        Links auf nicht importierte Datenbanken bleiben Text wie bisher.
+      - Am Ende bekommt jeder solche Block eine Kopie der Ansichten seiner
+        Datenbank (Tabelle mit ausgeblendeten Spalten, Board, Kalender) in
+        `block_views`; danach lassen sie sich je Block ändern.
+      - Wird der Import vorher abgebrochen, zeigt ein Block auf eine nicht
+        angelegte Datenbank den Hinweis „nicht verfügbar“.
+      - Bestehende Importe werden nicht umgebaut (Entscheidung des
+        Nutzers: neu importieren).
+      - Tests: Vitest (`import-blocks.test.ts`, `notion-import.test.ts`),
+        Playwright `notion-import.e2e.ts`; zusätzlich ein Export mit
+        Datenbank in einer Seite gegen die lokale Supabase importiert.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1860,6 +1939,11 @@ Noch nicht abschließend geprüft:
   bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 - Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
   und 5 nur in Chromium mit Geräte-Emulation geprüft).
+- (Behoben, 19a) Papierkorb und Wiederherstellen schickten alle IDs eines
+  Seitenbaums in einer URL (`id=in.(…)`); ab etwa 300 Seiten (Notion-Import)
+  antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs
+  (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
+  Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
 - Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
   (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
   Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste

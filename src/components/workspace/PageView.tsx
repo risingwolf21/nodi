@@ -44,6 +44,8 @@ type PageViewProps = {
     onCreateEntry?: (databaseId: string) => Promise<string>;
     /** Databases of the workspace, for new relations; undefined where that is not possible. */
     databases?: Page[];
+    /** All pages the app knows, for the databases shown as blocks in the text. */
+    knownPages: Page[];
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -80,6 +82,7 @@ export function PageView({
     entries,
     onCreateEntry,
     databases,
+    knownPages,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
@@ -282,6 +285,15 @@ export function PageView({
                     topBarEnd={topBarEnd}
                     fullWidth={page.full_width}
                     renderHeader={renderHeader}
+                    databaseBlocks={{
+                        readOnly,
+                        pages: knownPages,
+                        // Blocks show databases of the page's own workspace.
+                        databases: databases ?? [],
+                        onOpenPage: onSelect,
+                        onCreateEntry,
+                        onRenameEntry: onRename,
+                    }}
                 />
             </Suspense>
         </LoadErrorBoundary>

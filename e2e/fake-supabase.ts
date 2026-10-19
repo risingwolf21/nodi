@@ -6,6 +6,8 @@ import type { BrowserContext, Route } from "@playwright/test";
 /** Must match VITE_SUPABASE_URL of the test build (playwright.config.ts). */
 export const SUPABASE_URL = "http://fake.localhost:54321";
 export const OWNER = "11111111-1111-4111-8111-111111111111";
+// A local Supabase refuses requests from about 300 ids in the URL (414).
+const MAX_URL_LENGTH = 8000;
 const WORKSPACE = "w1";
 // supabase.ts: `sb-<first label of the host>-auth-token`.
 const AUTH_STORAGE_KEY = "sb-fake-auth-token";
@@ -42,6 +44,9 @@ export type FakeView = {
     position: number;
 };
 
+/** Views of a "Datenbank" block in a page's text (package 19c). */
+export type FakeBlockView = FakeView & { pageId: string; blockId: string };
+
 export type FakeValue = { pageId: string; propertyId: string; value: unknown; updatedAt: string };
 
 /** One call of the RPC set_page_property, as the app sent it. */
@@ -61,6 +66,7 @@ export type FakeBackend = {
     pages: FakePage[];
     properties: FakeProperty[];
     views: FakeView[];
+    blockViews: FakeBlockView[];
     values: FakeValue[];
     previews: FakePreview[];
     /** Every set_page_property call, oldest first. */
@@ -108,6 +114,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         pages: [],
         properties: [],
         views: [],
+        blockViews: [],
         values: [],
         previews: [],
         propertyCalls: [],
@@ -273,6 +280,8 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         });
 
     if (method === "OPTIONS") return json({});
+    // Like the proxy in front of Supabase: a very long URL is refused.
+    if (request.url().length > MAX_URL_LENGTH) return json({ message: "URI too long" }, 414);
 
     // Auth
     if (path === "/auth/v1/token" && query.get("grant_type") === "password") {
@@ -319,9 +328,11 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             return route.fulfill({ status: 201, headers: CORS });
         }
         if (method === "PATCH") {
-            const target = backend.pages.find((item) => item.id === idFilter());
-            if (target) Object.assign(target, requestBody(route));
-            return json(target ? [{ id: target.id }] : []);
+            // Several pages at once: the trash moves whole trees (`id=in.(…)`).
+            const ids = /^in\.\((.*)\)$/.exec(query.get("id") ?? "")?.[1].split(",") ?? [idFilter()];
+            const targets = backend.pages.filter((item) => ids.includes(item.id));
+            for (const target of targets) Object.assign(target, requestBody(route));
+            return json(targets.map(({ id }) => ({ id })));
         }
         // Readable page ids, for deleting local copies of revoked pages.
         if (query.get("select") === "id") {
@@ -403,6 +414,42 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         }
         if (method === "DELETE") {
             backend.views = backend.views.filter((item) => item.id !== idFilter());
+            return json([{ id: idFilter() }]);
+        }
+    }
+    if (path === "/rest/v1/block_views") {
+        if (method === "GET") {
+            return json(
+                backend.blockViews.filter(
+                    (view) =>
+                        `eq.${view.databaseId}` === query.get("database_id") &&
+                        `eq.${view.pageId}` === query.get("page_id") &&
+                        `eq.${view.blockId}` === query.get("block_id"),
+                ),
+            );
+        }
+        if (method === "POST") {
+            const body = requestBody(route);
+            const view: FakeBlockView = {
+                id: crypto.randomUUID(),
+                databaseId: text(body, "database_id"),
+                pageId: text(body, "page_id"),
+                blockId: text(body, "block_id"),
+                name: text(body, "name"),
+                type: text(body, "type"),
+                config: typeof body.config === "object" && body.config !== null ? { ...body.config } : {},
+                position: Number(body.position),
+            };
+            backend.blockViews.push(view);
+            return json([view], 201);
+        }
+        if (method === "PATCH") {
+            const view = backend.blockViews.find((item) => item.id === idFilter());
+            if (view) Object.assign(view, requestBody(route));
+            return json(view ? [view] : []);
+        }
+        if (method === "DELETE") {
+            backend.blockViews = backend.blockViews.filter((item) => item.id !== idFilter());
             return json([{ id: idFilter() }]);
         }
     }

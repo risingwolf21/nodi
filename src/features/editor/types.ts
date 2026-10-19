@@ -1,7 +1,8 @@
-import type { PartialBlock } from "@blocknote/core";
+import type { editorSchema } from "@/components/editor/editor-schema";
 import type { RequestFailureReason } from "@/lib/request-errors";
 
-export type DocumentContent = PartialBlock[];
+/** Blocks of Nodi's editor schema (BlockNote's own and the database block). */
+export type DocumentContent = (typeof editorSchema)["PartialBlock"][];
 
 /**
  * Position of a document state in the last-write-wins order enforced by

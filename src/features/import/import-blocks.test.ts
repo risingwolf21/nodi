@@ -7,7 +7,7 @@ const link = (href: string, label: string) => ({ type: "link", href, content: [t
 function classify(href: string): LinkTarget {
     if (href.startsWith("http")) return { kind: "web" };
     if (href.endsWith(".md")) return { kind: "page" };
-    if (href.endsWith(".csv")) return { kind: "database" };
+    if (href.endsWith(".csv")) return { kind: "database", databaseId: href.startsWith("Aufgaben") ? "db1" : null };
     if (href.includes("fehlt")) return { kind: "missing", path: `Seite/${href}` };
     return { kind: "file", path: `Seite/${decodeURIComponent(href)}` };
 }
@@ -69,6 +69,24 @@ describe("rewriteImportedBlocks", () => {
             text("Aufgaben"),
             text(" und "),
             link("https://notion.so", "Notion"),
+        ]);
+    });
+
+    it("turns a link to an imported database on its own into a database block", async () => {
+        const result = await rewriteImportedBlocks(
+            [
+                { type: "paragraph", content: [link("Aufgaben%20abc.csv", "Aufgaben")], children: [] },
+                // Not imported: stays text.
+                { type: "paragraph", content: [link("Fremd.csv", "Fremd")], children: [] },
+            ],
+            classify,
+            upload,
+        );
+        const [block] = result.databaseBlocks;
+        expect(result.databaseBlocks).toEqual([{ blockId: expect.any(String), databaseId: "db1" }]);
+        expect(result.blocks).toEqual([
+            { id: block.blockId, type: "database", props: { databaseId: "db1" }, children: [] },
+            { type: "paragraph", content: [text("Fremd")], children: [] },
         ]);
     });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadCacheThenServer, useServerReload } from "@/features/pages/hooks/load-cache-then-server";
 import { pageTreeCacheFor } from "@/features/pages/services/page-tree-cache";
 import {
@@ -17,6 +17,7 @@ import {
     type ViewChanges,
 } from "../services/database-repository";
 import type {
+    DatabaseBlockRef,
     DatabaseData,
     DatabaseProperty,
     DatabaseView,
@@ -56,18 +57,47 @@ export type UseDatabaseResult = {
 export type NewEntryValue = { propertyId: string; value: PropertyValue };
 
 const NO_EDIT_RIGHT_MESSAGE = "Du darfst diese Datenbank nicht ändern.";
+const NO_PAGE_EDIT_RIGHT_MESSAGE = "Du darfst diese Seite nicht ändern.";
+
+/** A database block in a page: its views are its own (package 19c). */
+export type DatabaseBlockOptions = DatabaseBlockRef & {
+    /** Its views change with the page's text: edit rights on the page, online. */
+    canEditViews: boolean;
+};
+
+/**
+ * A block without views of its own shows a table. It is stored only when
+ * someone changes it, so reading a page writes nothing.
+ */
+const UNSAVED_VIEW_ID = "unsaved";
+
+function unsavedTable(databaseId: string): DatabaseView {
+    return {
+        id: UNSAVED_VIEW_ID,
+        databaseId,
+        name: VIEW_TYPE_LABELS.table,
+        type: "table",
+        config: EMPTY_VIEW_CONFIG,
+        position: 1,
+    };
+}
+
+const withBlockView = (data: DatabaseData, databaseId: string): DatabaseData =>
+    data.views.length > 0 ? data : { ...data, views: [unsavedTable(databaseId)] };
 
 const nextPosition = (items: { position: number }[]) =>
     items.reduce((highest, item) => Math.max(highest, item.position), 0) + 1;
 
 /**
  * Properties, views and values of one database; entries come with the page
- * tree, so the page tree creates their pages (`createEntryPage`).
+ * tree, so the page tree creates their pages (`createEntryPage`). With
+ * `block`, the views are those of a database block in a page.
  */
 export function useDatabase(
     databaseId: string,
     userId: string | undefined,
     createEntryPage?: () => Promise<string>,
+    block?: DatabaseBlockOptions,
 ): UseDatabaseResult {
     const [data, setData] = useState<DatabaseData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -80,6 +110,15 @@ export function useDatabase(
     const shownFromServerFor = useRef("");
     // The newest write per field, so an older failure does not undo a newer edit.
     const latestWrite = useRef(new Map<string, string>());
+    const blockPageId = block?.pageId;
+    const blockId = block?.blockId;
+    const canEditBlockViews = block?.canEditViews === true;
+    // Stable across renders; the strings above are the dependencies.
+    const blockRef = useMemo(
+        () => (blockPageId !== undefined && blockId !== undefined ? { pageId: blockPageId, blockId } : undefined),
+        [blockPageId, blockId],
+    );
+    const loadedFor = blockRef ? `${databaseId}/${blockRef.pageId}/${blockRef.blockId}` : databaseId;
 
     useEffect(() => {
         if (!userId) return;
@@ -88,19 +127,24 @@ export function useDatabase(
 
         async function load() {
             setLoading(true);
+            const cache = pageTreeCacheFor(currentUserId);
             try {
                 const result = await loadCacheThenServer({
                     userId: currentUserId,
                     readCache: async () =>
-                        parseCachedDatabase(await pageTreeCacheFor(currentUserId).getDatabase(databaseId)),
-                    fetchServer: () => databaseRepository.load(databaseId),
-                    cacheFirst: shownFromServerFor.current !== databaseId,
+                        parseCachedDatabase(
+                            await (blockRef
+                                ? cache.getDatabaseBlock(blockRef.pageId, blockRef.blockId)
+                                : cache.getDatabase(databaseId)),
+                        ),
+                    fetchServer: () => databaseRepository.load(databaseId, blockRef),
+                    cacheFirst: shownFromServerFor.current !== loadedFor,
                     isActive: () => active,
                     show: (loaded, cached) => {
-                        setData(loaded);
+                        setData(blockRef ? withBlockView(loaded, databaseId) : loaded);
                         setFromCache(cached);
                         setConfirmedByServer(!cached);
-                        if (!cached) shownFromServerFor.current = databaseId;
+                        if (!cached) shownFromServerFor.current = loadedFor;
                     },
                 });
                 if (!active) return;
@@ -122,22 +166,32 @@ export function useDatabase(
         return () => {
             active = false;
         };
-    }, [databaseId, userId, manualReloads, serverReloads]);
+    }, [databaseId, blockRef, loadedFor, userId, manualReloads, serverReloads]);
 
     useEffect(() => {
         if (!userId || !data || !confirmedByServer) return;
-        pageTreeCacheFor(userId)
-            .putDatabase(databaseId, data)
-            .catch((cacheError: unknown) => {
-                console.warn("Datenbank konnte nicht lokal gespeichert werden:", cacheError);
-            });
-    }, [userId, databaseId, data, confirmedByServer]);
+        const cache = pageTreeCacheFor(userId);
+        (blockRef
+            ? cache.putDatabaseBlock(blockRef.pageId, blockRef.blockId, data)
+            : cache.putDatabase(databaseId, data)
+        ).catch((cacheError: unknown) => {
+            console.warn("Datenbank konnte nicht lokal gespeichert werden:", cacheError);
+        });
+    }, [userId, databaseId, blockRef, data, confirmedByServer]);
 
     const requireEditable = useCallback((): DatabaseData => {
         if (fromCache || !data) throw new Error(DATABASE_OFFLINE_MESSAGE);
         if (!data.canEdit) throw new Error(NO_EDIT_RIGHT_MESSAGE);
         return data;
     }, [data, fromCache]);
+
+    // A block's views belong to its page; the database's own views to the database.
+    const requireViewsEditable = useCallback((): DatabaseData => {
+        if (!blockRef) return requireEditable();
+        if (fromCache || !data) throw new Error(DATABASE_OFFLINE_MESSAGE);
+        if (!canEditBlockViews) throw new Error(NO_PAGE_EDIT_RIGHT_MESSAGE);
+        return data;
+    }, [blockRef, canEditBlockViews, data, fromCache, requireEditable]);
 
     const change = (update: (current: DatabaseData) => DatabaseData) =>
         setData((current) => (current ? update(current) : current));
@@ -233,44 +287,75 @@ export function useDatabase(
         [requireEditable, updateProperty],
     );
 
+    /** Stores the unsaved table of a block, with the given changes. */
+    const saveUnsavedView = useCallback(
+        async (changes: ViewChanges) => {
+            const current = requireViewsEditable();
+            const unsaved = current.views.find((item) => item.id === UNSAVED_VIEW_ID);
+            if (!unsaved) return;
+            const view = await databaseRepository.addView(
+                databaseId,
+                {
+                    name: changes.name ?? unsaved.name,
+                    type: unsaved.type,
+                    config: changes.config ?? unsaved.config,
+                    position: changes.position ?? unsaved.position,
+                },
+                blockRef,
+            );
+            change((latest) => ({
+                ...latest,
+                views: latest.views.map((item) => (item.id === UNSAVED_VIEW_ID ? view : item)),
+            }));
+        },
+        [blockRef, databaseId, requireViewsEditable],
+    );
+
     const addView = useCallback(
         async (type: ViewType) => {
-            const current = requireEditable();
-            const view = await databaseRepository.addView(databaseId, {
-                name: uniqueName(
-                    VIEW_TYPE_LABELS[type],
-                    current.views.map((item) => item.name),
-                ),
-                type,
-                config: EMPTY_VIEW_CONFIG,
-                position: nextPosition(current.views),
-            });
+            const current = requireViewsEditable();
+            // The table a block shows stays next to the new view.
+            if (current.views.some((item) => item.id === UNSAVED_VIEW_ID)) await saveUnsavedView({});
+            const view = await databaseRepository.addView(
+                databaseId,
+                {
+                    name: uniqueName(
+                        VIEW_TYPE_LABELS[type],
+                        current.views.map((item) => item.name),
+                    ),
+                    type,
+                    config: EMPTY_VIEW_CONFIG,
+                    position: nextPosition(current.views),
+                },
+                blockRef,
+            );
             change((latest) => ({ ...latest, views: [...latest.views, view] }));
             return view;
         },
-        [databaseId, requireEditable],
+        [blockRef, databaseId, requireViewsEditable, saveUnsavedView],
     );
 
     const updateView = useCallback(
         async (viewId: string, changes: ViewChanges) => {
-            requireEditable();
-            const view = await databaseRepository.updateView(viewId, changes);
+            requireViewsEditable();
+            if (viewId === UNSAVED_VIEW_ID) return saveUnsavedView(changes);
+            const view = await databaseRepository.updateView(viewId, changes, blockRef);
             change((latest) => ({
                 ...latest,
                 views: latest.views.map((item) => (item.id === viewId ? view : item)),
             }));
         },
-        [requireEditable],
+        [blockRef, requireViewsEditable, saveUnsavedView],
     );
 
     const deleteView = useCallback(
         async (viewId: string) => {
-            const current = requireEditable();
+            const current = requireViewsEditable();
             if (current.views.length <= 1) throw new Error("Die letzte Ansicht kann nicht gelöscht werden.");
-            await databaseRepository.deleteView(viewId);
+            await databaseRepository.deleteView(viewId, blockRef);
             change((latest) => ({ ...latest, views: latest.views.filter((item) => item.id !== viewId) }));
         },
-        [requireEditable],
+        [blockRef, requireViewsEditable],
     );
 
     const setValue = useCallback(

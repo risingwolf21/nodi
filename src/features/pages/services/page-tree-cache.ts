@@ -12,6 +12,7 @@ export function pageTreeDatabaseName(userId: string): string {
 
 const pagesKey = (workspaceId: string) => `pages:${workspaceId}`;
 const databaseKey = (databaseId: string) => `database:${databaseId}`;
+const databaseBlockKey = (pageId: string, blockId: string) => `database-block:${pageId}:${blockId}`;
 const SHARED_PAGES_KEY = "shared-pages";
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -117,6 +118,15 @@ export class PageTreeCache {
 
     putDatabase(databaseId: string, data: unknown): Promise<void> {
         return this.write(databaseKey(databaseId), data);
+    }
+
+    /** The same for a "Datenbank" block in a page, with the block's own views (package 19c). */
+    getDatabaseBlock(pageId: string, blockId: string): Promise<unknown> {
+        return this.read(databaseBlockKey(pageId, blockId));
+    }
+
+    putDatabaseBlock(pageId: string, blockId: string, data: unknown): Promise<void> {
+        return this.write(databaseBlockKey(pageId, blockId), data);
     }
 
     close(): Promise<void> {
