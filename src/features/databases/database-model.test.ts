@@ -386,6 +386,31 @@ describe("formatValue", () => {
         expect(formatValue(status, "doing")).toBe("In Arbeit");
         expect(formatValue(due, { start: "2026-10-20", end: null })).toBe("20. Okt. 2026");
     });
+
+    it("shows numbers in their format; percent like Notion (0.15 is 15 %)", () => {
+        // Intl separates the symbol with a no-break space.
+        const shown = (numberFormat: DatabaseProperty["numberFormat"], value: number) =>
+            formatValue({ ...estimate, numberFormat }, value).replace(/\s/g, " ");
+        expect(shown("euro", 1234.5)).toBe("1.234,50 €");
+        expect(shown("dollar", 12)).toBe("12,00 $");
+        expect(shown("percent", 0.15)).toBe("15 %");
+        expect(shown("franc", 3)).toBe("3,00 CHF");
+        expect(shown(undefined, 1234.5)).toBe("1.234,5");
+    });
+
+    it("reads the number format from the server's options and from the cache", () => {
+        const [fromServer] = parseProperties([
+            { id: "p", databaseId: "db", name: "Preis", type: "number", options: { format: "euro" }, position: 0 },
+        ]);
+        expect(fromServer.numberFormat).toBe("euro");
+        expect(parseProperties([{ ...fromServer, options: [] }])[0].numberFormat).toBe("euro");
+        // Unknown formats (a newer app version) are shown as plain numbers.
+        expect(
+            parseProperties([
+                { id: "p", databaseId: "db", name: "X", type: "number", options: { format: "bitcoin" } },
+            ])[0].numberFormat,
+        ).toBeUndefined();
+    });
 });
 
 describe("parsing", () => {

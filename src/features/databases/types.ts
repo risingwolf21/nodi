@@ -23,6 +23,9 @@ export type PropertyOption = {
     color: OptionColor;
 };
 
+/** How a number property shows its values (package 17b); the value stays a plain number. */
+export type NumberFormat = "number" | "percent" | "euro" | "dollar" | "pound" | "franc" | "yen";
+
 export type DatabaseProperty = {
     id: string;
     databaseId: string;
@@ -32,6 +35,8 @@ export type DatabaseProperty = {
     options: PropertyOption[];
     /** Formula properties: the expression in Notion's syntax (server: options.expression). */
     formula?: string;
+    /** Number properties: how values are shown (server: options.format); missing means "number". */
+    numberFormat?: NumberFormat;
     position: number;
 };
 

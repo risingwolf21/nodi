@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import { FileText, Maximize2, Plus } from "lucide-react";
 import { displayTitle } from "@/features/pages/page-display";
 import type { DatabaseRow } from "../database-model";
-import type { DatabaseProperty, PropertyOption, PropertyType, PropertyValue } from "../types";
+import type { DatabaseProperty, NumberFormat, PropertyOption, PropertyType, PropertyValue } from "../types";
 import { AddPropertyButton } from "./AddPropertyButton";
 import { PropertyHeader } from "./PropertyHeader";
 import { PropertyValueEditor } from "./PropertyValueEditor";
@@ -25,6 +25,7 @@ export type TableViewProps = {
     onHideProperty: (propertyId: string) => Promise<void>;
     onDeleteProperty: (propertyId: string) => Promise<void>;
     onEditFormula: (propertyId: string) => void;
+    onChangeNumberFormat: (propertyId: string, format: NumberFormat) => Promise<void>;
     onError: (message: string) => void;
 };
 
@@ -118,6 +119,7 @@ export function TableView({
     onHideProperty,
     onDeleteProperty,
     onEditFormula,
+    onChangeNumberFormat,
     onError,
 }: TableViewProps) {
     const [newEntryId, setNewEntryId] = useState("");
@@ -159,6 +161,7 @@ export function TableView({
                                     onHide={() => onHideProperty(property.id)}
                                     onDelete={() => onDeleteProperty(property.id)}
                                     onEditFormula={() => onEditFormula(property.id)}
+                                    onChangeNumberFormat={(format) => onChangeNumberFormat(property.id, format)}
                                     onError={onError}
                                 />
                             </th>

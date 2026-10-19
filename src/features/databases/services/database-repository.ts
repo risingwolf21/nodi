@@ -47,8 +47,10 @@ function requireRow<T>(rows: T[] | null): T {
 /** The server stores choices as `{"options": [...]}`. */
 const optionsColumn = (options: PropertyOption[]) => ({ options });
 
-export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position">;
-export type PropertyChanges = Partial<Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula">>;
+export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "numberFormat">;
+export type PropertyChanges = Partial<
+    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat">
+>;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
 
@@ -139,7 +141,8 @@ export const databaseRepository = {
                 database_id: databaseId,
                 name: property.name,
                 type: property.type,
-                options: optionsColumn(property.options),
+                // A number's format sits in options as well.
+                options: property.numberFormat ? { format: property.numberFormat } : optionsColumn(property.options),
                 position: property.position,
             })
             .select(PROPERTY_COLUMNS);
@@ -149,9 +152,16 @@ export const databaseRepository = {
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, formula, ...rest } = changes;
-        // The server keeps a formula's expression in options as well.
-        const column = formula !== undefined ? { expression: formula } : options ? optionsColumn(options) : undefined;
+        const { options, formula, numberFormat, ...rest } = changes;
+        // The server keeps a formula's expression and a number's format in options as well.
+        const column =
+            formula !== undefined
+                ? { expression: formula }
+                : numberFormat !== undefined
+                  ? { format: numberFormat }
+                  : options
+                    ? optionsColumn(options)
+                    : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)

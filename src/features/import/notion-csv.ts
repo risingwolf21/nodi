@@ -4,7 +4,7 @@
 // multi-select as "A, B", checkboxes as "Yes"/"No", dates in the user's
 // date format and relations as "Title (Path.md)".
 import { OPTION_COLORS } from "@/features/databases/database-model";
-import type { DateValue, OptionColor, PropertyOption } from "@/features/databases/types";
+import type { DateValue, NumberFormat, OptionColor, PropertyOption } from "@/features/databases/types";
 
 /** Property types a column can become; Notion's other types arrive as text. */
 export type ImportedType =
@@ -17,6 +17,10 @@ export type ImportedColumn = {
     options: PropertyOption[];
     /** Dates like 05/10/2026: day first (seen a first number above 12). */
     dayFirst: boolean;
+    /** Numbers: how Notion showed them (currency, percent). */
+    numberFormat: NumberFormat;
+    /** Numbers like 1.234,56: the comma separates the decimals. */
+    decimalComma: boolean;
 };
 
 // Limits of the server (migration 20261018200000_databases.sql).
@@ -159,7 +163,56 @@ export function parseNotionDate(text: string, dayFirst = false): DateValue | nul
 
 const CHECKED = new Set(["yes", "ja", "true", "✓"]);
 const UNCHECKED = new Set(["no", "nein", "false", ""]);
-const NUMBER = /^-?\d+(?:\.\d+)?$/;
+// Notion writes numbers as it shows them: "1,234.5", "€12.00", "15%", "1.234,56 €".
+const NUMBER_SYMBOLS: [RegExp, NumberFormat][] = [
+    [/%/, "percent"],
+    [/€|\bEUR\b/i, "euro"],
+    [/US\$|\$|\bUSD\b/i, "dollar"],
+    [/£|\bGBP\b/i, "pound"],
+    [/\bCHF\b/i, "franc"],
+    [/¥|\bJPY\b/i, "yen"],
+];
+const NUMBER_DIGITS = /^-?\d[\d.,]*$/;
+
+/** The digits of a number and the format its symbol stands for; null for anything else. */
+function numberParts(text: string): { digits: string; format: NumberFormat } | null {
+    let rest = text.trim();
+    let format: NumberFormat = "number";
+    for (const [symbol, symbolFormat] of NUMBER_SYMBOLS) {
+        if (!symbol.test(rest)) continue;
+        format = symbolFormat;
+        rest = rest.replace(symbol, "");
+        break;
+    }
+    // Spaces around the symbol and after the sign; spaces between digits (a phone number) are no number.
+    rest = rest.trim().replace(/^-\s+/, "-");
+    return NUMBER_DIGITS.test(rest) ? { digits: rest, format } : null;
+}
+
+/** "1,234.5" or (decimal comma) "1.234,5" → 1234.5; percent values as fractions, like Notion stores them. */
+function parseNumberValue(text: string, decimalComma: boolean): number | null {
+    const parts = numberParts(text);
+    if (!parts) return null;
+    const normalized = decimalComma
+        ? parts.digits.replace(/\./g, "").replace(",", ".")
+        : parts.digits.replace(/,/g, "");
+    if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return null;
+    const value = Number(normalized);
+    // 15 % is 0.15; toPrecision drops the rounding noise of the division.
+    return parts.format === "percent" ? Number((value / 100).toPrecision(15)) : value;
+}
+
+/** A column of numbers: its format and decimal separator; null if a value is no number. */
+function numberColumn(values: string[]): { numberFormat: NumberFormat; decimalComma: boolean } | null {
+    const parts = values.map(numberParts);
+    if (parts.some((part) => part === null)) return null;
+    // "12,5" or "1.234,56" use a decimal comma; "1,234" stays a thousands separator.
+    const decimalComma = parts.some((part) => part && /,\d{1,2}$|,\d{4,}$|\.\d{3},/.test(part.digits));
+    if (values.some((value) => parseNumberValue(value, decimalComma) === null)) return null;
+    const formats = new Set(parts.map((part) => part?.format));
+    const [numberFormat] = formats;
+    return { numberFormat: formats.size === 1 && numberFormat ? numberFormat : "number", decimalComma };
+}
 const URL_VALUE = /^https?:\/\/\S+$/i;
 const EMAIL = /^[^@\s]+@[^@\s]+$/;
 
@@ -210,41 +263,45 @@ function choiceOptions(names: string[]): PropertyOption[] {
 
 /** Guesses the property type of a column from its (cleaned) values. */
 export function inferColumn(name: string, values: readonly string[]): ImportedColumn {
-    const column = (type: ImportedType, options: PropertyOption[] = [], dayFirst = false): ImportedColumn => ({
+    const column = (type: ImportedType, settings: Partial<ImportedColumn> = {}): ImportedColumn => ({
         name: name.trim().slice(0, MAX_NAME_LENGTH),
         type,
-        options,
-        dayFirst,
+        options: [],
+        dayFirst: false,
+        numberFormat: "number",
+        decimalComma: false,
+        ...settings,
     });
     const filled = values.map((value) => value.trim()).filter(Boolean);
     if (filled.length === 0) return column("text");
 
     const lower = filled.map((value) => value.toLowerCase());
     if (lower.every((value) => CHECKED.has(value) || UNCHECKED.has(value))) return column("checkbox");
-    if (filled.every((value) => NUMBER.test(value))) return column("number");
+    const numbers = numberColumn(filled);
+    if (numbers) return column("number", numbers);
 
     const dayFirst = filled.some((value) => {
         const match = /(?:^|→\s*)(\d{1,2})\/\d{1,2}\/\d{4}/.exec(value);
         return match !== null && Number(match[1]) > 12;
     });
-    if (filled.every((value) => parseNotionDate(value, dayFirst))) return column("date", [], dayFirst);
+    if (filled.every((value) => parseNotionDate(value, dayFirst))) return column("date", { dayFirst });
     if (filled.every((value) => URL_VALUE.test(value) && value.length <= MAX_URL_LENGTH)) return column("url");
     if (filled.every((value) => EMAIL.test(value) && value.length <= MAX_EMAIL_LENGTH)) return column("email");
 
     const distinct = [...new Set(filled)];
     const fitsChoice = distinct.length <= MAX_OPTIONS && distinct.every((value) => value.length <= MAX_OPTION_LENGTH);
     // A status column is one even if every value occurs only once.
-    if (fitsChoice && isStatusColumn(name, filled)) return column("status", statusOptions(distinct));
+    if (fitsChoice && isStatusColumn(name, filled)) return column("status", { options: statusOptions(distinct) });
 
     if (filled.some((value) => value.includes(","))) {
         const parts = filled.flatMap(splitMulti);
         const choices = asChoice(parts);
         if (choices && filled.every((value) => splitMulti(value).length <= MAX_MULTI_SELECT_VALUES)) {
-            return column("multi_select", choiceOptions(choices));
+            return column("multi_select", { options: choiceOptions(choices) });
         }
     } else {
         const choices = asChoice(filled);
-        if (choices) return column("select", choiceOptions(choices));
+        if (choices) return column("select", { options: choiceOptions(choices) });
     }
     return column("text");
 }
@@ -257,7 +314,7 @@ export function columnValue(column: ImportedColumn, raw: string): unknown {
     const optionId = (name: string) => column.options.find((option) => option.name === name)?.id;
     switch (column.type) {
         case "number":
-            return Number(value);
+            return parseNumberValue(value, column.decimalComma) ?? undefined;
         case "date":
             return parseNotionDate(value, column.dayFirst) ?? undefined;
         case "select":

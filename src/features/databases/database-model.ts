@@ -12,6 +12,7 @@ import {
     type FilterRule,
     type OptionColor,
     type PlaceValue,
+    type NumberFormat,
     type PropertyOption,
     type PropertyType,
     type PropertyValue,
@@ -109,6 +110,22 @@ function isPropertyType(value: unknown): value is PropertyType {
     return typeof value === "string" && (PROPERTY_TYPES as readonly string[]).includes(value);
 }
 
+export const NUMBER_FORMATS: readonly NumberFormat[] = ["number", "percent", "euro", "dollar", "pound", "franc", "yen"];
+
+export const NUMBER_FORMAT_LABELS: Record<NumberFormat, string> = {
+    number: "Zahl",
+    percent: "Prozent",
+    euro: "Euro (€)",
+    dollar: "US-Dollar ($)",
+    pound: "Pfund (£)",
+    franc: "Franken (CHF)",
+    yen: "Yen (¥)",
+};
+
+export function isNumberFormat(value: unknown): value is NumberFormat {
+    return typeof value === "string" && (NUMBER_FORMATS as readonly string[]).includes(value);
+}
+
 function isViewType(value: unknown): value is ViewType {
     return typeof value === "string" && (VIEW_TYPES as readonly string[]).includes(value);
 }
@@ -156,6 +173,12 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
         }
         if (!isPropertyType(row.type)) return [];
         // The server keeps the expression in options, the cache next to them.
+        // The server keeps the number format in options as well.
+        const numberFormat = isNumberFormat(row.numberFormat)
+            ? row.numberFormat
+            : isObject(row.options) && isNumberFormat(row.options.format)
+              ? row.options.format
+              : null;
         const expression =
             typeof row.formula === "string"
                 ? row.formula
@@ -171,6 +194,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 options: parseOptions(row.options),
                 position: numberOrZero(row.position),
                 ...(row.type === "formula" ? { formula: expression } : {}),
+                ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
             },
         ];
     });
@@ -555,6 +579,17 @@ const dateTimeFormat = new Intl.DateTimeFormat("de-DE", {
     minute: "2-digit",
 });
 const numberFormat = new Intl.NumberFormat("de-DE");
+const currencyFormat = (currency: string) => new Intl.NumberFormat("de-DE", { style: "currency", currency });
+// Percent like Notion: 0.15 is shown as 15 %.
+const NUMBER_FORMATTERS: Record<NumberFormat, Intl.NumberFormat> = {
+    number: numberFormat,
+    percent: new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 2 }),
+    euro: currencyFormat("EUR"),
+    dollar: currencyFormat("USD"),
+    pound: currencyFormat("GBP"),
+    franc: currencyFormat("CHF"),
+    yen: currencyFormat("JPY"),
+};
 const coordinateFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 5 });
 
 const formulaNumberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 10 });
@@ -585,7 +620,7 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
     if (value === null) return "";
     switch (property.type) {
         case "number":
-            return typeof value === "number" ? numberFormat.format(value) : "";
+            return typeof value === "number" ? NUMBER_FORMATTERS[property.numberFormat ?? "number"].format(value) : "";
         case "checkbox":
             return value === true ? "Ja" : "Nein";
         case "select":

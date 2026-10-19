@@ -1,4 +1,4 @@
-import { createBackend, page as fakePage } from "./fake-supabase";
+import { createBackend, page as fakePage, taskDatabase } from "./fake-supabase";
 import { expect, openApp, test } from "./test";
 
 test("Datenbank anlegen, Einträge, Eigenschaften, Sortierung, Filter und Eintrag; offline nur lesbar", async ({
@@ -87,4 +87,26 @@ test("Datenbank anlegen, Einträge, Eigenschaften, Sortierung, Filter und Eintra
     await expect(page.getByRole("button", { name: "Neu", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Eigenschaft hinzufügen" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Zahl bearbeiten" }).first()).toBeDisabled();
+});
+
+test("Das Zahlenformat einer Eigenschaft wird im Spaltenmenü gewählt und gespeichert", async ({ page, context }) => {
+    const backend = taskDatabase({
+        properties: [{ id: "price", databaseId: "db", name: "Preis", type: "number", options: {}, position: 0 }],
+        values: [{ pageId: "e1", propertyId: "price", value: 1234.5, updatedAt: "2026-10-01T10:00:00Z" }],
+    });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    const table = page.getByRole("table");
+    await expect(table).toContainText("1.234,5");
+
+    await table.getByRole("button", { name: "Preis", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Euro (€)" }).click();
+    // Intl separates the symbol with a no-break space.
+    await expect(table).toContainText(/1\.234,50\s€/);
+    expect(backend.propertyPatches).toContainEqual({ options: { format: "euro" } });
+
+    // From the server after reloading.
+    await page.reload();
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    await expect(page.getByRole("table")).toContainText(/1\.234,50\s€/);
 });

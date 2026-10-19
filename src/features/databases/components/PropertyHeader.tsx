@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { EyeOff, Sigma, Trash2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
-import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "../database-model";
-import type { DatabaseProperty, PropertyType } from "../types";
+import { NUMBER_FORMAT_LABELS, NUMBER_FORMATS, PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "../database-model";
+import type { DatabaseProperty, NumberFormat, PropertyType } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PropertyTypeIcon } from "./PropertyTypeIcon";
 
@@ -15,6 +15,8 @@ type PropertyHeaderProps = {
     onDelete: () => Promise<void>;
     /** Formula properties: opens the formula editor. */
     onEditFormula?: () => void;
+    /** Number properties: how values are shown. */
+    onChangeNumberFormat?: (format: NumberFormat) => Promise<void>;
     onError: (message: string) => void;
 };
 
@@ -27,6 +29,7 @@ export function PropertyHeader({
     onHide,
     onDelete,
     onEditFormula,
+    onChangeNumberFormat,
     onError,
 }: PropertyHeaderProps) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -91,6 +94,25 @@ export function PropertyHeader({
                         <Sigma className="size-4" />
                         Formel bearbeiten
                     </MenuItem>
+                )}
+                {property.type === "number" && onChangeNumberFormat && (
+                    <>
+                        <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Zahlenformat</p>
+                        {NUMBER_FORMATS.map((format) => (
+                            <MenuItem
+                                key={format}
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onChangeNumberFormat(format).catch(report);
+                                }}
+                            >
+                                <span className="flex-1">{NUMBER_FORMAT_LABELS[format]}</span>
+                                {format === (property.numberFormat ?? "number") && (
+                                    <span className="text-xs text-brand">aktuell</span>
+                                )}
+                            </MenuItem>
+                        ))}
+                    </>
                 )}
                 <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Typ</p>
                 <div className="max-h-56 overflow-y-auto">
