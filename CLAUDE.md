@@ -383,13 +383,14 @@ supabase/
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
-                            # Verknüpfungen (P17d)
+                            # Verknüpfungen (P17d), Verschieben (P18a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
                             # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
-                            # Dateien (P15a), Verknüpfungen (P17d)
+                            # Dateien (P15a), Verknüpfungen (P17d),
+                            # Verschieben (P18a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1744,6 +1745,38 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
       - Ist die Ziel-Datenbank nicht importiert (angehalten), entfällt
         die Spalte mit Hinweis.
 
+18. **Seiten verschieben** (Nutzerwunsch 2026-10-19).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Seitenmenü „Verschieben
+      nach…“ mit Suche und zusätzlich Ziehen in der Seitenleiste (Maus).
+      (2) Verschieben darf, wer Schreibrecht auf Seite und Ziel hat (wie
+      Notion); ein Wechsel zwischen Privat und Workspace nur der Owner
+      der Seite (§2). (3) Datenbanken wie Notion: Eine Seite wird beim
+      Verschieben in eine Datenbank zum Eintrag, ein Eintrag beim
+      Herausnehmen zur normalen Seite (seine Werte entfallen).
+    - **Annahme:** Eine Seite mit Unterseiten wird vorerst kein Eintrag
+      (Einträge zeigen in Nodi keine Unterseiten; sie wären versteckt).
+    - **Aufteilung:** 18a Datenbank, 18b Oberfläche.
+    - **Umsetzung 18a** (`20261019180000_move_page.sql`):
+      - RPC `move_page(page, parent, section)`: Ziel ist eine Seite
+        (`parent`) oder die oberste Ebene eines Bereichs (`section`,
+        `workspace`/`private`). `parent_id` bleibt für API-Clients
+        gesperrt (13a); die Funktion ist der einzige Weg.
+      - Prüft Schreibrecht auf Seite und Ziel (`42501`), gleichen
+        Workspace, nichts im Papierkorb, keine Zyklen (Ziel ist weder die
+        Seite noch darunter; Tiefe ≤ 50), keine Datenbank als Eintrag,
+        keine Seite mit Unterseiten als Eintrag (`22023`), fehlende
+        Argumente (`22004`).
+      - Die Seite übernimmt den Bereich ihres neuen Platzes. Ein
+        Bereichswechsel nur durch den Owner (`42501`) und für den ganzen
+        Unterbaum wie `set_page_section` (nach privat von den Blättern
+        her, Owner wird der Aufrufer; in den Workspace von der Wurzel
+        her; private Seiten anderer bleiben, wie sie sind).
+      - In eine Datenbank: Eintrag am Ende (`position` = Maximum + 1).
+        Aus einer Datenbank heraus (oder in eine andere): Werte gelöscht,
+        Verknüpfungen auf der Gegenseite gelöst; `position` wird `null`.
+      - pgTAP: `move_page.test.sql`.
+      - Die Oberfläche folgt in 18b.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1787,9 +1820,9 @@ Noch nicht abschließend geprüft:
   gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
   löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
   filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
-- Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
-  gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
-  Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
+- (Umgesetzt in Paket 18a) Verschieben nur über `move_page`, die
+  Rechte, Workspace, Bereichsregel und Zyklen prüft; `parent_id` bleibt
+  für API-Clients gesperrt.
 - RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
   die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
   prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
