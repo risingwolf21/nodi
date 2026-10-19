@@ -3,6 +3,9 @@ import type { Page } from "@/features/pages/types";
 import {
     applyView,
     buildRows,
+    dateFromInput,
+    dateHasTime,
+    dateInputValue,
     EMPTY_VIEW_CONFIG,
     dateProperty,
     formatValue,
@@ -18,6 +21,8 @@ import {
     previewText,
     readValue,
     rowsByDay,
+    setDateTime,
+    timeOfDay,
     uniqueName,
     visibleProperties,
 } from "./database-model";
@@ -253,6 +258,16 @@ describe("calendar", () => {
         expect(days.get("2026-10-31")?.map((row) => row.page.id)).toEqual(["a", "b"]);
     });
 
+    it("places a time on its local day", () => {
+        // 00:30 local time: in UTC it may still be the day before.
+        const lateNight = new Date(2026, 9, 31, 0, 30).toISOString();
+        const rows = buildRows(entries, {
+            ...data,
+            values: [{ pageId: "a", propertyId: "due", value: { start: lateNight, end: null }, updatedAt: "" }],
+        });
+        expect([...rowsByDay(rows, due).keys()]).toEqual(["2026-10-31"]);
+    });
+
     it("uses the chosen date property, otherwise the first", () => {
         const start: DatabaseProperty = { ...due, id: "start", position: 0 };
         expect(dateProperty([due, start], config())?.id).toBe("start");
@@ -410,6 +425,46 @@ describe("formatValue", () => {
                 { id: "p", databaseId: "db", name: "X", type: "number", options: { format: "bitcoin" } },
             ])[0].numberFormat,
         ).toBeUndefined();
+    });
+});
+
+describe("dates with a time", () => {
+    const at = (hours: number, minutes = 0) => new Date(2026, 9, 19, hours, minutes).toISOString();
+
+    it("converts between stored values and the inputs (local time)", () => {
+        expect(dateInputValue("2026-10-19")).toBe("2026-10-19");
+        expect(dateInputValue(at(14, 30))).toBe("2026-10-19T14:30");
+        expect(dateFromInput("2026-10-19")).toBe("2026-10-19");
+        expect(dateFromInput("2026-10-19T14:30")).toBe(at(14, 30));
+        expect(dateFromInput("")).toBeNull();
+        expect(timeOfDay(at(8, 5))).toBe("08:05");
+        expect(timeOfDay("2026-10-19")).toBeNull();
+    });
+
+    it("adds a time (09:00) or drops it, on both ends", () => {
+        const withTime = setDateTime({ start: "2026-10-19", end: "2026-10-20" }, true);
+        expect(withTime).toEqual({ start: at(9), end: new Date(2026, 9, 20, 9).toISOString() });
+        expect(dateHasTime(withTime)).toBe(true);
+        expect(setDateTime({ start: at(23, 45), end: null }, false)).toEqual({ start: "2026-10-19", end: null });
+    });
+
+    it("shows, filters and sorts by the time", () => {
+        expect(formatValue(due, { start: at(14, 30), end: null })).toBe("19. Okt. 2026, 14:30");
+        const rows = buildRows(entries, {
+            ...data,
+            values: [
+                { pageId: "a", propertyId: "due", value: { start: at(18), end: null }, updatedAt: "" },
+                { pageId: "b", propertyId: "due", value: { start: at(8), end: null }, updatedAt: "" },
+                { pageId: "c", propertyId: "due", value: { start: "2026-10-19", end: null }, updatedAt: "" },
+            ],
+        });
+        // A day without a time counts from midnight.
+        const sorted = applyView(rows, config({ sort: [{ propertyId: "due", direction: "asc" }] }), [due]);
+        expect(sorted.map((row) => row.page.id)).toEqual(["c", "b", "a"]);
+        const onDay = rows.filter((row) =>
+            matchesFilter(row, { propertyId: "due", operator: "equals", value: "2026-10-19" }, due),
+        );
+        expect(onDay.map((row) => row.page.id)).toEqual(["a", "b", "c"]);
     });
 });
 

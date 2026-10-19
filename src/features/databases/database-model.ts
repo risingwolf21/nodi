@@ -421,6 +421,53 @@ function compileFormula(expression: string): CompiledFormula {
     }
 }
 
+const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A date without a time ("YYYY-MM-DD"); otherwise an ISO timestamp (package 17c). */
+function isDay(value: string): boolean {
+    return DAY_ONLY.test(value);
+}
+
+export function dateHasTime(value: DateValue): boolean {
+    return !isDay(value.start);
+}
+
+const pad2 = (value: number) => String(value).padStart(2, "0");
+
+/** The value of `<input type="date">` or `"datetime-local"` (local time) for a stored date. */
+export function dateInputValue(value: string): string {
+    if (isDay(value)) return value;
+    const date = toDate(value);
+    return date ? `${localDay(date)}T${pad2(date.getHours())}:${pad2(date.getMinutes())}` : "";
+}
+
+/** What an input gives back: a day stays a day; a local date and time becomes a timestamp. */
+export function dateFromInput(input: string): string | null {
+    if (isDay(input)) return input;
+    const date = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(input) ? new Date(input) : null;
+    return date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+}
+
+// Like a calendar: a date that gets a time starts in the morning.
+const DEFAULT_HOURS = 9;
+
+/** Adds a time (09:00 local) to both ends, or drops it (the local day stays). */
+export function setDateTime(value: DateValue, withTime: boolean): DateValue {
+    const convert = (part: string) => {
+        if (withTime === !isDay(part)) return part;
+        if (!withTime) return dayOf(part);
+        const [year, month, day] = part.split("-").map(Number);
+        return new Date(year, month - 1, day, DEFAULT_HOURS).toISOString();
+    };
+    return { start: convert(value.start), end: value.end ? convert(value.end) : null };
+}
+
+/** "14:30" for a date with a time, in local time; null for a day. */
+export function timeOfDay(value: string): string | null {
+    const date = isDay(value) ? null : toDate(value);
+    return date ? `${pad2(date.getHours())}:${pad2(date.getMinutes())}` : null;
+}
+
 /** "YYYY-MM-DD" is a local calendar day; anything else a point in time. */
 function toDate(value: string): Date | null {
     const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -598,9 +645,7 @@ const formulaNumberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigi
 function formatFormulaResult(value: PropertyValue): string {
     if (typeof value === "number") return formulaNumberFormat.format(value);
     if (typeof value === "boolean") return value ? "Ja" : "Nein";
-    if (isDateValue(value)) {
-        return value.start.includes("T") ? dateTimeFormat.format(new Date(value.start)) : formatDay(value.start);
-    }
+    if (isDateValue(value)) return formatDateText(value.start);
     return typeof value === "string" ? value : "";
 }
 
@@ -609,10 +654,11 @@ function formatCoordinates(place: PlaceValue): string {
     return `${coordinateFormat.format(place.lat)}; ${coordinateFormat.format(place.lng)}`;
 }
 
-/** "YYYY-MM-DD" is a calendar day, shown without a time zone shift. */
-function formatDay(value: string): string {
-    const day = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
-    return Number.isNaN(day.getTime()) ? value : dateFormat.format(day);
+/** "YYYY-MM-DD" is a calendar day, shown without a time zone shift; a timestamp with its local time. */
+function formatDateText(value: string): string {
+    const date = toDate(value);
+    if (!date) return value;
+    return isDay(value) ? dateFormat.format(date) : dateTimeFormat.format(date);
 }
 
 /** Text for showing a value in a cell, a card or a filter. */
@@ -634,7 +680,7 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return isDateValue(value)
                 ? [value.start, value.end]
                       .filter(Boolean)
-                      .map((day) => formatDay(day ?? ""))
+                      .map((day) => formatDateText(day ?? ""))
                       .join(" – ")
                 : "";
         case "place":
@@ -697,8 +743,11 @@ export function operatorNeedsValue(operator: FilterOperator): boolean {
     return !["isEmpty", "isNotEmpty", "checked", "unchecked"].includes(operator);
 }
 
-function dayOf(value: string): string {
-    return value.slice(0, 10);
+/** The local calendar day of a date or a timestamp. */
+export function dayOf(value: string): string {
+    if (isDay(value)) return value;
+    const date = toDate(value);
+    return date ? localDay(date) : value.slice(0, 10);
 }
 
 function fieldValue(row: DatabaseRow, propertyId: string): PropertyValue {
@@ -793,7 +842,8 @@ function sortKey(property: DatabaseProperty | undefined, value: PropertyValue): 
     if (value === null) return null;
     if (typeof value === "number") return value;
     if (typeof value === "boolean") return value ? 1 : 0;
-    if (isDateValue(value)) return value.start;
+    // A day counts from its local midnight, a time as that moment.
+    if (isDateValue(value)) return toDate(value.start)?.getTime() ?? null;
     if (property?.type === "place") return formatValue(property, value) || null;
     if (property && (property.type === "select" || property.type === "status")) {
         // Like Notion: by the order of the options.

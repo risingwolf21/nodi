@@ -24,9 +24,13 @@ describe("parseNotionDate", () => {
             start: "2026-10-19",
             end: "2026-10-21",
         });
-        // Date properties have no time.
-        expect(parseNotionDate("October 19, 2026 2:30 PM")).toEqual({ start: "2026-10-19", end: null });
-        expect(parseNotionDate("19.10.2026 14:30")).toEqual({ start: "2026-10-19", end: null });
+        // A time in the device's time zone.
+        expect(parseNotionDate("October 19, 2026 2:30 PM")).toEqual({
+            start: new Date(2026, 9, 19, 14, 30).toISOString(),
+            end: null,
+        });
+        expect(parseNotionDate("19.10.2026 14:30")?.start).toBe(new Date(2026, 9, 19, 14, 30).toISOString());
+        expect(parseNotionDate("October 19, 2026 12:15 AM")?.start).toBe(new Date(2026, 9, 19, 0, 15).toISOString());
     });
 
     it("rejects anything else", () => {

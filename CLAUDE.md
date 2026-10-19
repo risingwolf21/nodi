@@ -1581,9 +1581,8 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         Komma und wiederholten Teilen → Mehrfachauswahl; wiederholte
         Werte (höchstens 50 verschiedene, je ≤ 100 Zeichen) → Auswahl;
         sonst Text. Optionen in der Reihenfolge des Auftretens, Farben
-        reihum. Eine Uhrzeit wird geprüft und weggelassen (Datums-
-        Eigenschaften in Nodi haben nur Tage; ein UTC-Zeitstempel
-        verrutschte sonst im Editor um einen Tag).
+        reihum. (Uhrzeiten seit 17c, Zahlenformate seit 17b, Status seit
+        17a.)
       - Relationen („Titel (Pfad.md)“) werden zu Text mit den Titeln.
         Status, Personen, Dateien, Formeln, Rollups usw. kommen als
         Auswahl oder Text an (Notion exportiert ihr Ergebnis).
@@ -1657,6 +1656,22 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         (Wert / 100). Haben alle Werte dasselbe Symbol, bekommt die
         Eigenschaft dieses Format. Leerzeichen zwischen Ziffern
         (Telefonnummern) sind keine Zahl.
+    - **Umsetzung 17c** (nur Frontend, keine Migration; der Server
+      erlaubt schon Zeitstempel in Datumswerten):
+      - Ein Datumswert ist ein Tag (`YYYY-MM-DD`) oder ein Zeitpunkt
+        (ISO-Zeitstempel in UTC); je Wert, wie Notion. Angezeigt und
+        bearbeitet wird in der Ortszeit des Geräts.
+      - Editor: Uhr-Schalter neben dem Datum (`aria-pressed`). An: beide
+        Enden bekommen 09:00 Ortszeit, Eingabe `datetime-local`. Aus: der
+        lokale Tag bleibt.
+      - Anzeige „19. Okt. 2026, 14:30“; Kalender ordnet nach dem lokalen
+        Tag und zeigt die Uhrzeit vor dem Titel (nur am ersten Tag eines
+        Zeitraums). Filter „ist/vor/nach“ vergleichen den lokalen Tag
+        (gilt jetzt auch für „Erstellt“/„Zuletzt bearbeitet“, vorher
+        UTC-Tag). Sortieren nach dem Zeitpunkt; ein Tag zählt ab
+        Mitternacht.
+      - Import: Notions Uhrzeiten (ohne Zeitzone) gelten als Ortszeit des
+        Geräts und werden als Zeitstempel gespeichert.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
