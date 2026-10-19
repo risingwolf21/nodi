@@ -1860,6 +1860,11 @@ Noch nicht abschließend geprüft:
   bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 - Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
   und 5 nur in Chromium mit Geräte-Emulation geprüft).
+- (Behoben, 19a) Papierkorb und Wiederherstellen schickten alle IDs eines
+  Seitenbaums in einer URL (`id=in.(…)`); ab etwa 300 Seiten (Notion-Import)
+  antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs
+  (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
+  Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
 - Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
   (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
   Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
