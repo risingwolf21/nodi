@@ -133,8 +133,10 @@ jobs:
 
       # Der echte Produktions-Build, mit den Werten aus den Secrets.
       - name: Check bundle for secret keys
+        # supabase-js enthält das Präfix selbst (Formatprüfung), daher nur
+        # nach einem Präfix mit Schlüssel dahinter suchen.
         run: |
-          ! grep -rl "sb_secret_" dist \
+          ! grep -rlE "sb_secret_[A-Za-z0-9_-]{16,}" dist \
             || (echo "Ein geheimer Supabase-Schlüssel steht im Bundle" && exit 1)
 
       - name: Configure GitHub Pages
