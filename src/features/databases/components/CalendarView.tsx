@@ -47,7 +47,7 @@ export function CalendarView({
                     <button
                         type="button"
                         onClick={() =>
-                            onAddDateProperty().catch((err: unknown) =>
+                            void onAddDateProperty().catch((err: unknown) =>
                                 onError(
                                     err instanceof Error
                                         ? err.message

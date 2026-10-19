@@ -36,26 +36,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               )
             : null;
 
-        supabase.auth.getSession().then(({ data, error }) => {
+        const stopWaiting = () => {
             answered = true;
             if (offlineStart) clearTimeout(offlineStart);
-            if (!active) return;
+        };
 
-            if (data.session) {
-                rememberAccount(toAccount(data.session));
-                setOfflineAccount(null);
-            } else if (error && isAuthRetryableFetchError(error)) {
-                // The session is still stored; supabase-js renews it once the
-                // network is back. Until then the app works with local data.
+        supabase.auth
+            .getSession()
+            .then(({ data, error }) => {
+                stopWaiting();
+                if (!active) return;
+
+                if (data.session) {
+                    rememberAccount(toAccount(data.session));
+                    setOfflineAccount(null);
+                } else if (error && isAuthRetryableFetchError(error)) {
+                    // The session is still stored; supabase-js renews it once the
+                    // network is back. Until then the app works with local data.
+                    setOfflineAccount(remembered);
+                } else {
+                    if (error) console.error("Could not load auth session:", error);
+                    setOfflineAccount(null);
+                }
+
+                setSession(data.session);
+                setLoading(false);
+            })
+            .catch((err: unknown) => {
+                // Unexpected (storage, a bug in the client): without an
+                // answer the app would stay at "loading". Like a missing
+                // network: local data of a remembered account, else login.
+                stopWaiting();
+                if (!active) return;
+                console.error("Could not load auth session:", err);
                 setOfflineAccount(remembered);
-            } else {
-                if (error) console.error("Could not load auth session:", error);
-                setOfflineAccount(null);
-            }
-
-            setSession(data.session);
-            setLoading(false);
-        });
+                setLoading(false);
+            });
 
         const {
             data: { subscription },

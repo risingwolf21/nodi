@@ -164,7 +164,7 @@ export function ShareDialog({ page, userId, onClose }: ShareDialogProps) {
                 </p>
             </div>
 
-            <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
+            <form onSubmit={(event) => void invite(event)} className="flex flex-col gap-2 sm:flex-row">
                 <Input
                     type="email"
                     aria-label="E-Mail-Adresse"

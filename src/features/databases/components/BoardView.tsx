@@ -52,7 +52,7 @@ export function BoardView({
                     <button
                         type="button"
                         onClick={() =>
-                            onAddGroupProperty().catch((err: unknown) =>
+                            void onAddGroupProperty().catch((err: unknown) =>
                                 onError(
                                     err instanceof Error
                                         ? err.message

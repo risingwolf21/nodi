@@ -201,7 +201,7 @@ export default function WorkspaceHome() {
                                 <CardTitle>Deinen Workspace erstellen</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <form onSubmit={createWorkspace} className="space-y-4">
+                                <form onSubmit={(event) => void createWorkspace(event)} className="space-y-4">
                                     <Input
                                         aria-label="Name des Workspace"
                                         value={workspaceName}

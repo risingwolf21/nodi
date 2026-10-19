@@ -72,7 +72,7 @@ export function PageActionsDialog({ page, mode, onClose, onRename, onArchive, on
             </h2>
 
             {mode === "rename" ? (
-                <form onSubmit={handleRename} className="space-y-4">
+                <form onSubmit={(event) => void handleRename(event)} className="space-y-4">
                     <Input
                         value={title}
                         onChange={(event) => setTitle(event.target.value)}
