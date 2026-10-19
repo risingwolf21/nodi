@@ -1,5 +1,16 @@
 import { useState, type KeyboardEvent } from "react";
-import { formatValue, hasOptions, isComputed, isDateValue, isPlaceValue } from "../database-model";
+import { Clock } from "lucide-react";
+import {
+    dateFromInput,
+    dateHasTime,
+    dateInputValue,
+    formatValue,
+    hasOptions,
+    isComputed,
+    isDateValue,
+    isPlaceValue,
+    setDateTime,
+} from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
@@ -117,17 +128,33 @@ export function PropertyValueEditor({
 
     if (property.type === "date") {
         const date = isDateValue(value) ? value : null;
+        const withTime = date !== null && dateHasTime(date);
         return (
-            <input
-                type="date"
-                disabled={!canChange}
-                value={date?.start.slice(0, 10) ?? ""}
-                aria-label={property.name}
-                onChange={(event) =>
-                    save(event.target.value ? { start: event.target.value, end: date?.end ?? null } : null)
-                }
-                className={`${fieldClass} bg-transparent disabled:opacity-100`}
-            />
+            <div className="flex min-w-0 items-center">
+                <input
+                    type={withTime ? "datetime-local" : "date"}
+                    disabled={!canChange}
+                    value={date ? dateInputValue(date.start) : ""}
+                    aria-label={property.name}
+                    onChange={(event) => {
+                        const start = dateFromInput(event.target.value);
+                        save(start ? { start, end: date?.end ?? null } : null);
+                    }}
+                    className={`${fieldClass} min-w-0 flex-1 bg-transparent disabled:opacity-100`}
+                />
+                {date && canChange && (
+                    <button
+                        type="button"
+                        aria-pressed={withTime}
+                        aria-label={`Uhrzeit für ${property.name}`}
+                        title={withTime ? "Uhrzeit entfernen" : "Uhrzeit hinzufügen"}
+                        onClick={() => save(setDateTime(date, !withTime))}
+                        className={`flex size-7 shrink-0 items-center justify-center rounded hover:bg-accent pointer-coarse:size-9 ${withTime ? "text-brand" : "text-muted-foreground"}`}
+                    >
+                        <Clock className="size-3.5" />
+                    </button>
+                )}
+            </div>
         );
     }
 

@@ -101,13 +101,15 @@ function validDate(year: number, month: number, day: number): boolean {
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
-/** "10:30", "10:30 AM", "22:15 Uhr" are times; anything else is not. */
-function isTime(text: string): boolean {
+/** "10:30", "10:30 AM", "22:15 Uhr" → hours and minutes (24 h); null for anything else. */
+function parseTime(text: string): { hours: number; minutes: number } | null {
     const match = /^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp])\.?[Mm]\.?)?(?:\s*(?:Uhr|\(.*\)))?$/.exec(text.trim());
-    if (!match) return false;
+    if (!match) return null;
     const hours = Number(match[1]);
-    const maxHours = match[3] ? 12 : 23;
-    return hours <= maxHours && (!match[3] || hours >= 1) && Number(match[2]) < 60;
+    const minutes = Number(match[2]);
+    const meridiem = match[3]?.toLowerCase();
+    if (minutes > 59 || hours > (meridiem ? 12 : 23) || (meridiem && hours < 1)) return null;
+    return { hours: meridiem ? (hours % 12) + (meridiem === "p" ? 12 : 0) : hours, minutes };
 }
 
 /** One date (optionally with time) in one of Notion's date formats. */
@@ -144,10 +146,12 @@ function parseSingleDate(text: string, dayFirst: boolean): string | null {
         break;
     }
     if (!date || !validDate(date.year, date.month, date.day)) return null;
-    // Date properties in Nodi have no time (the editor picks a day): a time
-    // is checked, so text is not taken for a date, and then left out.
-    if (rest && !isTime(rest.replace(/^T/, ""))) return null;
-    return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
+    if (!rest) return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
+
+    // Notion writes the time without a zone, as the user saw it: local time of this device.
+    const time = parseTime(rest.replace(/^T/, ""));
+    if (!time) return null;
+    return new Date(date.year, date.month - 1, date.day, time.hours, time.minutes).toISOString();
 }
 
 /** "October 19, 2026" or a range "October 19, 2026 → October 21, 2026". */
