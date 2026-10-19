@@ -6,6 +6,8 @@ import type { BrowserContext, Route } from "@playwright/test";
 /** Must match VITE_SUPABASE_URL of the test build (playwright.config.ts). */
 export const SUPABASE_URL = "http://fake.localhost:54321";
 export const OWNER = "11111111-1111-4111-8111-111111111111";
+// A local Supabase refuses requests from about 300 ids in the URL (414).
+const MAX_URL_LENGTH = 8000;
 const WORKSPACE = "w1";
 // supabase.ts: `sb-<first label of the host>-auth-token`.
 const AUTH_STORAGE_KEY = "sb-fake-auth-token";
@@ -273,6 +275,8 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         });
 
     if (method === "OPTIONS") return json({});
+    // Like the proxy in front of Supabase: a very long URL is refused.
+    if (request.url().length > MAX_URL_LENGTH) return json({ message: "URI too long" }, 414);
 
     // Auth
     if (path === "/auth/v1/token" && query.get("grant_type") === "password") {
@@ -319,9 +323,11 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             return route.fulfill({ status: 201, headers: CORS });
         }
         if (method === "PATCH") {
-            const target = backend.pages.find((item) => item.id === idFilter());
-            if (target) Object.assign(target, requestBody(route));
-            return json(target ? [{ id: target.id }] : []);
+            // Several pages at once: the trash moves whole trees (`id=in.(…)`).
+            const ids = /^in\.\((.*)\)$/.exec(query.get("id") ?? "")?.[1].split(",") ?? [idFilter()];
+            const targets = backend.pages.filter((item) => ids.includes(item.id));
+            for (const target of targets) Object.assign(target, requestBody(route));
+            return json(targets.map(({ id }) => ({ id })));
         }
         // Readable page ids, for deleting local copies of revoked pages.
         if (query.get("select") === "id") {
