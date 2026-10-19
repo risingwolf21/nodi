@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
-import { PageTree } from "../PageTree";
-import { pagesInSection, withoutDatabaseEntries } from "../page-hierarchy";
+import { PageTree, type TreeDragAndDrop } from "../PageTree";
+import { moveProblem, pagesInSection, withoutDatabaseEntries, type MoveTarget } from "../page-hierarchy";
 import type { Page, PageKind, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
 
@@ -32,6 +32,10 @@ type SidebarProps = {
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
+    /** "Verschieben nach …" for a page of the tree. */
+    onMove: (page: Page) => void;
+    /** A page dragged onto another page or a section title. */
+    onDropPage: (page: Page, target: MoveTarget) => void;
 };
 
 const SECTIONS: { section: PageSection; title: string; addLabel: string; emptyText: string }[] = [
@@ -69,13 +73,38 @@ export function Sidebar({
     onArchive,
     onRestore,
     onDelete,
+    onMove,
+    onDropPage,
 }: SidebarProps) {
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
+    const [draggedId, setDraggedId] = useState<string | null>(null);
+    const [dropOnSection, setDropOnSection] = useState<PageSection | null>(null);
     const workspace = workspaces.find((item) => item.id === workspaceId);
     const trashOpen = showTrash && !readOnly;
     const treePages = withoutDatabaseEntries(pages);
     const sharedTreePages = withoutDatabaseEntries(sharedPages);
+
+    // Same rules as "Verschieben nach …"; the server checks the rights.
+    const dragged = draggedId ? pages.find((page) => page.id === draggedId) : undefined;
+    const canDrop = (target: MoveTarget) =>
+        dragged !== undefined && moveProblem(dragged, target, pages, userId) === null;
+    const dragAndDrop: TreeDragAndDrop | undefined = readOnly
+        ? undefined
+        : {
+              draggedId,
+              canDrop,
+              start: setDraggedId,
+              end: () => {
+                  setDraggedId(null);
+                  setDropOnSection(null);
+              },
+              drop: (target) => {
+                  if (dragged && canDrop(target)) onDropPage(dragged, target);
+                  setDraggedId(null);
+                  setDropOnSection(null);
+              },
+          };
 
     return (
         <div className="flex h-full flex-col bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] text-sidebar-foreground">
@@ -166,7 +195,23 @@ export function Sidebar({
                     <>
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
                             <section key={section} aria-labelledby={`section-${section}`} className="mb-3">
-                                <div className="group/section flex h-7 items-center justify-between px-2">
+                                {/* Dropping a page on the section title moves it to the top of the section. */}
+                                <div
+                                    onDragOver={(event) => {
+                                        if (!canDrop({ section })) return;
+                                        event.preventDefault();
+                                        setDropOnSection(section);
+                                    }}
+                                    onDragLeave={() => setDropOnSection(null)}
+                                    onDrop={(event) => {
+                                        event.preventDefault();
+                                        dragAndDrop?.drop({ section });
+                                    }}
+                                    className={cn(
+                                        "group/section flex h-7 items-center justify-between rounded-md px-2",
+                                        dropOnSection === section && "ring-2 ring-brand",
+                                    )}
+                                >
                                     <h2 id={`section-${section}`} className="text-xs font-medium text-muted-foreground">
                                         {title}
                                     </h2>
@@ -190,6 +235,8 @@ export function Sidebar({
                                     onAddChild={(parentId) => onCreatePage(parentId, section)}
                                     onRename={onRename}
                                     onArchive={onArchive}
+                                    onMove={onMove}
+                                    dragAndDrop={dragAndDrop}
                                 />
                             </section>
                         ))}

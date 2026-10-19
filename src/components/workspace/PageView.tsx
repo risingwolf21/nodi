@@ -35,6 +35,8 @@ type PageViewProps = {
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
     onMoveSection?: (page: Page, target: PageSection) => void;
+    /** "Verschieben nach …"; not for pages shared from other workspaces. */
+    onMove?: (page: Page) => void;
     userId: string | undefined;
     /** For a database: its entries (subpages). */
     entries: Page[];
@@ -73,6 +75,7 @@ export function PageView({
     onArchive,
     onShare,
     onMoveSection,
+    onMove,
     userId,
     entries,
     onCreateEntry,
@@ -144,6 +147,16 @@ export function PageView({
                             }}
                         >
                             Teilen
+                        </MenuItem>
+                    )}
+                    {onMove && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onMove(page);
+                            }}
+                        >
+                            Verschieben nach …
                         </MenuItem>
                     )}
                     {onMoveSection && (

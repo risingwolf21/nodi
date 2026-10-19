@@ -429,6 +429,39 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         return json([{ applied: true, stored_edited_at: call.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
     }
 
+    if (path === "/rest/v1/rpc/move_page") {
+        const body = requestBody(route);
+        const moving = backend.pages.find((item) => item.id === body.p_page_id);
+        const parent = backend.pages.find((item) => item.id === body.p_parent_id);
+        if (!moving) return json({ code: "42501", message: "no edit rights" }, 403);
+        // Like the server (package 18a): the subtree takes the section of its new place.
+        const section = parent ? parent.visibility : body.p_section === "workspace" ? "workspace" : "private";
+        const subtree = new Set([moving.id]);
+        for (let grown = true; grown;) {
+            grown = false;
+            for (const item of backend.pages) {
+                if (item.parent_id && subtree.has(item.parent_id) && !subtree.has(item.id)) {
+                    subtree.add(item.id);
+                    grown = true;
+                }
+            }
+        }
+        for (const item of backend.pages) if (subtree.has(item.id)) item.visibility = section;
+        const intoDatabase = parent?.kind === "database";
+        const wasEntry = backend.pages.some((item) => item.id === moving.parent_id && item.kind === "database");
+        if (wasEntry && moving.parent_id !== parent?.id) {
+            backend.values = backend.values.filter((value) => value.pageId !== moving.id);
+        }
+        moving.position = intoDatabase
+            ? Math.max(
+                  0,
+                  ...backend.pages.filter((item) => item.parent_id === parent?.id).map((item) => item.position ?? 0),
+              ) + 1
+            : null;
+        moving.parent_id = parent?.id ?? null;
+        return route.fulfill({ status: 204, headers: CORS });
+    }
+
     if (path === "/rest/v1/rpc/add_relation_property") {
         const body = requestBody(route);
         const [source, paired] = [crypto.randomUUID(), crypto.randomUUID()];
