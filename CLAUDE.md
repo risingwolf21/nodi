@@ -366,12 +366,13 @@ supabase/
                             # Mitglieder und Bereiche (P12a),
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
-                            # Formeln (P14f)
+                            # Formeln (P14f), Datei-Speicher (P15a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
-                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f)
+                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
+                            # Dateien (P15a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1438,6 +1439,46 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         Eigenschaftsleiste.
       - Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
         reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
+
+15. **Datei-Speicher** (Nutzerwunsch 2026-10-19, Voraussetzung für den
+    Notion-Import, Paket 16).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Bilder und beliebige
+      Anhänge; Bilder im Text, andere Dateien zum Herunterladen.
+      (2) Höchstens 10 MB je Datei. (3) Einmal angesehene Bilder sind
+      offline sichtbar (je Konto lokal gespeichert, beim Abmelden
+      gelöscht); Hochladen nur online. (4) Über einen öffentlichen Link
+      sind die Dateien genau dieser Seite sichtbar, solange der Link
+      aktiv ist.
+    - **Aufteilung:** 15a Datenbank (Bucket, Regeln, pgTAP), 15b
+      Oberfläche (Hochladen im Editor, Anzeige, Offline-Cache,
+      öffentliche Ansicht).
+    - **Umsetzung 15a** (`20261019120000_page_files_storage.sql`):
+      - Privater Bucket `page-files`, `file_size_limit` 10 MB, alle
+        Dateitypen (Bilder zeigt die App nur per `<img>`; Dateien liegen
+        auf der Supabase-Domain, nicht auf der App-Domain).
+      - Pfad `<pageId>/<zufällige ID>-<Dateiname>`; die Seite steckt im
+        Pfad (`page_id_from_file_path`, andere Formen gehören zu keiner
+        Seite). Rechte folgen der Seite: Lesen mit `can_read_page`,
+        Hochladen und Löschen mit `can_edit_page`, kein Ändern
+        (eine neue Version ist eine neue Datei). Über einen aktiven,
+        nicht archivierten öffentlichen Link (`has_active_public_link`)
+        lesen auch `anon` und angemeldete Fremde.
+      - Signierte URLs (`createSignedUrl`) prüfen dieselben Regeln.
+      - pgTAP: `page_files.test.sql`; zusätzlich gegen die lokale
+        Storage-API geprüft (Hochladen, signierte URL, Fremde, 11 MB,
+        Überschreiben, öffentlicher Link).
+      - Noch nicht: Dateien endgültig gelöschter Seiten bleiben liegen
+        (`storage.objects` erlaubt kein direktes Löschen, nur die
+        Storage-API); Aufräumen später.
+
+16. **Notion-Import** (Nutzerwunsch 2026-10-19), nach Paket 15.
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Quelle ist der
+      Notion-Export als ZIP („Markdown & CSV“), verarbeitet im Browser,
+      ohne Server und ohne Notion-Zugangsdaten. (2) Erst Seiten (16a),
+      dann Datenbanken aus den CSV-Dateien (16b). (3) Bilder und
+      Anhänge kommen in den Datei-Speicher (Paket 15). (4) Alles landet
+      unter einer neuen privaten Seite „Notion-Import“ im aktuellen
+      Workspace.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
