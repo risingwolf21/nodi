@@ -536,6 +536,10 @@ die folgenden Leitlinien.
   Serverfehlern unterscheiden.
 - Wiederholungen nur für geeignete temporäre Fehler durchführen. Keine
   endlosen Retry-Schleifen.
+- Promises immer abwarten oder ihre Fehler behandeln. ESLint prüft das
+  mit Typinformationen (`no-floating-promises`, `no-misused-promises`,
+  `await-thenable`). Bewusst nicht abgewartet, weil die Funktion ihre
+  Fehler selbst behandelt (z. B. Submit-Handler): `void handler(event)`.
 - Offline-/Sync-Status sichtbar und verständlich darstellen.
 
 ### Clean Code

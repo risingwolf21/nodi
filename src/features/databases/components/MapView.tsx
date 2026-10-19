@@ -48,7 +48,7 @@ export function MapView({
                     <button
                         type="button"
                         onClick={() =>
-                            onAddPlaceProperty().catch((err: unknown) =>
+                            void onAddPlaceProperty().catch((err: unknown) =>
                                 onError(
                                     err instanceof Error
                                         ? err.message

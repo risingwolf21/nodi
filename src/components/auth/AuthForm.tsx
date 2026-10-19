@@ -56,7 +56,7 @@ export function AuthForm() {
             </CardHeader>
 
             <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="email">E-Mail-Adresse</Label>
                         <Input

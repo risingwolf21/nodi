@@ -17,6 +17,18 @@ export default defineConfig([
         ],
         languageOptions: {
             globals: globals.browser,
+            // Type information for the promise rules below.
+            parserOptions: {
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
+            },
+        },
+        // A forgotten await or an unhandled rejection loses errors silently;
+        // in the offline sync that means changes that never reach the server.
+        rules: {
+            "@typescript-eslint/no-floating-promises": "error",
+            "@typescript-eslint/no-misused-promises": "error",
+            "@typescript-eslint/await-thenable": "error",
         },
     },
 ]);
