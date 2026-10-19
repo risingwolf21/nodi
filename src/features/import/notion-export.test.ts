@@ -41,28 +41,51 @@ describe("planNotionImport", () => {
             [`Alpha ${ID_D}.md`, "# Alpha"],
         ]);
         const plan = planNotionImport(files, [...files.keys(), `Reise ${ID_A}/Foto.png`]);
-        expect(plan.pages.map((page) => [page.title, page.parentPath && titleFromFileName(page.parentPath)])).toEqual([
+        expect(plan.items.map((item) => [item.title, item.parentPath && titleFromFileName(item.parentPath)])).toEqual([
             ["Alpha", null],
             ["Reise", null],
             ["Tag 2", "Reise"],
             ["Tag 1", "Reise"],
             ["Notizen", "Tag 1"],
         ]);
-        expect(plan.databases).toEqual([]);
+        expect(plan.skippedInEntries).toBe(0);
     });
 
-    it("leaves databases and their entries for package 16b", () => {
+    it("places databases in the tree, with their entries and all properties", () => {
         const files = new Map([
-            [`Projekte ${ID_A}.md`, `# Projekte\n\n[Aufgaben](Projekte%20${ID_A}/Aufgaben%20${ID_B}.csv)`],
+            [
+                `Projekte ${ID_A}.md`,
+                `# Projekte\n\n[Aufgaben](Projekte%20${ID_A}/Aufgaben%20${ID_B}.csv)\n\n[Notizen](Projekte%20${ID_A}/Notizen%20${ID_D}.md)`,
+            ],
+            [`Projekte ${ID_A}/Notizen ${ID_D}.md`, "# Notizen"],
             [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}.md`, "# Bericht\n\nStatus: Erledigt"],
+            // Entries have no subpages in Nodi.
+            [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Anhang ${ID_D}.md`, "# Anhang"],
         ]);
         const plan = planNotionImport(files, [
             ...files.keys(),
             `Projekte ${ID_A}/Aufgaben ${ID_B}.csv`,
             `Projekte ${ID_A}/Aufgaben ${ID_B}_all.csv`,
+            `Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Tabelle ${ID_D}.csv`,
         ]);
-        expect(plan.pages.map((page) => page.title)).toEqual(["Projekte"]);
-        expect(plan.databases).toEqual([{ path: `Projekte ${ID_A}/Aufgaben ${ID_B}.csv`, title: "Aufgaben" }]);
+        expect(plan.items).toEqual([
+            { kind: "page", path: `Projekte ${ID_A}.md`, title: "Projekte", parentPath: null },
+            {
+                kind: "database",
+                path: `Projekte ${ID_A}/Aufgaben ${ID_B}.csv`,
+                dataPath: `Projekte ${ID_A}/Aufgaben ${ID_B}_all.csv`,
+                title: "Aufgaben",
+                parentPath: `Projekte ${ID_A}.md`,
+                entryPaths: [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}.md`],
+            },
+            {
+                kind: "page",
+                path: `Projekte ${ID_A}/Notizen ${ID_D}.md`,
+                title: "Notizen",
+                parentPath: `Projekte ${ID_A}.md`,
+            },
+        ]);
+        expect(plan.skippedInEntries).toBe(2);
     });
 
     it("attaches pages in plain folders (e.g. the export folder) to the nearest page or the top", () => {
@@ -71,7 +94,7 @@ describe("planNotionImport", () => {
             [`Export-x/Seite ${ID_A}/Unterordner/Tief ${ID_B}.md`, "# Tief"],
         ]);
         const plan = planNotionImport(files, files.keys());
-        expect(plan.pages.map((page) => [page.title, page.parentPath])).toEqual([
+        expect(plan.items.map((item) => [item.title, item.parentPath])).toEqual([
             ["Seite", null],
             ["Tief", `Export-x/Seite ${ID_A}.md`],
         ]);

@@ -34,7 +34,6 @@ function notionExport(): Uint8Array {
         [`Reise nach Rom ${ROME}/Kolosseum.png`]: PNG,
         [`Reise nach Rom ${ROME}/Plan.pdf`]: strToU8("%PDF-1.4"),
         [`Reise nach Rom ${ROME}/Tag 1 ${DAY}.md`]: strToU8("# Tag 1\n\nAnkunft am Abend."),
-        [`Aufgaben ${TASKS}.csv`]: strToU8("Name,Status\nTickets,Erledigt"),
     });
     return zipSync({ "Export-Part-1.zip": part });
 }
@@ -72,7 +71,6 @@ test("Ein Notion-Export wird mit Unterseiten und Dateien unter „Notion-Import�
     await dialog.getByRole("button", { name: "Importieren" }).click();
 
     await expect(dialog.getByText("2 von 2 Seiten importiert, 2 Dateien übernommen.")).toBeVisible();
-    await expect(dialog.getByText("Noch nicht übernommen (1 Datenbank): Aufgaben.")).toBeVisible();
 
     // The tree: everything below a new private page.
     const byTitle = (title: string) => backend.pages.find((item) => item.title === title);
@@ -112,4 +110,50 @@ test("Eine Datei ohne Notion-Seiten wird mit Hinweis abgelehnt", async ({ page, 
 
     await expect(dialog.getByRole("alert")).toContainText("Markdown & CSV");
     expect(backend.pagesCreated).toBe(0);
+});
+
+test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übernommen", async ({ page, context }) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    await chooseArchive(
+        page,
+        zipSync({
+            // Notion writes a byte order mark and CRLF; the second file has all properties.
+            [`Aufgaben ${TASKS}.csv`]: strToU8("\uFEFFName,Status\r\nTickets,Offen\r\n"),
+            [`Aufgaben ${TASKS}_all.csv`]: strToU8(
+                '\uFEFFName,Status,Erledigt,Fällig\r\nTickets,Offen,Yes,"October 19, 2026"\r\nHotel,Offen,No,\r\n',
+            ),
+            [`Aufgaben ${TASKS}/Tickets ${DAY}.md`]: strToU8(
+                "# Tickets\n\nStatus: Offen\nErledigt: Yes\nFällig: October 19, 2026\n\nOnline kaufen.",
+            ),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText("1 von 1 Datenbank (2 Einträge) importiert, 0 Dateien übernommen.")).toBeVisible();
+
+    const database = backend.pages.find((item) => item.title === "Aufgaben");
+    expect(database?.kind).toBe("database");
+    expect(backend.properties.map(({ name, type }) => [name, type])).toEqual([
+        ["Status", "select"],
+        ["Erledigt", "checkbox"],
+        ["Fällig", "date"],
+    ]);
+    const entries = backend.pages.filter((item) => item.parent_id === database?.id);
+    expect(entries.map(({ title, position }) => [title, position])).toEqual([
+        ["Tickets", 0],
+        ["Hotel", 1],
+    ]);
+    // The entry's text, without the property lines Notion repeats there.
+    const text = JSON.stringify(backend.savedDocuments.get(entries[0].id));
+    expect(text).toContain("Online kaufen.");
+    expect(text).not.toContain("Status:");
+
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    const table = page.getByRole("table");
+    await expect(table.getByRole("row")).toHaveCount(3);
+    await expect(table).toContainText("Offen");
+    await expect(table.getByRole("checkbox", { name: "Erledigt" }).first()).toBeChecked();
+    await expect(table.getByLabel("Fällig").first()).toHaveValue("2026-10-19");
 });

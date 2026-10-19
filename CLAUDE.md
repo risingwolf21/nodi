@@ -324,8 +324,9 @@ src/
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
+      notion-csv.ts         # CSV lesen, Eigenschaftstypen ableiten, Notion-Daten (16b, Vitest)
       import-blocks.ts      # Links/Dateien in BlockNote-Blöcken umschreiben (Vitest)
-      notion-import.ts      # Ablauf: Seiten anlegen, Dateien hochladen, speichern (Vitest)
+      notion-import.ts      # Ablauf: Seiten/Datenbanken anlegen, Dateien, Werte, speichern (Vitest)
       markdown-to-blocks.ts # BlockNote-Markdown-Parser ohne Ansicht
       components/NotionImportDialog.tsx # nachgeladen; Auswahl, Fortschritt, Ergebnis
     pages/
@@ -1551,10 +1552,9 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         Seiten per `createPage` (privat). Der Import läuft Seite für
         Seite, „Nach dieser Seite anhalten“ bricht ab; bei einem Fehler
         stoppt er, Importiertes bleibt. Die Seite „Notion-Import“
-        enthält Datum, Seitenzahl und die noch nicht übernommenen
-        Datenbanken.
-      - Datenbanken (`.csv` und ihre Eintrags-Ordner) werden in 16a nur
-        genannt, nicht importiert (16b).
+        enthält Datum und Anzahl der Seiten und Datenbanken.
+      - Datenbanken (`.csv` und ihre Eintrags-Ordner) wurden in 16a nur
+        genannt; seit 16b werden sie importiert.
       - Tests: Vitest (`notion-export`, `import-blocks`, `notion-import`
         mit fflate-ZIPs), Playwright `notion-import.e2e.ts` (das
         Fake-Backend liefert gespeicherte Dokumente jetzt zurück);
@@ -1564,6 +1564,50 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         bleibt), Spalten und eingebettete Inhalte nur als Text, Links
         auf importierte Seiten springen nicht zur Seite; kein Import
         in den Bereich „Workspace“.
+    - **Umsetzung 16b** (nur Frontend, keine Migration):
+      - Eine Datenbank `Titel <id>.csv` steht im Baum wie eine Seite
+        (gleiche Elternregel, Reihenfolge nach Links). Gelesen wird
+        `…_all.csv` (alle Eigenschaften), sonst die `.csv` (nur die der
+        Ansicht). RFC-4180-CSV mit Anführungszeichen, Zeilenumbrüchen,
+        BOM und CRLF.
+      - Erste Spalte = Titel der Einträge; jede weitere wird eine
+        Eigenschaft. Notions CSV hat keine Typen, daher abgeleitet aus
+        allen Werten der Spalte (leere zählen nicht): Yes/No (auch
+        Ja/Nein) → Checkbox; Zahlen (`-12.5`) → Zahl; Daten in Notions
+        Formaten („October 19, 2026“, „Oct 19, 2026“, „19. Oktober 2026“,
+        `2026-10-19`, `2026/10/19`, `10/19/2026` bzw. Tag zuerst, wenn
+        ein Tag über 12 vorkommt, `19.10.2026`, Zeiträume mit „→“) →
+        Datum; http(s)-Links → URL; E-Mail-Adressen → E-Mail; mit
+        Komma und wiederholten Teilen → Mehrfachauswahl; wiederholte
+        Werte (höchstens 50 verschiedene, je ≤ 100 Zeichen) → Auswahl;
+        sonst Text. Optionen in der Reihenfolge des Auftretens, Farben
+        reihum. Eine Uhrzeit wird geprüft und weggelassen (Datums-
+        Eigenschaften in Nodi haben nur Tage; ein UTC-Zeitstempel
+        verrutschte sonst im Editor um einen Tag).
+      - Relationen („Titel (Pfad.md)“) werden zu Text mit den Titeln.
+        Status, Personen, Dateien, Formeln, Rollups usw. kommen als
+        Auswahl oder Text an (Notion exportiert ihr Ergebnis).
+      - Einträge: je CSV-Zeile eine Unterseite der Datenbank (Position
+        in Zeilenreihenfolge), Werte per `set_page_property` (je
+        Eintrag parallel). Der Text kommt aus der passenden
+        `.md` im Ordner der Datenbank (nach Titel zugeordnet), ohne die
+        Zeilen „Eigenschaft: Wert“, die Notion unter den Titel
+        schreibt; Bilder und Anhänge wie bei Seiten. Einträge ohne
+        Zeile (`.md` ohne CSV-Zeile) werden ohne Werte angelegt.
+        Unterseiten und Datenbanken in Einträgen werden nicht
+        übernommen (Hinweis mit Anzahl).
+      - „Nach dieser Seite anhalten“ hält auch zwischen Einträgen.
+      - `usePages.createPage` liest die Elternseite und die Positionen
+        aus dem neuesten Stand (Ref, sofort ergänzt), nicht aus dem
+        Stand des letzten Renders: Der Import legt eine Datenbank und
+        gleich danach ihre Einträge an.
+      - Tests: Vitest (`notion-csv`, `notion-export`, `notion-import`),
+        Playwright „Eine Notion-Datenbank wird … übernommen“; zusätzlich
+        gegen die lokale Supabase mit einem Export mit allen Typen,
+        Relation, Zeitraum und Eintrag mit Bild geprüft.
+      - Noch nicht: Ansichten (Board, Kalender …) aus Notion (nur die
+        Tabelle), Status-Typ, Relationen als Verknüpfung, Uhrzeiten,
+        Zahlen mit Tausendertrennern oder Währung (werden Text).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

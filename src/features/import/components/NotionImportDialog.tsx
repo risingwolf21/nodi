@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { databaseRepository } from "@/features/databases/services/database-repository";
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
 import { uploadPageFile } from "@/features/files/services/page-files";
 import { markdownToBlocks } from "../markdown-to-blocks";
@@ -9,7 +10,7 @@ import { readExportArchive } from "../read-archive";
 
 type NotionImportDialogProps = {
     /** A private page of the current workspace (usePages.createPage). */
-    createPage: (title: string, parentId: string | null) => Promise<{ id: string }>;
+    createPage: (title: string, parentId: string | null, kind?: "page" | "database") => Promise<{ id: string }>;
     onOpen: (pageId: string) => void;
     onClose: () => void;
 };
@@ -31,7 +32,12 @@ async function saveDocument(pageId: string, content: Parameters<typeof remoteDoc
     if (result.kind === "failed") throw new Error(`Der Text konnte nicht gespeichert werden: ${result.message}`);
 }
 
-/** Notion export (ZIP, "Markdown & CSV") → pages below "Notion-Import" (CLAUDE.md §12 P16a). */
+async function setValue(pageId: string, propertyId: string, value: unknown) {
+    // A new entry has no other writes: the value is always taken.
+    await databaseRepository.setValue(pageId, propertyId, value, new Date().toISOString(), crypto.randomUUID());
+}
+
+/** Notion export (ZIP, "Markdown & CSV") → pages and databases below "Notion-Import" (CLAUDE.md §12 P16). */
 export default function NotionImportDialog({ createPage, onOpen, onClose }: NotionImportDialogProps) {
     const [file, setFile] = useState<File | null>(null);
     const [phase, setPhase] = useState<Phase>({ kind: "choose" });
@@ -58,6 +64,8 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
             saveDocument,
             uploadFile: uploadPageFile,
             markdownToBlocks,
+            addProperty: (databaseId, property) => databaseRepository.addProperty(databaseId, property),
+            setValue,
             signal: cancel.current.signal,
             onProgress: (progress) => setPhase({ kind: "importing", ...progress }),
         });
@@ -90,7 +98,7 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
                     </ol>
                     <p className="text-sm text-muted-foreground">
                         Alles kommt unter eine neue private Seite „Notion-Import“. Bilder und Anhänge bis 10 MB werden
-                        übernommen. Datenbanken folgen mit einem späteren Import.
+                        übernommen. Bei Datenbanken leitet Nodi die Art der Eigenschaften aus den Werten ab.
                     </p>
                     <input
                         type="file"
@@ -119,7 +127,7 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
             {phase.kind === "importing" && (
                 <div className="space-y-3">
                     <p className="text-sm" role="status">
-                        Seite {Math.min(phase.done + 1, phase.total)} von {phase.total}
+                        Schritt {Math.min(phase.done + 1, phase.total)} von {phase.total}
                         {phase.title && <span className="text-muted-foreground"> – {phase.title}</span>}
                     </p>
                     <progress className="w-full" max={phase.total} value={phase.done} aria-label="Fortschritt" />
@@ -136,6 +144,18 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
     );
 }
 
+/** "2 von 3 Seiten", "1 von 1 Datenbank (4 Einträge)"; parts the export does not have are left out. */
+function importedParts(summary: ImportSummary): string[] {
+    const parts: string[] = [];
+    if (summary.plannedPages > 0) parts.push(`${summary.pages} von ${summary.plannedPages} Seiten`);
+    if (summary.plannedDatabases > 0) {
+        const databases = summary.plannedDatabases === 1 ? "Datenbank" : "Datenbanken";
+        const entries = summary.entries === 1 ? "1 Eintrag" : `${summary.entries} Einträge`;
+        parts.push(`${summary.databases} von ${summary.plannedDatabases} ${databases} (${entries})`);
+    }
+    return parts;
+}
+
 function ImportResult({
     summary,
     onOpen,
@@ -149,7 +169,7 @@ function ImportResult({
     return (
         <div className="space-y-3 text-sm">
             <p role="status">
-                {summary.pages} von {summary.plannedPages} Seiten importiert, {summary.files}{" "}
+                {importedParts(summary).join(" und ")} importiert, {summary.files}{" "}
                 {summary.files === 1 ? "Datei" : "Dateien"} übernommen.
                 {summary.cancelled && " Der Import wurde angehalten."}
             </p>
@@ -157,13 +177,6 @@ function ImportResult({
                 <p role="alert" className="text-destructive">
                     {summary.error}
                     {rootPageId && " Bereits Importiertes liegt unter „Notion-Import“."}
-                </p>
-            )}
-            {summary.databases.length > 0 && (
-                <p className="text-muted-foreground">
-                    Noch nicht übernommen ({summary.databases.length}{" "}
-                    {summary.databases.length === 1 ? "Datenbank" : "Datenbanken"}):{" "}
-                    {summary.databases.map((database) => database.title).join(", ")}.
                 </p>
             )}
             {summary.problems.length > 0 && (
