@@ -19,6 +19,7 @@ import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
+import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
@@ -29,7 +30,7 @@ const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
 
 /** Local copies of pages that are no longer readable go at the next contact with the server. */
 function cleanUpRevokedCopies(userId: string): void {
-    deleteRevokedLocalCopies(userId, localDocumentStoreFor(userId)).catch((err: unknown) => {
+    deleteRevokedLocalCopies(userId, localDocumentStoreFor(userId), fileCacheFor(userId)).catch((err: unknown) => {
         console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
     });
 }

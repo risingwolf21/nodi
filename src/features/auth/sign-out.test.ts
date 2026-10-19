@@ -16,6 +16,10 @@ vi.mock("@/features/pages/services/page-tree-cache", () => ({
     closePageTreeCache: vi.fn(async () => undefined),
     pageTreeDatabaseName: (userId: string) => `nodi-${userId}-tree`,
 }));
+vi.mock("@/features/files/services/file-cache", () => ({
+    closeFileCache: vi.fn(async () => undefined),
+    fileCacheDatabaseName: (userId: string) => `nodi-${userId}-files`,
+}));
 vi.mock("@/lib/indexed-db", () => ({ deleteDatabase }));
 
 const { signOutAndDeleteLocalData } = await import("./sign-out");
@@ -31,7 +35,12 @@ describe("signOutAndDeleteLocalData", () => {
 
         expect(engine.stop).toHaveBeenCalled();
         expect(engine.start).not.toHaveBeenCalled();
-        expect(deleteDatabase).toHaveBeenCalledTimes(2);
+        // Documents, page tree and cached images (package 15).
+        expect(deleteDatabase.mock.calls.map((call: unknown[]) => call[1])).toEqual([
+            "nodi-u1",
+            "nodi-u1-tree",
+            "nodi-u1-files",
+        ]);
     });
 
     it("keeps syncing and deletes nothing when signing out fails", async () => {

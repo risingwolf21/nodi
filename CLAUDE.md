@@ -314,6 +314,11 @@ src/
         account-sync.ts              # eine Sync-Engine je Konto und Tab
         document-changes.ts          # BroadcastChannel zwischen Tabs
         revoked-documents.ts         # lokale Kopien nicht mehr lesbarer Seiten löschen
+    files/                  # Paket 15b
+      file-reference.ts     # Verweis `nodi-file:<pfad>`, Pfad, Dateiname (Vitest)
+      services/page-files.ts        # Storage: hochladen, signierte URL
+      services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
+      services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     pages/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
@@ -336,7 +341,7 @@ src/
     public/
       public-page.ts        # Token aus `?p=`, Link-URL, RPC get_public_page
       PublicPage.tsx        # öffentliche Ansicht ohne Login (in main.tsx gewählt)
-      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend
+      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend, Bilder per signierter URL
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
@@ -472,8 +477,9 @@ Darstellung; Ablauf in `src/features/editor/services/`).
 - **Logout (Policy §2):** offene Editoren speichern lokal, dann
   `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
   „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
-  `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
-  Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
+  `signOut()`; erst wenn das klappt, werden Engine gestoppt, die
+  Datenbanken (Dokumente, Seitenbaum, seit 15b Bilder) geschlossen und
+  gelöscht und `nodi-account` entfernt.
   Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
   nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
   Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
@@ -1470,6 +1476,37 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
       - Noch nicht: Dateien endgültig gelöschter Seiten bleiben liegen
         (`storage.objects` erlaubt kein direktes Löschen, nur die
         Storage-API); Aufräumen später.
+    - **Umsetzung 15b** (nur Frontend, keine Migration;
+      `src/features/files/`):
+      - Im Dokument steht ein Verweis `nodi-file:<pfad>` statt einer URL
+        (signierte URLs laufen ab). `file-reference.ts`: Pfad, Verweis,
+        Dateiname für Storage (Umlaute → Grundbuchstaben, sonst `-`,
+        höchstens 100 Zeichen, Endung bleibt), Bild an der Endung.
+      - Editor: BlockNote `uploadFile` lädt in den Ordner der Seite
+        (`uploadPageFile`, vorher Prüfung auf 10 MB), `resolveFileUrl`
+        (`createFileUrlResolver`) löst Verweise auf; fremde URLs bleiben.
+        Bilder: zuerst aus dem Cache, sonst signierte URL laden und im
+        Cache ablegen; je Editor eine Object-URL je Bild. Andere Anhänge:
+        bei jedem Öffnen eine neue signierte URL (1 h), kein Cache.
+        Scheitert ein Upload, zeigt BlockNote nur seinen Text; der nennt
+        daher Internet und 10 MB.
+      - Cache: IndexedDB `nodi-<userId>-files` (eigene DB, kein Upgrade
+        der Dokument-DB), Schlüssel = Pfad. Abmelden schließt und löscht
+        ihn mit den anderen Datenbanken. Die Bereinigung entzogener
+        Seiten (`deleteRevokedLocalCopies`) löscht auch Bilder von Seiten,
+        die nicht mehr lesbar sind.
+      - Öffentliche Ansicht: derselbe Resolver ohne Cache; die
+        signierte URL erlaubt der aktive Link (15a). Nichts wird auf dem
+        Gerät gespeichert.
+      - Tests: Vitest (`file-reference.test.ts`, `file-storage.test.ts`),
+        Playwright `page-files.e2e.ts` (Fake-Storage in
+        `e2e/fake-supabase.ts`); zusätzlich gegen die lokale Supabase mit
+        echtem Storage geprüft (Hochladen, Verweis, Bild ohne Storage aus
+        dem Cache, 11 MB abgelehnt, öffentlicher Link, Abmelden löscht
+        den Cache).
+      - Noch nicht: Anzeige des Upload-Fortschritts, Dateien beim
+        Entfernen aus dem Text löschen, Bilder vor dem Hochladen
+        verkleinern.
 
 16. **Notion-Import** (Nutzerwunsch 2026-10-19), nach Paket 15.
     - **Entschieden (Nutzer, 2026-10-19):** (1) Quelle ist der

@@ -1,5 +1,6 @@
 import { forgetSyncEngine, syncEngineFor } from "@/features/editor/services/account-sync";
 import { closeLocalDocumentStore, localDatabaseName } from "@/features/editor/services/local-document-store";
+import { closeFileCache, fileCacheDatabaseName } from "@/features/files/services/file-cache";
 import { closePageTreeCache, pageTreeDatabaseName } from "@/features/pages/services/page-tree-cache";
 import { deleteDatabase } from "@/lib/indexed-db";
 
@@ -28,9 +29,10 @@ export async function signOutAndDeleteLocalData(userId: string, signOut: () => P
     }
 
     forgetSyncEngine(userId);
-    await Promise.all([closeLocalDocumentStore(userId), closePageTreeCache(userId)]);
+    await Promise.all([closeLocalDocumentStore(userId), closePageTreeCache(userId), closeFileCache(userId)]);
     await Promise.all([
         deleteDatabase(indexedDB, localDatabaseName(userId)),
         deleteDatabase(indexedDB, pageTreeDatabaseName(userId)),
+        deleteDatabase(indexedDB, fileCacheDatabaseName(userId)),
     ]);
 }
