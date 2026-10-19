@@ -13,6 +13,8 @@ import {
     parseCachedDatabase,
     parseProperties,
     parseViewConfig,
+    parseViews,
+    placeProperty,
     previewText,
     readValue,
     rowsByDay,
@@ -230,6 +232,45 @@ describe("calendar", () => {
     });
 });
 
+describe("places", () => {
+    const place: DatabaseProperty = { id: "place", databaseId: "db", name: "Ort", type: "place", options: [], position: 6 };
+    const placeData: DatabaseData = {
+        ...data,
+        properties: [place],
+        values: [
+            { pageId: "a", propertyId: "place", value: { lat: 48.1372, lng: 11.5756, label: "Marienplatz, München" }, updatedAt: "" },
+            { pageId: "b", propertyId: "place", value: { lat: 52.52, lng: 13.405, label: null }, updatedAt: "" },
+            { pageId: "c", propertyId: "place", value: { lat: 120, lng: 0 }, updatedAt: "" },
+        ],
+    };
+    const rows = buildRows(entries, placeData);
+
+    it("reads valid places only and shows the address or the coordinates", () => {
+        expect(rows.map((row) => formatValue(place, row.values.place))).toEqual([
+            "Marienplatz, München",
+            "52,52; 13,405",
+            "",
+        ]);
+        expect(readValue(place, { lat: 1, lng: 2, label: "" })).toEqual({ lat: 1, lng: 2, label: null });
+    });
+
+    it("filters places by their address", () => {
+        const rule = { propertyId: "place", operator: "contains" as const, value: "münchen" };
+        expect(rows.filter((row) => matchesFilter(row, rule, place)).map((row) => row.page.id)).toEqual(["a"]);
+    });
+
+    it("sorts places by their text, empty last", () => {
+        const sorted = applyView(rows, config({ sort: [{ propertyId: "place", direction: "asc" }] }), [place]);
+        expect(sorted.map((row) => row.page.id)).toEqual(["b", "a", "c"]);
+    });
+
+    it("uses the chosen place property, otherwise the first", () => {
+        const second: DatabaseProperty = { ...place, id: "second", position: 7 };
+        expect(placeProperty([second, place], config())?.id).toBe("place");
+        expect(placeProperty([second, place], config({ placePropertyId: "second" }))?.id).toBe("second");
+    });
+});
+
 describe("formatValue", () => {
     it("shows values in German", () => {
         expect(formatValue(estimate, 1234.5)).toBe("1.234,5");
@@ -252,11 +293,14 @@ describe("parsing", () => {
             hiddenPropertyIds: ["estimate"],
             groupByPropertyId: null,
             datePropertyId: null,
+            placePropertyId: null,
         });
     });
 
-    it("rejects invalid server rows instead of showing them", () => {
-        expect(() => parseProperties([{ id: "p", databaseId: "db", name: "X", type: "formula" }])).toThrow();
+    it("rejects broken server rows, but leaves out types of a newer app version", () => {
+        expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
+        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "formula" }])).toEqual([]);
+        expect(parseViews([{ id: "v", databaseId: "db", name: "Zeitleiste", type: "timeline" }])).toEqual([]);
     });
 
     it("reads the server's options object and the cached list alike", () => {
