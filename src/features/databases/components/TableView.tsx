@@ -24,6 +24,7 @@ export type TableViewProps = {
     onChangePropertyType: (propertyId: string, type: PropertyType) => Promise<void>;
     onHideProperty: (propertyId: string) => Promise<void>;
     onDeleteProperty: (propertyId: string) => Promise<void>;
+    onEditFormula: (propertyId: string) => void;
     onError: (message: string) => void;
 };
 
@@ -116,6 +117,7 @@ export function TableView({
     onChangePropertyType,
     onHideProperty,
     onDeleteProperty,
+    onEditFormula,
     onError,
 }: TableViewProps) {
     const [newEntryId, setNewEntryId] = useState("");
@@ -152,6 +154,7 @@ export function TableView({
                                     onChangeType={(type) => onChangePropertyType(property.id, type)}
                                     onHide={() => onHideProperty(property.id)}
                                     onDelete={() => onDeleteProperty(property.id)}
+                                    onEditFormula={() => onEditFormula(property.id)}
                                     onError={onError}
                                 />
                             </th>
@@ -185,6 +188,7 @@ export function TableView({
                                         onCreateOption={(name) => onCreateOption(property.id, name)}
                                         onError={onError}
                                         alignNumbersRight
+                                        error={row.errors[property.id]}
                                     />
                                 </td>
                             ))}

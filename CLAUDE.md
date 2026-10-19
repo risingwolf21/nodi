@@ -288,6 +288,9 @@ src/
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
+      formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
+      formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
+      components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -1373,6 +1376,40 @@ Arbeitspakete, je ein Pull Request:
             (rückwärtskompatibel; die App ab 14e lässt den unbekannten Typ
             aus).
         -   pgTAP: `database_formulas.test.sql`.
+    -   **Umsetzung 14f-b** (nur Frontend, keine Migration):
+        -   Engine in `features/databases/formula/`: Tokenizer und
+            rekursiver Parser (Rangfolge `?:` < `or`/`||` < `and`/`&&` <
+            `==`/`!=` < Vergleich < `+`/`-` < `*`/`/`/`%` < unär `-`/`not`/`!`
+            < `^`, rechtsassoziativ), Ausdruck bis 2000 Zeichen,
+            Verschachtelung bis 50. `prop()` nur mit festem Namen in
+            Anführungszeichen. Ausgewertet wird der Baum, nie JavaScript;
+            `replace`/`replaceAll` ersetzen reinen Text (keine regulären
+            Ausdrücke).
+        -   Werte: Zahl, Text, Wahrheitswert, Datum, leer. Leer zählt beim
+            Rechnen als 0; `+` mit Text hängt an; falsch, leer, 0 und ""
+            gelten als falsch. Eigenschaften gehen als Zahl, Checkbox als
+            Wahrheitswert, Datum/Zeiten als Datum ein, alles andere als der
+            angezeigte Text (Auswahl: Name der Option). `prop("Name")` ist
+            der Titel, wenn keine Eigenschaft so heißt. Datum: `dateAdd`
+            (Monatsende bleibt Monatsende), `dateBetween` (ganze Einheiten,
+            ohne Sommerzeit-Stunde, wie Notion), `formatDate` (YYYY, MM,
+            DD, HH, mm …).
+        -   Berechnet in `buildRows` für jeden Eintrag (auch offline aus dem
+            Cache); Formeln dürfen Formeln verwenden. Fehler stehen je
+            Eintrag in `row.errors`: Zirkelbezug bei allen beteiligten
+            Formeln, sonst „Die Formel „X“ hat einen Fehler.“ an der
+            verwendenden Formel. Anzeige „Fehler“ (Grund im Tooltip und für
+            Screenreader), leere Formel „Formel fehlt“.
+        -   Ergebnis wird angezeigt, gefiltert (Zahlen und Daten als
+            solche, sonst als Text) und sortiert wie andere Werte.
+        -   Formel-Editor (Dialog): Eingabe, Vorschau für den ersten Eintrag
+            (bzw. den offenen Eintrag) oder Prüfung der Schreibweise,
+            Eigenschaften und Funktionen zum Einfügen, Strg/⌘+Enter
+            speichert. Öffnet sich nach „Formel“ anlegen, über „Formel
+            bearbeiten“ im Spaltenkopf und über den Namen in der
+            Eigenschaftsleiste.
+        -   Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
+            reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

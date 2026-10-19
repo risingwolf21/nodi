@@ -271,6 +271,69 @@ describe("places", () => {
     });
 });
 
+describe("formulas", () => {
+    const formula = (id: string, name: string, expression: string, position: number): DatabaseProperty => ({
+        id,
+        databaseId: "db",
+        name,
+        type: "formula",
+        options: [],
+        position,
+        formula: expression,
+    });
+    const rowsWith = (...formulas: DatabaseProperty[]) =>
+        buildRows(entries, { ...data, properties: [...data.properties, ...formulas] });
+
+    it("computes from other properties, the title and other formulas", () => {
+        const total = formula("total", "Gesamt", 'prop("Aufwand") * 100', 10);
+        const label = formula("label", "Beschriftung", 'prop("Name") + ": " + prop("Gesamt") + " € (" + prop("Status") + ")"', 11);
+        const [a, b] = rowsWith(label, total);
+        expect(a.values.total).toBe(300);
+        expect(a.values.label).toBe("Angebot schreiben: 300 € (Erledigt)");
+        expect(b.values.label).toBe("Bericht: 800 € (Offen)");
+        expect(a.errors).toEqual({});
+    });
+
+    it("turns dates into date values and computes a date range", () => {
+        const deadline = formula("deadline", "Frist", 'dateAdd(prop("Fällig"), 1, "weeks")', 10);
+        const [a, b] = rowsWith(deadline);
+        expect(a.values.deadline).toEqual({ start: "2026-10-27", end: null });
+        expect(formatValue(deadline, a.values.deadline)).toBe("27. Okt. 2026");
+        expect(b.values.deadline).toBeNull();
+    });
+
+    it("reports a cycle for every formula in it and a broken formula where it is used", () => {
+        const first = formula("first", "Eins", 'prop("Zwei") + 1', 10);
+        const second = formula("second", "Zwei", 'prop("Eins") + 1', 11);
+        const broken = formula("broken", "Kaputt", "1 +", 12);
+        const user = formula("user", "Nutzer", 'prop("Kaputt") * 2', 13);
+        const [a] = rowsWith(first, second, broken, user);
+        expect(a.errors.first).toContain("Zirkelbezug");
+        expect(a.errors.second).toContain("Zirkelbezug");
+        expect(a.errors.broken).toBe("Unerwartet: das Ende an Stelle 4.");
+        expect(a.errors.user).toBe("Die Formel „Kaputt“ hat einen Fehler.");
+        expect(a.values.user).toBeNull();
+    });
+
+    it("filters and sorts by the result", () => {
+        const total = formula("total", "Gesamt", 'prop("Aufwand") * 100', 10);
+        const rows = rowsWith(total);
+        const properties = [...data.properties, total];
+        const bigger = config({ filter: [{ propertyId: "total", operator: "greaterThan", value: "500" }] });
+        expect(applyView(rows, bigger, properties).map((row) => row.page.id)).toEqual(["b"]);
+        const sorted = config({ sort: [{ propertyId: "total", direction: "desc" }] });
+        expect(applyView(rows, sorted, properties).map((row) => row.page.id)).toEqual(["b", "a", "c"]);
+    });
+
+    it("reads the expression from the server's options and from the cache", () => {
+        const [fromServer] = parseProperties([
+            { id: "f", databaseId: "db", name: "F", type: "formula", options: { expression: "1 + 1" }, position: 1 },
+        ]);
+        expect(fromServer.formula).toBe("1 + 1");
+        expect(parseProperties([{ ...fromServer }])[0].formula).toBe("1 + 1");
+    });
+});
+
 describe("formatValue", () => {
     it("shows values in German", () => {
         expect(formatValue(estimate, 1234.5)).toBe("1.234,5");
@@ -299,7 +362,7 @@ describe("parsing", () => {
 
     it("rejects broken server rows, but leaves out types of a newer app version", () => {
         expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
-        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "formula" }])).toEqual([]);
+        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "rollup" }])).toEqual([]);
         expect(parseViews([{ id: "v", databaseId: "db", name: "Zeitleiste", type: "timeline" }])).toEqual([]);
     });
 

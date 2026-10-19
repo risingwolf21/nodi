@@ -9,6 +9,7 @@ import {
     Link,
     List,
     MapPin,
+    Sigma,
     Tags,
     Type,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const ICONS = {
     url: Link,
     email: AtSign,
     place: MapPin,
+    formula: Sigma,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

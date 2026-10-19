@@ -3,6 +3,7 @@ import { formatValue, hasOptions, isComputed, isDateValue, isPlaceValue } from "
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
+import { FormulaErrorText } from "./FormulaErrorText";
 import { PlacePicker } from "./PlacePicker";
 
 const OSM_ZOOM = 16;
@@ -17,6 +18,8 @@ type PropertyValueEditorProps = {
     onError: (message: string) => void;
     /** Numbers right-aligned, as in table columns. */
     alignNumbersRight?: boolean;
+    /** A formula that could not be computed. */
+    error?: string;
 };
 
 const fieldClass =
@@ -38,10 +41,13 @@ export function PropertyValueEditor({
     onCreateOption,
     onError,
     alignNumbersRight = false,
+    error,
 }: PropertyValueEditorProps) {
     const [draft, setDraft] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
     const canChange = editable && !isComputed(property.type);
+
+    if (error) return <FormulaErrorText error={error} className={fieldClass} />;
 
     function save(next: PropertyValue) {
         onChange(next).catch((err: unknown) => {
