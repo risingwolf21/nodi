@@ -1730,6 +1730,19 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         `add_relation_property`, Spiegeln der Gegenseite.
       - Noch nicht: Einträge der Ziel-Datenbank aus der Auswahl heraus
         anlegen, verknüpften Eintrag direkt öffnen, Rollups.
+    - **Umsetzung 17e-b** (nur Frontend, keine Migration):
+      - Eine CSV-Spalte ist eine Relation, wenn jede gefüllte Zelle nur
+        Links „Titel (Pfad.md)“ enthält (aufgelöst vom Ordner der CSV) und
+        alle auf Einträge **einer** Datenbank dieses Exports zeigen. Sonst
+        bleibt sie Text (Titel ohne Pfade, wie bisher).
+      - Relationen werden erst nach allen Datenbanken angelegt (dann gibt
+        es die verknüpften Einträge). Hat die Ziel-Datenbank eine Spalte
+        zurück, wird sie zur Gegenseite (Name übernommen), sonst heißt
+        die Gegenseite wie die Quell-Datenbank. Werte beider Spalten
+        werden vereinigt und nur auf einer Seite gesetzt; der Server
+        verknüpft die andere. Höchstens 100 Einträge je Wert.
+      - Ist die Ziel-Datenbank nicht importiert (angehalten), entfällt
+        die Spalte mit Hinweis.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

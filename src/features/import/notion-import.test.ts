@@ -58,6 +58,8 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
     const properties: (NewProperty & { databaseId: string; id: string })[] = [];
     const values: { pageId: string; property: string; value: unknown }[] = [];
     const views: (NewView & { databaseId: string; id: string })[] = [];
+    const relations: { id: string; databaseId: string; name: string; targetDatabaseId: string; pairedName: string }[] =
+        [];
     const deps: ImportDependencies = {
         createPage: vi.fn(async (title: string, parentId: string | null, kind?: "page" | "database") => {
             const page = { title, parentId, id: `p${created.length}`, ...(kind ? { kind } : {}) };
@@ -91,10 +93,16 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
         addView: vi.fn(async (databaseId: string, view: NewView) => {
             views.push({ ...view, databaseId, id: `view${views.length}` });
         }),
+        addRelation: vi.fn(async (databaseId: string, name: string, targetDatabaseId: string, pairedName: string) => {
+            const id = `relation${relations.length}`;
+            relations.push({ id, databaseId, name, targetDatabaseId, pairedName });
+            properties.push({ id, databaseId, name, type: "relation", options: [], position: 99 });
+            return { propertyId: id };
+        }),
         markdownToBlocks,
         ...overrides,
     };
-    return { deps, created, saved, uploads, properties, values, views };
+    return { deps, created, saved, uploads, properties, values, views, relations };
 }
 
 describe("importNotionExport", () => {
@@ -183,6 +191,56 @@ describe("importNotionExport", () => {
         const summary = await importNotionExport(exportFiles(), deps);
         expect(titles).toEqual([IMPORT_ROOT_TITLE, "Aufgaben"]);
         expect(summary).toMatchObject({ pages: 0, databases: 1, entries: 0, cancelled: true, error: null });
+    });
+
+    it("links entries of two databases with one two-way relation", async () => {
+        const PROJECTS = "5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b";
+        const link = (folder: string, title: string, id: string) =>
+            `${title} (${encodeURIComponent(folder)}/${encodeURIComponent(`${title} ${id}`)}.md)`;
+        const tasks = `Aufgaben ${ID_C}`;
+        const projects = `Projekte ${PROJECTS}`;
+        const archive = new Map<string, Uint8Array>([
+            [
+                `${projects}.csv`,
+                strToU8(
+                    [
+                        "Name,Aufgaben,Notiz",
+                        `Website,"${link(tasks, "Entwurf", ID_A)}, ${link(tasks, "Texte", ID_B)}",Neu`,
+                        "Newsletter,,",
+                    ].join("\n"),
+                ),
+            ],
+            [`${projects}/Website ${ID_D}.md`, strToU8("# Website")],
+            [`${tasks}.csv`, strToU8(`Name,Projekte\nEntwurf,${link(projects, "Website", ID_D)}\nTexte,`)],
+            [`${tasks}/Entwurf ${ID_A}.md`, strToU8("# Entwurf")],
+            [`${tasks}/Texte ${ID_B}.md`, strToU8("# Texte")],
+        ]);
+        const { deps, created, properties, relations, values } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id;
+        // The relation columns are no text properties; one relation with both sides, made from the
+        // database imported first ("Aufgaben").
+        expect(properties.map(({ name, type }) => [name, type])).toEqual([
+            ["Notiz", "text"],
+            ["Projekte", "relation"],
+        ]);
+        expect(relations).toEqual([
+            {
+                id: "relation0",
+                databaseId: id("Aufgaben"),
+                name: "Projekte",
+                targetDatabaseId: id("Projekte"),
+                pairedName: "Aufgaben",
+            },
+        ]);
+        // One side is set, with the links of both columns; the server links back.
+        expect(values.filter((value) => value.property === "Projekte")).toEqual([
+            { pageId: id("Entwurf"), property: "Projekte", value: [id("Website")] },
+            // Only the column in "Projekte" had this link.
+            { pageId: id("Texte"), property: "Projekte", value: [id("Website")] },
+        ]);
+        expect(summary.problems).toEqual([]);
     });
 
     it("explains an archive without pages", async () => {

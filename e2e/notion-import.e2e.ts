@@ -176,3 +176,39 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
     await page.getByRole("tab", { name: "Board" }).click();
     await expect(page.getByText("Tickets", { exact: true })).toBeVisible();
 });
+
+test("Notion-Relationen zwischen zwei Datenbanken werden zur Verknüpfung", async ({ page, context }) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    const projects = `Projekte ${ROME}`;
+    const tasks = `Aufgaben ${TASKS}`;
+    const link = (folder: string, title: string, id: string) =>
+        `${title} (${encodeURIComponent(folder)}/${encodeURIComponent(`${title} ${id}`)}.md)`;
+    await chooseArchive(
+        page,
+        zipSync({
+            [`${projects}.csv`]: strToU8(`Name,Aufgaben\nWebsite,"${link(tasks, "Entwurf", DAY)}"\n`),
+            [`${projects}/Website ${ROME}.md`]: strToU8("# Website"),
+            [`${tasks}.csv`]: strToU8(`Name,Projekte\nEntwurf,"${link(projects, "Website", ROME)}"\nTexte,\n`),
+            [`${tasks}/Entwurf ${DAY}.md`]: strToU8("# Entwurf"),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText(/2 von 2 Datenbanken \(3 Einträge\) importiert/)).toBeVisible();
+
+    // One relation with both sides; no text columns for it.
+    expect(backend.properties.map(({ name, type }) => [name, type])).toEqual([
+        ["Projekte", "relation"],
+        ["Aufgaben", "relation"],
+    ]);
+    const entry = (title: string) => backend.pages.find((item) => item.title === title)?.id;
+    expect(backend.propertyCalls.map((call) => [call.p_page_id, call.p_value])).toEqual([
+        [entry("Entwurf"), [entry("Website")]],
+    ]);
+
+    // The other database shows the link, mirrored like on the server.
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+    await page.getByRole("button", { name: "Projekte", exact: true }).click();
+    await expect(page.getByRole("table").getByRole("button", { name: "Aufgaben wählen" })).toContainText("Entwurf");
+});

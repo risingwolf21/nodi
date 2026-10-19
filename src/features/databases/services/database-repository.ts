@@ -195,7 +195,12 @@ export const databaseRepository = {
     },
 
     /** Both sides of a relation at once (RPC add_relation_property, package 17d). */
-    async addRelation(databaseId: string, name: string, targetDatabaseId: string, pairedName: string): Promise<void> {
+    async addRelation(
+        databaseId: string,
+        name: string,
+        targetDatabaseId: string,
+        pairedName: string,
+    ): Promise<{ propertyId: string }> {
         const response = await supabase.rpc("add_relation_property", {
             p_database_id: databaseId,
             p_name: name,
@@ -204,6 +209,11 @@ export const databaseRepository = {
         });
         const failure = databaseError(response, "Die Verknüpfung konnte nicht angelegt werden.");
         if (failure) throw failure;
+        const row: unknown = Array.isArray(response.data) ? response.data[0] : response.data;
+        if (typeof row !== "object" || row === null || !("property_id" in row) || typeof row.property_id !== "string") {
+            throw new Error("Unerwartete Antwort beim Anlegen der Verknüpfung.");
+        }
+        return { propertyId: row.property_id };
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {

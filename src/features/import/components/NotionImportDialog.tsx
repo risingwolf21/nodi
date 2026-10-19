@@ -69,6 +69,8 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
             listViews: (databaseId) => databaseRepository.listViews(databaseId),
             updateView: (viewId, changes) => databaseRepository.updateView(viewId, changes),
             addView: (databaseId, view) => databaseRepository.addView(databaseId, view),
+            addRelation: (databaseId, name, targetId, pairedName) =>
+                databaseRepository.addRelation(databaseId, name, targetId, pairedName),
             signal: cancel.current.signal,
             onProgress: (progress) => setPhase({ kind: "importing", ...progress }),
         });
