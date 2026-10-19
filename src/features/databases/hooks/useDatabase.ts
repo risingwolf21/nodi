@@ -43,15 +43,30 @@ export type UseDatabaseResult = {
     deleteView: (viewId: string) => Promise<void>;
     /** Shown at once; undone if the server rejects it. */
     setValue: (pageId: string, propertyId: string, value: PropertyValue) => Promise<void>;
+    /**
+     * A new entry, with a first value if given (a board column, a calendar
+     * day). Resolves to its page id, or null while another one is being
+     * created or when entries cannot be created here.
+     */
+    createEntry: (initial?: NewEntryValue) => Promise<string | null>;
 };
+
+export type NewEntryValue = { propertyId: string; value: PropertyValue };
 
 const NO_EDIT_RIGHT_MESSAGE = "Du darfst diese Datenbank nicht ändern.";
 
 const nextPosition = (items: { position: number }[]) =>
     items.reduce((highest, item) => Math.max(highest, item.position), 0) + 1;
 
-/** Properties, views and values of one database; entries come with the page tree. */
-export function useDatabase(databaseId: string, userId: string | undefined): UseDatabaseResult {
+/**
+ * Properties, views and values of one database; entries come with the page
+ * tree, so the page tree creates their pages (`createEntryPage`).
+ */
+export function useDatabase(
+    databaseId: string,
+    userId: string | undefined,
+    createEntryPage?: () => Promise<string>,
+): UseDatabaseResult {
     const [data, setData] = useState<DatabaseData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -263,6 +278,23 @@ export function useDatabase(databaseId: string, userId: string | undefined): Use
         [requireEditable],
     );
 
+    // Repeated taps on "Neu" while an entry is being created add nothing.
+    const creatingEntry = useRef(false);
+    const createEntry = useCallback(
+        async (initial?: NewEntryValue) => {
+            if (!createEntryPage || creatingEntry.current) return null;
+            creatingEntry.current = true;
+            try {
+                const pageId = await createEntryPage();
+                if (initial && initial.value !== null) await setValue(pageId, initial.propertyId, initial.value);
+                return pageId;
+            } finally {
+                creatingEntry.current = false;
+            }
+        },
+        [createEntryPage, setValue],
+    );
+
     return {
         data,
         loading,
@@ -276,5 +308,6 @@ export function useDatabase(databaseId: string, userId: string | undefined): Use
         updateView,
         deleteView,
         setValue,
+        createEntry,
     };
 }

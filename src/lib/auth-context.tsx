@@ -16,6 +16,8 @@ type AuthContextValue = {
      */
     offline: boolean;
     loading: boolean;
+    signIn: (email: string, password: string) => Promise<void>;
+    signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
     signOut: () => Promise<void>;
 };
 

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 type AuthMode = "login" | "signup";
 
 export function AuthForm() {
+    const { signIn, signUp } = useAuth();
     const [mode, setMode] = useState<AuthMode>("login");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -24,19 +25,10 @@ export function AuthForm() {
 
         try {
             if (mode === "login") {
-                const { error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-                if (error) throw error;
+                await signIn(email, password);
             } else {
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                });
-                if (error) throw error;
-
-                if (!data.session) {
+                const { needsConfirmation } = await signUp(email, password);
+                if (needsConfirmation) {
                     setMessage("Dein Konto wurde angelegt. Bitte bestätige gegebenenfalls deine E-Mail-Adresse.");
                 }
             }
