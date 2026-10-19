@@ -3,14 +3,19 @@ import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-rea
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
-import { DatabaseView } from "@/features/databases/components/DatabaseView";
-import { PropertyBar } from "@/features/databases/components/PropertyBar";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { displayTitle } from "@/features/pages/page-display";
 import type { Page, PageSection, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
+// Databases come in their own chunk, loaded with the first database or entry.
+const DatabaseView = lazy(() =>
+    import("@/features/databases/components/DatabaseView").then((module) => ({ default: module.DatabaseView })),
+);
+const PropertyBar = lazy(() =>
+    import("@/features/databases/components/PropertyBar").then((module) => ({ default: module.PropertyBar })),
+);
 
 type PageViewProps = {
     page: Page;
@@ -181,7 +186,22 @@ export function PageView({
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
             />
             {database && (
-                <PropertyBar entry={page} databaseId={database.id} userId={userId} readOnly={readOnly || !canEdit} />
+                // Its own boundary: the editor's fallback shows this header again.
+                <LoadErrorBoundary
+                    key={page.id}
+                    fallback={
+                        <LoadErrorNotice message="Die Eigenschaften konnten nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                    }
+                >
+                    <Suspense fallback={null}>
+                        <PropertyBar
+                            entry={page}
+                            databaseId={database.id}
+                            userId={userId}
+                            readOnly={readOnly || !canEdit}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             )}
         </>
     );
@@ -191,15 +211,30 @@ export function PageView({
         return (
             <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
                 {renderHeader(!readOnly)}
-                <DatabaseView
-                    database={page}
-                    entries={entries}
-                    userId={userId}
-                    readOnly={readOnly}
-                    onOpenEntry={onSelect}
-                    onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
-                    onRenameEntry={onRename}
-                />
+                <LoadErrorBoundary
+                    key={page.id}
+                    fallback={
+                        <LoadErrorNotice message="Die Datenbank konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                    }
+                >
+                    <Suspense
+                        fallback={
+                            <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
+                                Datenbank wird geladen …
+                            </p>
+                        }
+                    >
+                        <DatabaseView
+                            database={page}
+                            entries={entries}
+                            userId={userId}
+                            readOnly={readOnly}
+                            onOpenEntry={onSelect}
+                            onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
+                            onRenameEntry={onRename}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             </EditorFrame>
         );
     }
