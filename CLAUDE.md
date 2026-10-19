@@ -65,61 +65,61 @@ funktionieren.
 
 ### Explizite Anforderungen
 
--   React + TypeScript mit klarer, wartbarer Struktur.
--   Bestehende BlockNote-Editorfunktionalität erhalten.
--   Supabase-Integration und Authentifizierung beibehalten.
--   PWA auf iOS und Android installierbar machen.
--   Ein neues, eigenständiges Nodi-App-Icon erstellen und in den
-    passenden Plattformgrößen bereitstellen.
--   Bereits geladene Seiten **offline lesen und bearbeiten** können.
--   Offline vorgenommene Änderungen lokal dauerhaft speichern und später
-    automatisch synchronisieren.
--   Konfliktstrategie: **Last-Write-Wins (LWW)**.
--   Die lokale Warteschlange muss Neustarts und vorübergehende
-    Verbindungsabbrüche überstehen.
--   GitHub-Pages-Deployment unter `https://risingwolf21.github.io/nodi/`
-    unterstützen.
--   Änderungen schrittweise entwickeln und testen.
+- React + TypeScript mit klarer, wartbarer Struktur.
+- Bestehende BlockNote-Editorfunktionalität erhalten.
+- Supabase-Integration und Authentifizierung beibehalten.
+- PWA auf iOS und Android installierbar machen.
+- Ein neues, eigenständiges Nodi-App-Icon erstellen und in den
+  passenden Plattformgrößen bereitstellen.
+- Bereits geladene Seiten **offline lesen und bearbeiten** können.
+- Offline vorgenommene Änderungen lokal dauerhaft speichern und später
+  automatisch synchronisieren.
+- Konfliktstrategie: **Last-Write-Wins (LWW)**.
+- Die lokale Warteschlange muss Neustarts und vorübergehende
+  Verbindungsabbrüche überstehen.
+- GitHub-Pages-Deployment unter `https://risingwolf21.github.io/nodi/`
+  unterstützen.
+- Änderungen schrittweise entwickeln und testen.
 
 ### Getroffene Entscheidungen (Nutzer, 2026-10-16)
 
 Diese Entscheidungen sind verbindlich:
 
--   **LWW-Ordnung:** Maßgeblich ist die **Bearbeitungszeit auf dem
-    Client**, durchgesetzt vom Server. Eine serverseitige
-    Funktion/RPC übernimmt einen Schreibvorgang nur, wenn seine
-    Bearbeitungszeit neuer ist als der gespeicherte Stand; Zeitstempel
-    aus der Zukunft werden auf die Serverzeit `now()` gekappt; bei
-    Gleichstand entscheidet die Mutation-ID.
--   **Offline-Umfang:** Dokumentinhalt bereits geöffneter Seiten ist
-    offline les- und bearbeitbar. Workspaces und Seitenbaum werden
-    **nur lesend** gecacht.
--   **Neue Seiten offline:** vorerst **nein**. Seiten-IDs werden schon
-    clientseitig erzeugt (`crypto.randomUUID()`), eine spätere
-    Erweiterung bleibt möglich.
--   **Logout mit ungesyncten Änderungen:** zuerst synchronisieren. Ist
-    das nicht möglich, warnen und wählen lassen: „Abbrechen" oder
-    „Trotzdem abmelden und lokale Änderungen verwerfen". Danach den
-    lokalen Cache dieses Kontos löschen.
--   **Berechtigungen:** `visibility` und `owner_id` einer Seite darf
-    nur deren Owner ändern.
--   **Tests:** Vitest (mit `fake-indexeddb` für IndexedDB-Logik) darf
-    eingeführt werden.
--   **Merge Requests:** Jedes Arbeitspaket bekommt einen eigenen Pull
-    Request mit nachvollziehbarer Beschreibung. Die CI-Pipeline
-    (`.github/workflows/ci.yml`) muss grün sein.
--   **Verdrängte Schreibvorgänge (Nutzer, 2026-10-17, Option A):**
-    Lehnt der Server eine lokale Änderung ab, weil ein anderes Gerät
-    eine neuere Version hat, lädt die App automatisch den Serverstand
-    und zeigt einen kurzen, nicht blockierenden Hinweis: „Diese Seite
-    wurde auf einem anderen Gerät geändert. Die neuere Version wurde
-    geladen.“ Kein Dialog, keine Rückfrage. Nie „Gespeichert“ anzeigen,
-    wenn die eigene Änderung verdrängt wurde.
+- **LWW-Ordnung:** Maßgeblich ist die **Bearbeitungszeit auf dem
+  Client**, durchgesetzt vom Server. Eine serverseitige
+  Funktion/RPC übernimmt einen Schreibvorgang nur, wenn seine
+  Bearbeitungszeit neuer ist als der gespeicherte Stand; Zeitstempel
+  aus der Zukunft werden auf die Serverzeit `now()` gekappt; bei
+  Gleichstand entscheidet die Mutation-ID.
+- **Offline-Umfang:** Dokumentinhalt bereits geöffneter Seiten ist
+  offline les- und bearbeitbar. Workspaces und Seitenbaum werden
+  **nur lesend** gecacht.
+- **Neue Seiten offline:** vorerst **nein**. Seiten-IDs werden schon
+  clientseitig erzeugt (`crypto.randomUUID()`), eine spätere
+  Erweiterung bleibt möglich.
+- **Logout mit ungesyncten Änderungen:** zuerst synchronisieren. Ist
+  das nicht möglich, warnen und wählen lassen: „Abbrechen" oder
+  „Trotzdem abmelden und lokale Änderungen verwerfen". Danach den
+  lokalen Cache dieses Kontos löschen.
+- **Berechtigungen:** `visibility` und `owner_id` einer Seite darf
+  nur deren Owner ändern.
+- **Tests:** Vitest (mit `fake-indexeddb` für IndexedDB-Logik) darf
+  eingeführt werden.
+- **Merge Requests:** Jedes Arbeitspaket bekommt einen eigenen Pull
+  Request mit nachvollziehbarer Beschreibung. Die CI-Pipeline
+  (`.github/workflows/ci.yml`) muss grün sein.
+- **Verdrängte Schreibvorgänge (Nutzer, 2026-10-17, Option A):**
+  Lehnt der Server eine lokale Änderung ab, weil ein anderes Gerät
+  eine neuere Version hat, lädt die App automatisch den Serverstand
+  und zeigt einen kurzen, nicht blockierenden Hinweis: „Diese Seite
+  wurde auf einem anderen Gerät geändert. Die neuere Version wurde
+  geladen.“ Kein Dialog, keine Rückfrage. Nie „Gespeichert“ anzeigen,
+  wenn die eigene Änderung verdrängt wurde.
 
 ### Noch nicht festgelegt
 
--   Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen
-    (vorerst nein; später nachrüstbar).
+- Ob überschriebene Inhalte als Konfliktkopie aufbewahrt werden sollen
+  (vorerst nein; später nachrüstbar).
 
 ## 3. Bekannter technischer Ist-Zustand
 
@@ -129,29 +129,36 @@ haben kann.
 
 ### `package.json`
 
--   Projektname: `nodi`
--   `"type": "module"`
--   Skripte:
-    -   `npm run dev` → `vite`
-    -   `npm run build` → `tsc -b && vite build`
-    -   `npm run lint` → `eslint .`
-    -   `npm run preview` → `vite preview`
-    -   `npm test` → `vitest run` (seit Paket 3)
--   Runtime-Abhängigkeiten umfassen unter anderem:
-    -   React `^19.2.8`
-    -   React DOM `^19.2.8`
-    -   Vite `^8.3.0`
-    -   TypeScript `~6.0.2`
-    -   `@supabase/supabase-js` `^2.118.0`
-    -   `@blocknote/core`, `@blocknote/react`, `@blocknote/mantine`
-        jeweils `^0.56.0`
-    -   Tailwind CSS 4 und `@tailwindcss/vite`
-    -   shadcn-Ökosystem, `lucide-react`, Geist Variable Font
--   Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
-    (devDependencies), `workbox-window` (dependency).
--   Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
--   Seit Paket 14e: `leaflet` `1.9.4` (dependency, nur in der
-    nachgeladenen Karte) und `@types/leaflet` (devDependency).
+- Projektname: `nodi`
+- `"type": "module"`
+- Skripte:
+  - `npm run dev` → `vite`
+  - `npm run build` → `tsc -b && vite build`
+  - `npm run lint` → `eslint .`
+  - `npm run preview` → `vite preview`
+  - `npm test` → `vitest run` (seit Paket 3)
+  - `npm run format` → `prettier --write .`, `npm run format:check` →
+    `prettier --check .` (seit dem Clean-Code-Paket)
+- Runtime-Abhängigkeiten umfassen unter anderem:
+  - React `^19.2.8`
+  - React DOM `^19.2.8`
+  - Vite `^8.3.0`
+  - TypeScript `~6.0.2`
+  - `@supabase/supabase-js` `^2.118.0`
+  - `@blocknote/core`, `@blocknote/react`, `@blocknote/mantine`
+    jeweils `^0.56.0`
+  - Tailwind CSS 4 und `@tailwindcss/vite`
+  - shadcn-Ökosystem, `lucide-react`, Geist Variable Font
+- Seit Paket 4: `vite-plugin-pwa` `^2.0.0` und `workbox-build`
+  (devDependencies), `workbox-window` (dependency).
+- Seit Paket 7: `fake-indexeddb` (devDependency, nur für Tests).
+- Prettier `3.9.9` (devDependency, exakt gepinnt, damit sich die
+  Formatierung nicht mit einem Update ändert). `.prettierrc.json`: 4
+  Leerzeichen, doppelte Anführungszeichen, Semikolons, Zeilenbreite 120;
+  JSON, YAML und Markdown mit 2 Leerzeichen (npm schreibt `package.json`
+  so).
+- Seit Paket 14e: `leaflet` `1.9.4` (dependency, nur in der
+  nachgeladenen Karte) und `@types/leaflet` (devDependency).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -163,15 +170,15 @@ seit Paket 4 `VitePWA(...)` sowie den Alias `@` → `src`.
 
 PWA-Konfiguration (Paket 4):
 
--   `generateSW`, `registerType: "prompt"`, `injectRegister: false`:
-    Registrierung und Update-Hinweis in
-    `src/components/pwa/UpdatePrompt.tsx`. Ein neuer Service Worker
-    übernimmt erst nach Bestätigung durch den Nutzer; stündliche
-    Update-Prüfung für installierte Apps.
--   Precache nur für die App-Shell (`js, css, html, svg, png, woff2`).
-    Keine `runtimeCaching`-Regeln: Supabase-Anfragen (cross-origin)
-    laufen am Service Worker vorbei und landen in keinem Cache.
--   Manifest-Werte gemäß §7, Icon-Pfade relativ zum Manifest.
+- `generateSW`, `registerType: "prompt"`, `injectRegister: false`:
+  Registrierung und Update-Hinweis in
+  `src/components/pwa/UpdatePrompt.tsx`. Ein neuer Service Worker
+  übernimmt erst nach Bestätigung durch den Nutzer; stündliche
+  Update-Prüfung für installierte Apps.
+- Precache nur für die App-Shell (`js, css, html, svg, png, woff2`).
+  Keine `runtimeCaching`-Regeln: Supabase-Anfragen (cross-origin)
+  laufen am Service Worker vorbei und landen in keinem Cache.
+- Manifest-Werte gemäß §7, Icon-Pfade relativ zum Manifest.
 
 Der `base`-Pfad ist für GitHub Pages wichtig. PWA-Manifest, Service
 Worker, Icons und alle Assets müssen mit `/nodi/` funktionieren. **Keine
@@ -197,51 +204,51 @@ Inhaltsbereich und Update-Hinweis.
 
 Bisheriger Inhalt:
 
-``` tsx
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+```tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App.tsx";
 import { AuthProvider } from "@/lib/auth-provider";
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AuthProvider>
       <App />
     </AuthProvider>
   </StrictMode>,
-)
+);
 ```
 
 `AuthProvider` umschließt die App. `@/` ist der Alias für `src/`.
 
 ### Styles
 
--   `src/index.css` verwendet Tailwind CSS 4, `tw-animate-css`,
-    `shadcn/tailwind.css` und `@fontsource-variable/geist`.
--   Es gibt Light- und Dark-Theme-CSS-Variablen.
--   Die ungenutzte Vite-Vorlage `src/App.css` wurde in Paket 1 entfernt.
--   Optik (Paket 10): neutrale Palette, nodi-Indigo nur als Akzent
-    (Token `--brand`: Fokus, Auswahl, Links, Logo). Dark Mode folgt
-    `prefers-color-scheme` (Variante `dark:` ebenso, keine `.dark`-Klasse).
-    `--page-gutter` hält Titel und Editortext bündig. Textspalte max.
-    860 px; je Seite umschaltbar auf „Volle Breite“ (Seitenmenü, Spalte
-    `pages.full_width`, Migration `20261018090000_page_full_width.sql`,
-    über Geräte synchronisiert, nur mit Schreibrecht und online).
--   Layout (Paket 10, ersetzt die Schublade aus Paket 5): ab `md`
-    Seitenleiste + Seite nebeneinander. Unter `md` wie die Notion-App:
-    Startbildschirm ist die Seitenliste, eine Seite öffnet sich im
-    Vollbild mit Zurück-Pfeil. Offene Seiten sind History-Einträge ohne
-    URL-Änderung (`history.pushState`), daher funktionieren Browser- und
-    Android-Zurück, und Neuladen bleibt auf GitHub Pages sicher.
-    Touch-Geräte (`pointer-coarse:`) zeigen Aktionen immer und mit
-    größeren Tap-Flächen.
+- `src/index.css` verwendet Tailwind CSS 4, `tw-animate-css`,
+  `shadcn/tailwind.css` und `@fontsource-variable/geist`.
+- Es gibt Light- und Dark-Theme-CSS-Variablen.
+- Die ungenutzte Vite-Vorlage `src/App.css` wurde in Paket 1 entfernt.
+- Optik (Paket 10): neutrale Palette, nodi-Indigo nur als Akzent
+  (Token `--brand`: Fokus, Auswahl, Links, Logo). Dark Mode folgt
+  `prefers-color-scheme` (Variante `dark:` ebenso, keine `.dark`-Klasse).
+  `--page-gutter` hält Titel und Editortext bündig. Textspalte max.
+  860 px; je Seite umschaltbar auf „Volle Breite“ (Seitenmenü, Spalte
+  `pages.full_width`, Migration `20261018090000_page_full_width.sql`,
+  über Geräte synchronisiert, nur mit Schreibrecht und online).
+- Layout (Paket 10, ersetzt die Schublade aus Paket 5): ab `md`
+  Seitenleiste + Seite nebeneinander. Unter `md` wie die Notion-App:
+  Startbildschirm ist die Seitenliste, eine Seite öffnet sich im
+  Vollbild mit Zurück-Pfeil. Offene Seiten sind History-Einträge ohne
+  URL-Änderung (`history.pushState`), daher funktionieren Browser- und
+  Android-Zurück, und Neuladen bleibt auf GitHub Pages sicher.
+  Touch-Geräte (`pointer-coarse:`) zeigen Aktionen immer und mit
+  größeren Tap-Flächen.
 
 ### Bekannte Dateien
 
 Stand nach Paket 10:
 
-``` text
+```text
 .env.example
 index.html
 vite.config.ts
@@ -374,97 +381,97 @@ ist `strict` aber Standard (geprüft mit TS 6.0.3).
 Datei: `src/components/editor/BlockEditor.tsx` (seit Paket 7 nur noch
 Darstellung; Ablauf in `src/features/editor/services/`).
 
--   **Laden:** zuerst aus dem lokalen Store (IndexedDB, eine Datenbank
-    `nodi-<userId>` je Konto, Store `documents`, Schlüssel `pageId`).
-    Nur eine hier noch nie geöffnete Seite wird von Supabase geladen
-    und sofort lokal abgelegt. Ohne Server und ohne lokale Kopie
-    erscheint ein Hinweis statt eines leeren Editors.
--   **Abgleich:** Eine lokale Kopie wird nach dem Öffnen einmal mit dem
-    Server verglichen. Eine ungesyncte lokale Änderung wird gesendet;
-    eine neuere Serverversion ersetzt eine synchronisierte Kopie. Was
-    der Nutzer währenddessen tippt, wird nicht überschrieben.
--   **Speichern:** Bearbeitungszeit = Zeitpunkt der Eingabe; nach
-    800 ms Debounce wird ein Snapshot mit neuer Mutation-ID lokal
-    geschrieben (`synced: false`). Je Seite gibt es nur den letzten
-    Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
-    erst nach Serverbestätigung und nur, wenn die lokale Version noch
-    dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
-    Lokales Schreiben wartet nie auf das Netz (Paket 13b): Der Anstoß an
-    die Sync-Engine und die Abfrage einer neueren Version laufen außerhalb
-    der Warteschlange der Sitzung. Bis eine Änderung im Store liegt, gilt
-    sie als „Tippen gewinnt“ (auch gegen andere Tabs).
--   **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
-    bilden die Warteschlange; sie übersteht Neustarts, weil sie in
-    IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
-    in `WorkspaceHome`) sendet sie per RPC `save_page_document`, auch
-    für Seiten, die gerade nicht offen sind. Auslöser: Start, neue
-    Änderung, `online`, App wieder sichtbar, „Erneut versuchen".
--   **Wiederholung:** offline/temporär/Auth → Backoff 2 s, 4 s, 8 s …
-    bis höchstens 5 min, nach 10 erfolglosen Durchläufen keine
-    zeitgesteuerten Versuche mehr (die Auslöser oben gelten weiter).
-    Dauerhafte Fehler werden nicht wiederholt, bis der Nutzer „Erneut
-    versuchen" wählt oder die App neu startet; die Änderung bleibt
-    lokal.
--   **Mehrere Tabs:** Durchläufe sind per Web Locks
-    (`nodi-sync-<userId>`) über Tabs serialisiert. Jede Änderung am
-    lokalen Store wird per `BroadcastChannel` gemeldet; offene Editoren
-    lesen dann den Store und zeigen den neuen Stand, sofern dort
-    gerade nicht getippt wird.
--   **Verdrängt (Option A):** Serverstand laden, lokale Kopie ersetzen,
-    kurzer Hinweis.
--   **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
-    „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
-    Änderung bleibt lokal erhalten. Scheitert nur das Laden einer
-    neueren Version, steht dort „Aktualisieren fehlgeschlagen“ (kein
-    Speicherfehler). Ein ungültiges Dokument vom Server ist dauerhaft.
--   **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
-    schreiben ausstehende Änderungen sofort lokal und senden sie.
--   **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
-    ohne Schreibrecht ist der Editor schreibgeschützt.
+- **Laden:** zuerst aus dem lokalen Store (IndexedDB, eine Datenbank
+  `nodi-<userId>` je Konto, Store `documents`, Schlüssel `pageId`).
+  Nur eine hier noch nie geöffnete Seite wird von Supabase geladen
+  und sofort lokal abgelegt. Ohne Server und ohne lokale Kopie
+  erscheint ein Hinweis statt eines leeren Editors.
+- **Abgleich:** Eine lokale Kopie wird nach dem Öffnen einmal mit dem
+  Server verglichen. Eine ungesyncte lokale Änderung wird gesendet;
+  eine neuere Serverversion ersetzt eine synchronisierte Kopie. Was
+  der Nutzer währenddessen tippt, wird nicht überschrieben.
+- **Speichern:** Bearbeitungszeit = Zeitpunkt der Eingabe; nach
+  800 ms Debounce wird ein Snapshot mit neuer Mutation-ID lokal
+  geschrieben (`synced: false`). Je Seite gibt es nur den letzten
+  Stand; schnelle Änderungen werden so zusammengefasst. „Gespeichert"
+  erst nach Serverbestätigung und nur, wenn die lokale Version noch
+  dieselbe ist (Compare-and-set in einer IndexedDB-Transaktion).
+  Lokales Schreiben wartet nie auf das Netz (Paket 13b): Der Anstoß an
+  die Sync-Engine und die Abfrage einer neueren Version laufen außerhalb
+  der Warteschlange der Sitzung. Bis eine Änderung im Store liegt, gilt
+  sie als „Tippen gewinnt“ (auch gegen andere Tabs).
+- **Warteschlange (Paket 8):** Alle Dokumente mit `synced: false`
+  bilden die Warteschlange; sie übersteht Neustarts, weil sie in
+  IndexedDB liegt. Die `SyncEngine` (eine je Konto und Tab, gestartet
+  in `WorkspaceHome`) sendet sie per RPC `save_page_document`, auch
+  für Seiten, die gerade nicht offen sind. Auslöser: Start, neue
+  Änderung, `online`, App wieder sichtbar, „Erneut versuchen".
+- **Wiederholung:** offline/temporär/Auth → Backoff 2 s, 4 s, 8 s …
+  bis höchstens 5 min, nach 10 erfolglosen Durchläufen keine
+  zeitgesteuerten Versuche mehr (die Auslöser oben gelten weiter).
+  Dauerhafte Fehler werden nicht wiederholt, bis der Nutzer „Erneut
+  versuchen" wählt oder die App neu startet; die Änderung bleibt
+  lokal.
+- **Mehrere Tabs:** Durchläufe sind per Web Locks
+  (`nodi-sync-<userId>`) über Tabs serialisiert. Jede Änderung am
+  lokalen Store wird per `BroadcastChannel` gemeldet; offene Editoren
+  lesen dann den Store und zeigen den neuen Stand, sofern dort
+  gerade nicht getippt wird.
+- **Verdrängt (Option A):** Serverstand laden, lokale Kopie ersetzen,
+  kurzer Hinweis.
+- **Fehler:** offline/temporär/Auth → „lokal gespeichert" mit
+  „Erneut versuchen"; dauerhafte Fehler → Fehlermeldung, die
+  Änderung bleibt lokal erhalten. Scheitert nur das Laden einer
+  neueren Version, steht dort „Aktualisieren fehlgeschlagen“ (kein
+  Speicherfehler). Ein ungültiges Dokument vom Server ist dauerhaft.
+- **Verlassen:** `visibilitychange` (hidden), `pagehide` und Unmount
+  schreiben ausstehende Änderungen sofort lokal und senden sie.
+- **Rechte:** `can_edit_page` wird mitgeladen und lokal gemerkt;
+  ohne Schreibrecht ist der Editor schreibgeschützt.
 
 ### Offline-Start, Status und Logout (Paket 9)
 
--   **Seitenbaum und Workspaces:** je Konto in IndexedDB
-    `nodi-<userId>-tree` (eigene DB, damit die Dokument-DB kein
-    Schema-Upgrade braucht, das offene alte Tabs blockieren würden).
-    Der Cache antwortet zuerst, der Server ersetzt ihn. Ist der Server
-    nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
-    nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
-    lehnen Änderungen zusätzlich ab). `online` lädt neu.
-    Seit 13c gemeinsam in `hooks/load-cache-then-server.ts`: Ohne
-    Sitzung dieses Kontos wird der Server nicht gefragt (eine anonyme
-    Antwort wäre eine leere Liste und überschriebe den Cache). Zeigt die
-    Liste schon Serverdaten, kommt beim Neuladen nicht erst der Cache
-    (kein Flackern zu „nur lesbar“). Solange Cache oder Fehler angezeigt
-    werden, laden auch „App wieder sichtbar“ und eine erneuerte Sitzung
-    neu. Serverdaten werden wie der Cache validiert. Änderungen prüfen
-    die zurückgegebenen Zeilen (RLS filtert ohne Fehler) und verwerfen
-    ihr Ergebnis nach einem Workspace-Wechsel; während der nächste
-    Workspace lädt, ist der alte Baum ausgeblendet und die offene Seite
-    geschlossen.
--   **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
-    Netz da, liefert `getSession()` keine Sitzung, obwohl sie
-    gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
-    ~30 s. Der `AuthProvider` merkt sich daher id und E-Mail des Kontos
-    (`nodi-account` in `localStorage`, keine Tokens) und startet damit
-    im Offline-Modus (`offline: true`): sofort, wenn der Browser
-    offline meldet, sonst nach 3 s. Eine spätere Antwort von Supabase
-    entscheidet (neue Sitzung oder Login). Bei `online` wird die
-    Erneuerung angestoßen.
--   **Gesamtstatus:** Die Engine führt eine Übersicht (ungesyncte
-    Seiten, Grund des letzten Abbruchs), die Kopfzeile zeigt sie per
-    `useSyncExternalStore`, ab `sm` mit Grund und „Erneut versuchen“.
-    Ohne ausstehende Änderungen steht dort „Offline“, wenn Sitzung oder
-    Seitenbaum aus lokalen Daten stammen.
--   **Logout (Policy §2):** offene Editoren speichern lokal, dann
-    `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
-    „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
-    `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
-    Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
-    Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
-    nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
-    Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
-    schließt sich bei `versionchange` endgültig).
+- **Seitenbaum und Workspaces:** je Konto in IndexedDB
+  `nodi-<userId>-tree` (eigene DB, damit die Dokument-DB kein
+  Schema-Upgrade braucht, das offene alte Tabs blockieren würden).
+  Der Cache antwortet zuerst, der Server ersetzt ihn. Ist der Server
+  nicht erreichbar, bleibt der Cache stehen und die Seitenleiste ist
+  nur lesend (Anlegen, Umbenennen, Papierkorb ausgeblendet; die Hooks
+  lehnen Änderungen zusätzlich ab). `online` lädt neu.
+  Seit 13c gemeinsam in `hooks/load-cache-then-server.ts`: Ohne
+  Sitzung dieses Kontos wird der Server nicht gefragt (eine anonyme
+  Antwort wäre eine leere Liste und überschriebe den Cache). Zeigt die
+  Liste schon Serverdaten, kommt beim Neuladen nicht erst der Cache
+  (kein Flackern zu „nur lesbar“). Solange Cache oder Fehler angezeigt
+  werden, laden auch „App wieder sichtbar“ und eine erneuerte Sitzung
+  neu. Serverdaten werden wie der Cache validiert. Änderungen prüfen
+  die zurückgegebenen Zeilen (RLS filtert ohne Fehler) und verwerfen
+  ihr Ergebnis nach einem Workspace-Wechsel; während der nächste
+  Workspace lädt, ist der alte Baum ausgeblendet und die offene Seite
+  geschlossen.
+- **Anmeldung offline:** Ist das Zugriffstoken abgelaufen und kein
+  Netz da, liefert `getSession()` keine Sitzung, obwohl sie
+  gespeichert bleibt; supabase-js wiederholt die Erneuerung bis zu
+  ~30 s. Der `AuthProvider` merkt sich daher id und E-Mail des Kontos
+  (`nodi-account` in `localStorage`, keine Tokens) und startet damit
+  im Offline-Modus (`offline: true`): sofort, wenn der Browser
+  offline meldet, sonst nach 3 s. Eine spätere Antwort von Supabase
+  entscheidet (neue Sitzung oder Login). Bei `online` wird die
+  Erneuerung angestoßen.
+- **Gesamtstatus:** Die Engine führt eine Übersicht (ungesyncte
+  Seiten, Grund des letzten Abbruchs), die Kopfzeile zeigt sie per
+  `useSyncExternalStore`, ab `sm` mit Grund und „Erneut versuchen“.
+  Ohne ausstehende Änderungen steht dort „Offline“, wenn Sitzung oder
+  Seitenbaum aus lokalen Daten stammen.
+- **Logout (Policy §2):** offene Editoren speichern lokal, dann
+  `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
+  „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
+  `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
+  Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
+  Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
+  nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
+  Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
+  schließt sich bei `versionchange` endgültig).
 
 **Wichtig:** Die PWA-Cache-Funktion löst diese Probleme nicht.
 Offline-Dokumentbearbeitung braucht zusätzlich eine lokale Datenbank und
@@ -477,74 +484,74 @@ die folgenden Leitlinien.
 
 ### TypeScript
 
--   `strict`-Modus und vorhandene TypeScript-Regeln beibehalten.
--   Keine unkontrollierte Verwendung von `any`. Typen nicht mit Type
-    Assertions erzwingen, wenn sich die Daten korrekt validieren lassen.
--   Daten von Supabase und IndexedDB als externe Daten behandeln und an
-    passenden Grenzen validieren.
--   Domänentypen von UI-Zuständen und Datenbank-DTOs unterscheiden, wenn
-    sie fachlich unterschiedliche Aufgaben haben.
--   Keine Typdefinitionen duplizieren, wenn sie sinnvoll an einer
-    gemeinsamen Stelle gepflegt werden können.
+- `strict`-Modus und vorhandene TypeScript-Regeln beibehalten.
+- Keine unkontrollierte Verwendung von `any`. Typen nicht mit Type
+  Assertions erzwingen, wenn sich die Daten korrekt validieren lassen.
+- Daten von Supabase und IndexedDB als externe Daten behandeln und an
+  passenden Grenzen validieren.
+- Domänentypen von UI-Zuständen und Datenbank-DTOs unterscheiden, wenn
+  sie fachlich unterschiedliche Aufgaben haben.
+- Keine Typdefinitionen duplizieren, wenn sie sinnvoll an einer
+  gemeinsamen Stelle gepflegt werden können.
 
 ### React
 
--   Komponenten primär für Darstellung und Nutzerinteraktion verwenden.
--   Hooks für wiederverwendbare React-Logik; Services/Module für Logik,
-    die nicht an React gebunden ist.
--   Keine unnötigen `useEffect`-Ketten für abgeleitete Zustände.
--   Abgeleitete Werte direkt berechnen, statt sie redundant im State zu
-    speichern.
--   Effekt-Abhängigkeiten korrekt halten und Lifecycle-Probleme
-    vermeiden.
--   Keine langen asynchronen Geschäftsabläufe direkt in UI-Komponenten,
-    wenn sie besser in einen klar abgegrenzten Service gehören.
--   Keine globalen Stores hinzufügen, bevor ein konkreter Bedarf belegt
-    ist.
+- Komponenten primär für Darstellung und Nutzerinteraktion verwenden.
+- Hooks für wiederverwendbare React-Logik; Services/Module für Logik,
+  die nicht an React gebunden ist.
+- Keine unnötigen `useEffect`-Ketten für abgeleitete Zustände.
+- Abgeleitete Werte direkt berechnen, statt sie redundant im State zu
+  speichern.
+- Effekt-Abhängigkeiten korrekt halten und Lifecycle-Probleme
+  vermeiden.
+- Keine langen asynchronen Geschäftsabläufe direkt in UI-Komponenten,
+  wenn sie besser in einen klar abgegrenzten Service gehören.
+- Keine globalen Stores hinzufügen, bevor ein konkreter Bedarf belegt
+  ist.
 
 ### Verantwortlichkeiten und Abhängigkeiten
 
--   UI-Komponenten sollen nicht die komplette
-    Offline-Synchronisierungslogik implementieren.
--   Supabase-Zugriffe, lokale Persistenz und Konfliktregeln sollten klar
-    getrennt sein.
--   Domänenlogik möglichst unabhängig von React und UI halten.
--   Abhängigkeiten sollen in eine Richtung zeigen: UI → Anwendungslogik
-    → Datenzugriff.
--   Die Datenzugriffsschicht sollte nicht von React-Komponenten
-    abhängen.
--   Vermeide zyklische Imports.
--   Abstraktionen nur dort einführen, wo sie Verantwortlichkeiten
-    tatsächlich trennen oder Tests vereinfachen.
+- UI-Komponenten sollen nicht die komplette
+  Offline-Synchronisierungslogik implementieren.
+- Supabase-Zugriffe, lokale Persistenz und Konfliktregeln sollten klar
+  getrennt sein.
+- Domänenlogik möglichst unabhängig von React und UI halten.
+- Abhängigkeiten sollen in eine Richtung zeigen: UI → Anwendungslogik
+  → Datenzugriff.
+- Die Datenzugriffsschicht sollte nicht von React-Komponenten
+  abhängen.
+- Vermeide zyklische Imports.
+- Abstraktionen nur dort einführen, wo sie Verantwortlichkeiten
+  tatsächlich trennen oder Tests vereinfachen.
 
 ### Fehlerbehandlung und Observability
 
--   Fehler nicht stillschweigend verschlucken.
--   Nutzerfreundliche Fehlermeldungen in der UI; technische Details
-    angemessen für Debugging protokollieren.
--   Keine Dokumentinhalte, Tokens oder personenbezogenen Daten unnötig
-    loggen.
--   Netzwerkfehler von Validierungs-, Berechtigungs- und permanenten
-    Serverfehlern unterscheiden.
--   Wiederholungen nur für geeignete temporäre Fehler durchführen. Keine
-    endlosen Retry-Schleifen.
--   Offline-/Sync-Status sichtbar und verständlich darstellen.
+- Fehler nicht stillschweigend verschlucken.
+- Nutzerfreundliche Fehlermeldungen in der UI; technische Details
+  angemessen für Debugging protokollieren.
+- Keine Dokumentinhalte, Tokens oder personenbezogenen Daten unnötig
+  loggen.
+- Netzwerkfehler von Validierungs-, Berechtigungs- und permanenten
+  Serverfehlern unterscheiden.
+- Wiederholungen nur für geeignete temporäre Fehler durchführen. Keine
+  endlosen Retry-Schleifen.
+- Offline-/Sync-Status sichtbar und verständlich darstellen.
 
 ### Clean Code
 
--   Aussagekräftige Namen; keine kryptischen Abkürzungen.
--   Funktionen klein halten und jeweils eine klar erkennbare
-    Verantwortung geben.
--   Duplikation vermeiden, aber nicht durch übergenerische Frameworks
-    ersetzen.
--   Magische Werte als benannte Konstanten führen, wenn sie fachlich
-    relevant sind.
--   Kommentare erklären vor allem Gründe, Invarianten und nicht
-    offensichtliche Entscheidungen; sie wiederholen nicht den Code.
--   Veraltete Kommentare und ungenutzte Dateien erst entfernen, nachdem
-    ihre Nutzung geprüft wurde.
--   Keine unnötigen Änderungen an Formatierung oder Importstil in
-    unbeteiligten Dateien.
+- Aussagekräftige Namen; keine kryptischen Abkürzungen.
+- Funktionen klein halten und jeweils eine klar erkennbare
+  Verantwortung geben.
+- Duplikation vermeiden, aber nicht durch übergenerische Frameworks
+  ersetzen.
+- Magische Werte als benannte Konstanten führen, wenn sie fachlich
+  relevant sind.
+- Kommentare erklären vor allem Gründe, Invarianten und nicht
+  offensichtliche Entscheidungen; sie wiederholen nicht den Code.
+- Veraltete Kommentare und ungenutzte Dateien erst entfernen, nachdem
+  ihre Nutzung geprüft wurde.
+- Keine unnötigen Änderungen an Formatierung oder Importstil in
+  unbeteiligten Dateien.
 
 ## 6. Vorgeschlagene Projektstruktur -- nur schrittweise einführen
 
@@ -554,7 +561,7 @@ Verantwortlichkeiten tatsächlich entstehen.
 
 Möglicher Zielzustand:
 
-``` text
+```text
 src/
   app/
     App.tsx
@@ -603,41 +610,41 @@ werden.
 
 ### Wo Code hingehört
 
--   `components/ui/`: generische UI-Primitives.
--   `features/pages/components/`: Seitennavigation, Seitenaktionen und
-    Seitenformulare.
--   `features/editor/components/`: BlockNote-UI und Editor-Status.
--   Feature-Service: fachliche Abläufe eines Features, etwa Dokument
-    laden oder speichern.
--   Offline-Service: IndexedDB, persistente Warteschlange und
-    Synchronisierung, sofern diese Verantwortlichkeiten nicht nur für
-    ein einzelnes kleines Modul relevant sind.
--   `lib/supabase.ts`: Client-Initialisierung, keine umfangreiche
-    Geschäftslogik.
--   `app/`: Root-Provider, App-Zusammensetzung und Routing, soweit dies
-    im Projekt benötigt wird.
+- `components/ui/`: generische UI-Primitives.
+- `features/pages/components/`: Seitennavigation, Seitenaktionen und
+  Seitenformulare.
+- `features/editor/components/`: BlockNote-UI und Editor-Status.
+- Feature-Service: fachliche Abläufe eines Features, etwa Dokument
+  laden oder speichern.
+- Offline-Service: IndexedDB, persistente Warteschlange und
+  Synchronisierung, sofern diese Verantwortlichkeiten nicht nur für
+  ein einzelnes kleines Modul relevant sind.
+- `lib/supabase.ts`: Client-Initialisierung, keine umfangreiche
+  Geschäftslogik.
+- `app/`: Root-Provider, App-Zusammensetzung und Routing, soweit dies
+  im Projekt benötigt wird.
 
 ## 7. PWA-Anforderungen
 
 ### Technische Ziele
 
--   PWA mit Manifest und Service Worker.
--   Installierbarkeit auf iOS und Android.
--   Korrekte Icons in den benötigten Größen und Formaten.
--   `name`, `short_name`, `start_url`, `scope`, `display`,
-    `theme_color`, `background_color` und Icons im Manifest sinnvoll
-    definieren.
--   Pfade müssen für GitHub Pages unter `/nodi/` korrekt sein.
--   iOS-Metadaten, `apple-touch-icon` und Safe-Area-Verhalten
-    berücksichtigen.
--   Service Worker darf Updates nicht unkontrolliert oder zu einem
-    inkonsistenten Zustand führen.
--   Keine vertraulichen oder nutzerspezifischen Supabase-Antworten
-    unbedacht im Cache speichern.
--   Authentifizierte API-Antworten nicht pauschal mit einem
-    Cache-First-Verfahren behandeln.
--   Offline-Start der App und Offline-Verfügbarkeit der zuletzt
-    gespeicherten Seiten getrennt testen.
+- PWA mit Manifest und Service Worker.
+- Installierbarkeit auf iOS und Android.
+- Korrekte Icons in den benötigten Größen und Formaten.
+- `name`, `short_name`, `start_url`, `scope`, `display`,
+  `theme_color`, `background_color` und Icons im Manifest sinnvoll
+  definieren.
+- Pfade müssen für GitHub Pages unter `/nodi/` korrekt sein.
+- iOS-Metadaten, `apple-touch-icon` und Safe-Area-Verhalten
+  berücksichtigen.
+- Service Worker darf Updates nicht unkontrolliert oder zu einem
+  inkonsistenten Zustand führen.
+- Keine vertraulichen oder nutzerspezifischen Supabase-Antworten
+  unbedacht im Cache speichern.
+- Authentifizierte API-Antworten nicht pauschal mit einem
+  Cache-First-Verfahren behandeln.
+- Offline-Start der App und Offline-Verfügbarkeit der zuletzt
+  gespeicherten Seiten getrennt testen.
 
 ### App-Icon
 
@@ -650,22 +657,22 @@ bevor Dateien wirklich existieren.
 
 Gestaltungsvorgabe des Nutzers (Branding-Tafel vom 2026-10-16):
 
--   Abgerundetes Quadrat mit Verlauf von Indigo (oben links) zu sehr
-    dunklem Navy (unten rechts).
--   Darin ein weißes, kräftiges kleines „n" als Bogen; am Fuß des
-    rechten Schenkels ein violetter Punkt (`#6366F1`).
--   Wortmarke „nodi" (klein, fett, dunkles Navy), Claim „Deine Ideen.
-    Überall."
--   Manifest-Werte: `name`/`short_name` „nodi", `description` „Deine
-    Ideen. Überall.", `display` `standalone`, `background_color`
-    `#0B0F14`, `theme_color` `#6366F1`.
--   Größen: 192×192 und 512×512 (Android/PWA), 180×180
-    (`apple-touch-icon`); 1024×1024 nur falls ein App-Store-Export
-    nötig wird.
--   Achtung: Die Tafel zeigt root-absolute Icon-Pfade (`/icons/…`) und
-    `purpose: "any maskable"` in einem Eintrag. Für `/nodi/` relative
-    Pfade verwenden und `any` und `maskable` als getrennte Icons mit
-    passendem Innenabstand bereitstellen.
+- Abgerundetes Quadrat mit Verlauf von Indigo (oben links) zu sehr
+  dunklem Navy (unten rechts).
+- Darin ein weißes, kräftiges kleines „n" als Bogen; am Fuß des
+  rechten Schenkels ein violetter Punkt (`#6366F1`).
+- Wortmarke „nodi" (klein, fett, dunkles Navy), Claim „Deine Ideen.
+  Überall."
+- Manifest-Werte: `name`/`short_name` „nodi", `description` „Deine
+  Ideen. Überall.", `display` `standalone`, `background_color`
+  `#0B0F14`, `theme_color` `#6366F1`.
+- Größen: 192×192 und 512×512 (Android/PWA), 180×180
+  (`apple-touch-icon`); 1024×1024 nur falls ein App-Store-Export
+  nötig wird.
+- Achtung: Die Tafel zeigt root-absolute Icon-Pfade (`/icons/…`) und
+  `purpose: "any maskable"` in einem Eintrag. Für `/nodi/` relative
+  Pfade verwenden und `any` und `maskable` als getrennte Icons mit
+  passendem Innenabstand bereitstellen.
 
 ## 8. Offline-Dokumente und Synchronisierung
 
@@ -697,26 +704,26 @@ festgelegt werden.
 
 ### Anforderungen an die lokale Warteschlange
 
--   Änderungen lokal dauerhaft speichern, bevor sie als sicher lokal
-    gesichert angezeigt werden.
--   Mehrere schnelle Änderungen am selben Dokument können sinnvoll
-    zusammengefasst werden; die letzte lokale Version muss aber erhalten
-    bleiben.
--   Jede Mutation muss idempotent wiederholbar sein oder eine stabile ID
-    besitzen, damit Wiederholungen nicht zu unerwarteten Nebeneffekten
-    führen.
--   Fehlerhafte Mutationen dürfen nicht stillschweigend gelöscht werden.
--   Temporäre Netzwerkfehler sollen später erneut versucht werden.
--   Bei Abmeldung/Kontowechsel darf ein Dokument nicht versehentlich mit
-    einem anderen Konto synchronisiert werden.
--   App-Neustart muss ausstehende Änderungen wiederfinden.
--   Ein Unmount-Callback allein ist keine ausreichende
-    Persistenzstrategie.
--   Sync nicht nur von `navigator.onLine` abhängig machen: Dieser Wert
-    ist ein Hinweis, kein sicherer Nachweis, dass Supabase erreichbar
-    ist.
--   Mehrere Tabs/Geräte und Rennen zwischen Lese- und Schreibvorgängen
-    berücksichtigen.
+- Änderungen lokal dauerhaft speichern, bevor sie als sicher lokal
+  gesichert angezeigt werden.
+- Mehrere schnelle Änderungen am selben Dokument können sinnvoll
+  zusammengefasst werden; die letzte lokale Version muss aber erhalten
+  bleiben.
+- Jede Mutation muss idempotent wiederholbar sein oder eine stabile ID
+  besitzen, damit Wiederholungen nicht zu unerwarteten Nebeneffekten
+  führen.
+- Fehlerhafte Mutationen dürfen nicht stillschweigend gelöscht werden.
+- Temporäre Netzwerkfehler sollen später erneut versucht werden.
+- Bei Abmeldung/Kontowechsel darf ein Dokument nicht versehentlich mit
+  einem anderen Konto synchronisiert werden.
+- App-Neustart muss ausstehende Änderungen wiederfinden.
+- Ein Unmount-Callback allein ist keine ausreichende
+  Persistenzstrategie.
+- Sync nicht nur von `navigator.onLine` abhängig machen: Dieser Wert
+  ist ein Hinweis, kein sicherer Nachweis, dass Supabase erreichbar
+  ist.
+- Mehrere Tabs/Geräte und Rennen zwischen Lese- und Schreibvorgängen
+  berücksichtigen.
 
 ### Last-Write-Wins (LWW)
 
@@ -726,13 +733,13 @@ verwenden.
 
 Vor Implementierung klären und dokumentieren:
 
--   Was bedeutet „latest": serverseitig bestätigte Reihenfolge,
-    serverseitiger Zeitstempel oder eine andere definierte Ordnung?
--   Wie werden gleichzeitige Updates geordnet?
--   Wie wird verhindert, dass ein älterer, verspäteter Request einen
-    neueren Stand überschreibt?
--   Welche Operation ist atomar, wenn mehrere Geräte gleichzeitig
-    schreiben?
+- Was bedeutet „latest": serverseitig bestätigte Reihenfolge,
+  serverseitiger Zeitstempel oder eine andere definierte Ordnung?
+- Wie werden gleichzeitige Updates geordnet?
+- Wie wird verhindert, dass ein älterer, verspäteter Request einen
+  neueren Stand überschreibt?
+- Welche Operation ist atomar, wenn mehrere Geräte gleichzeitig
+  schreiben?
 
 Bevorzugte Richtung: eine klar definierte, serverseitig durchgesetzte
 Konfliktregel, zum Beispiel über eine geeignete PostgreSQL-Funktion/RPC
@@ -743,31 +750,31 @@ Spalten, Constraints und RLS-Regeln geprüft sind.
 
 **Umsetzung (Paket 6, `20261017180000_save_page_document_lww.sql`):**
 
--   Neue Spalten `page_documents.client_updated_at` (Bearbeitungszeit,
-    `not null`, Default `now()`; Bestand mit `updated_at` befüllt) und
-    `last_mutation_id`.
--   RPC `save_page_document(p_page_id, p_document, p_edited_at,
-    p_mutation_id)` → `(applied, stored_edited_at, stored_mutation_id)`.
-    Seit Paket 8 (`20261018070000_save_page_document_only.sql`)
-    `security definer` mit ausdrücklicher Prüfung
-    `can_edit_page(p_page_id)`; `insert`/`update` auf `page_documents`
-    sind für `anon`/`authenticated` entzogen, die LWW-Regel ist also
-    nicht mehr umgehbar. `execute` nur für `authenticated`.
-    `updated_by` bleibt der Aufrufer (`auth.uid()` aus dem JWT).
--   Ordnung: `(client_updated_at, last_mutation_id)`. Übernommen wird
-    nur ein streng größeres Paar, atomar per
-    `insert … on conflict do update … where`. `p_edited_at` wird auf
-    `now()` gekappt.
--   Auswertung im Client: `applied = true` → synchronisiert.
-    `applied = false` und `stored_mutation_id` = eigene ID → schon
-    früher übernommen (Wiederholung). Sonst → von einem neueren Stand
-    verdrängt; Serverstand neu laden.
--   Fehlercodes: `42501` keine Schreibrechte oder Seite existiert
-    nicht (RLS greift vor dem Fremdschlüssel), `22023` Dokument ist
-    kein JSON-Array, `22004` Argument fehlt. Alle dauerhaft, nicht
-    wiederholen.
--   `updated_at`/`updated_by` bleiben Serverzeit und Autor des letzten
-    übernommenen Schreibvorgangs.
+- Neue Spalten `page_documents.client_updated_at` (Bearbeitungszeit,
+  `not null`, Default `now()`; Bestand mit `updated_at` befüllt) und
+  `last_mutation_id`.
+- RPC `save_page_document(p_page_id, p_document, p_edited_at,
+p_mutation_id)` → `(applied, stored_edited_at, stored_mutation_id)`.
+  Seit Paket 8 (`20261018070000_save_page_document_only.sql`)
+  `security definer` mit ausdrücklicher Prüfung
+  `can_edit_page(p_page_id)`; `insert`/`update` auf `page_documents`
+  sind für `anon`/`authenticated` entzogen, die LWW-Regel ist also
+  nicht mehr umgehbar. `execute` nur für `authenticated`.
+  `updated_by` bleibt der Aufrufer (`auth.uid()` aus dem JWT).
+- Ordnung: `(client_updated_at, last_mutation_id)`. Übernommen wird
+  nur ein streng größeres Paar, atomar per
+  `insert … on conflict do update … where`. `p_edited_at` wird auf
+  `now()` gekappt.
+- Auswertung im Client: `applied = true` → synchronisiert.
+  `applied = false` und `stored_mutation_id` = eigene ID → schon
+  früher übernommen (Wiederholung). Sonst → von einem neueren Stand
+  verdrängt; Serverstand neu laden.
+- Fehlercodes: `42501` keine Schreibrechte oder Seite existiert
+  nicht (RLS greift vor dem Fremdschlüssel), `22023` Dokument ist
+  kein JSON-Array, `22004` Argument fehlt. Alle dauerhaft, nicht
+  wiederholen.
+- `updated_at`/`updated_by` bleiben Serverzeit und Autor des letzten
+  übernommenen Schreibvorgangs.
 
 LWW kann Änderungen eines anderen Geräts bewusst überschreiben. Falls
 die App später wertvolle Inhalte schützt, sollte geprüft werden, ob
@@ -776,59 +783,60 @@ eine fachliche Entscheidung und nicht automatisch einzuführen.
 
 ### Lokale Daten und Sicherheit
 
--   Lokale Dokumente sind auf dem Gerät gespeichert und können auf
-    gemeinsam genutzten Geräten ein Datenschutzrisiko sein.
--   Keine anderen Nutzer oder Konten dürfen Zugriff auf die lokale
-    Warteschlange bekommen.
--   Beim Logout muss eine klare, dokumentierte Policy greifen:
-    ausstehende Änderungen entweder sicher synchronisieren, geschützt
-    aufbewahren oder nach ausdrücklicher Produktentscheidung löschen.
-    Nicht stillschweigend Daten verlieren.
--   Supabase RLS bleibt maßgeblich für den Serverzugriff.
--   Keine Auth-Tokens in eigenen IndexedDB-Tabellen duplizieren, sofern
-    es keinen zwingenden Grund gibt.
--   Umsetzung siehe §4 „Offline-Start, Status und Logout“.
+- Lokale Dokumente sind auf dem Gerät gespeichert und können auf
+  gemeinsam genutzten Geräten ein Datenschutzrisiko sein.
+- Keine anderen Nutzer oder Konten dürfen Zugriff auf die lokale
+  Warteschlange bekommen.
+- Beim Logout muss eine klare, dokumentierte Policy greifen:
+  ausstehende Änderungen entweder sicher synchronisieren, geschützt
+  aufbewahren oder nach ausdrücklicher Produktentscheidung löschen.
+  Nicht stillschweigend Daten verlieren.
+- Supabase RLS bleibt maßgeblich für den Serverzugriff.
+- Keine Auth-Tokens in eigenen IndexedDB-Tabellen duplizieren, sofern
+  es keinen zwingenden Grund gibt.
+- Umsetzung siehe §4 „Offline-Start, Status und Logout“.
 
 ## 9. GitHub Pages und Build
 
 Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
 
--   `base: "/nodi/"` beibehalten, solange dies das Deployment-Ziel ist.
--   Asset- und Navigationspfade unter diesem Prefix prüfen.
--   Nach PWA-Änderungen prüfen, dass Manifest, Icons und Service Worker
-    im Build aufgelöst werden.
--   `npm run build` ausführen und `dist/` kontrollieren.
--   Wenn verfügbar, die App über `npm run preview` testen.
--   Einen GitHub-Pages-Deploy und einen lokalen Preview-Server nicht
-    gleichsetzen; beide relevanten Pfade testen.
--   Keine Änderungen an GitHub Actions oder Firebase-Konfiguration ohne
-    vorherige Prüfung des tatsächlichen Deployment-Workflows.
--   `.github/workflows/deploy.yml` deployt bei Push auf den Branch
-    **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
-    `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
--   Ablauf des Deploys (seit 13d): **`build` und `verify-database` →
-    `migrate` → `deploy`**. `build` führt Lint, Unit-Tests, den
-    Produktions-Build und die Prüfungen auf Base-Pfad und geheime
-    Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
-    frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
-    danach verknüpft `migrate` das Supabase-Projekt und führt
-    `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
-    Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
-    `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
-    `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
-    (`cancel-in-progress: false`).
--   **Regel für Migrationen:** Zwischen `migrate` und `deploy` läuft noch
-    das alte Frontend gegen das neue Schema. Migrationen müssen daher
-    rückwärtskompatibel sein (erst erweitern, alte Wege später in einer
-    eigenen Migration entfernen).
--   Passt die Remote-Historie nicht zu `supabase/migrations` (z. B. eine
-    Migration wurde von Hand im SQL-Editor eingespielt), bricht
-    `db push` ab. Abhilfe lokal:
-    `supabase migration repair --status applied <version>`.
--   `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
-    Push auf `master`: Lint, Unit-Tests, Build, Prüfung von Base-Pfad,
-    PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
-    DB, `supabase db lint`, `supabase test db`.
+- `base: "/nodi/"` beibehalten, solange dies das Deployment-Ziel ist.
+- Asset- und Navigationspfade unter diesem Prefix prüfen.
+- Nach PWA-Änderungen prüfen, dass Manifest, Icons und Service Worker
+  im Build aufgelöst werden.
+- `npm run build` ausführen und `dist/` kontrollieren.
+- Wenn verfügbar, die App über `npm run preview` testen.
+- Einen GitHub-Pages-Deploy und einen lokalen Preview-Server nicht
+  gleichsetzen; beide relevanten Pfade testen.
+- Keine Änderungen an GitHub Actions oder Firebase-Konfiguration ohne
+  vorherige Prüfung des tatsächlichen Deployment-Workflows.
+- `.github/workflows/deploy.yml` deployt bei Push auf den Branch
+  **`production`** (nicht `master`) und liest `VITE_SUPABASE_URL` und
+  `VITE_SUPABASE_PUBLISHABLE_KEY` aus Repository-Secrets.
+- Ablauf des Deploys (seit 13d): **`build` und `verify-database` →
+  `migrate` → `deploy`**. `build` führt Lint, Unit-Tests, den
+  Produktions-Build und die Prüfungen auf Base-Pfad und geheime
+  Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
+  frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
+  danach verknüpft `migrate` das Supabase-Projekt und führt
+  `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+  Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
+  `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
+  `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
+  (`cancel-in-progress: false`).
+- **Regel für Migrationen:** Zwischen `migrate` und `deploy` läuft noch
+  das alte Frontend gegen das neue Schema. Migrationen müssen daher
+  rückwärtskompatibel sein (erst erweitern, alte Wege später in einer
+  eigenen Migration entfernen).
+- Passt die Remote-Historie nicht zu `supabase/migrations` (z. B. eine
+  Migration wurde von Hand im SQL-Editor eingespielt), bricht
+  `db push` ab. Abhilfe lokal:
+  `supabase migration repair --status applied <version>`.
+- `.github/workflows/ci.yml` läuft für jeden Pull Request und jeden
+  Push auf `master`: Lint, Formatierung (`npm run format:check`),
+  Unit-Tests, Build (mit Platzhalterwerten für Supabase), Prüfung von Base-Pfad,
+  PWA-Dateien und Bundle (`sb_secret_`), alle Migrationen auf frischer
+  DB, `supabase db lint`, `supabase test db`.
 
 ## 10. Test- und Qualitätsstrategie
 
@@ -847,37 +855,38 @@ Mindestens prüfen:
 
 ### Allgemein
 
--   `npm run lint`
--   `npm run build`
--   vorhandene Tests, sofern eingerichtet
--   Browser-Konsole auf neue Fehler
+- `npm run lint`
+- `npm run format:check` (vorher `npm run format`)
+- `npm run build`
+- vorhandene Tests, sofern eingerichtet
+- Browser-Konsole auf neue Fehler
 
 ### PWA
 
--   Manifest wird unter dem richtigen Base-Pfad geladen.
--   Icons laden ohne 404.
--   Service Worker wird registriert und kontrolliert die App.
--   Reload funktioniert.
--   Update eines neuen Builds funktioniert nachvollziehbar.
--   Installation/Zum-Home-Bildschirm auf realem iOS- und Android-Gerät
-    prüfen.
+- Manifest wird unter dem richtigen Base-Pfad geladen.
+- Icons laden ohne 404.
+- Service Worker wird registriert und kontrolliert die App.
+- Reload funktioniert.
+- Update eines neuen Builds funktioniert nachvollziehbar.
+- Installation/Zum-Home-Bildschirm auf realem iOS- und Android-Gerät
+  prüfen.
 
 ### Offline
 
--   Seite online öffnen und warten, bis der Inhalt lokal gespeichert
-    ist.
--   Flugmodus aktivieren und die Seite erneut öffnen.
--   Dokument offline ändern.
--   App schließen und erneut starten; lokale Änderung muss erhalten
-    bleiben.
--   Netzwerk wieder aktivieren; ausstehende Änderung muss synchronisiert
-    werden.
--   Wiederholte Synchronisierung darf keine Daten beschädigen.
--   Zwei Geräte mit unterschiedlichen Änderungen testen und die
-    definierte LWW-Regel überprüfen.
--   Fehlende Berechtigungen, Logout und Kontowechsel testen.
--   Netzwerkfehler dürfen nicht fälschlich als „Gespeichert" angezeigt
-    werden.
+- Seite online öffnen und warten, bis der Inhalt lokal gespeichert
+  ist.
+- Flugmodus aktivieren und die Seite erneut öffnen.
+- Dokument offline ändern.
+- App schließen und erneut starten; lokale Änderung muss erhalten
+  bleiben.
+- Netzwerk wieder aktivieren; ausstehende Änderung muss synchronisiert
+  werden.
+- Wiederholte Synchronisierung darf keine Daten beschädigen.
+- Zwei Geräte mit unterschiedlichen Änderungen testen und die
+  definierte LWW-Regel überprüfen.
+- Fehlende Berechtigungen, Logout und Kontowechsel testen.
+- Netzwerkfehler dürfen nicht fälschlich als „Gespeichert" angezeigt
+  werden.
 
 ## 11. Arbeitsablauf für Claude Code
 
@@ -899,22 +908,22 @@ Bei Beginn einer Aufgabe:
 
 ### Nicht tun
 
--   Nicht sofort die gesamte Codebasis umstrukturieren.
--   Keine Dateien erstellen, ohne ihre Rolle und Einbindung zu kennen.
--   Keine unbekannten Spalten, RPCs, Policies oder Constraints
-    voraussetzen.
--   Keine Secrets lesen oder ausgeben, wenn es nicht notwendig ist.
--   Keine `localStorage`-Lösung als Ersatz für eine robuste
-    Offline-Dokumentdatenbank verwenden.
--   Nicht behaupten, offline zu funktionieren, nur weil die App Shell
-    gecacht wird.
--   Keine automatisch synchronisierten Schreibvorgänge als erfolgreich
-    anzeigen, bevor sie tatsächlich lokal dauerhaft gespeichert oder
-    remote bestätigt wurden.
--   Keine unüberprüften absoluten URLs verwenden, die GitHub Pages
-    brechen.
--   Keine Fehler mit `catch(() => undefined)` verstecken, ohne sie an
-    geeigneter Stelle sichtbar zu machen oder kontrolliert zu behandeln.
+- Nicht sofort die gesamte Codebasis umstrukturieren.
+- Keine Dateien erstellen, ohne ihre Rolle und Einbindung zu kennen.
+- Keine unbekannten Spalten, RPCs, Policies oder Constraints
+  voraussetzen.
+- Keine Secrets lesen oder ausgeben, wenn es nicht notwendig ist.
+- Keine `localStorage`-Lösung als Ersatz für eine robuste
+  Offline-Dokumentdatenbank verwenden.
+- Nicht behaupten, offline zu funktionieren, nur weil die App Shell
+  gecacht wird.
+- Keine automatisch synchronisierten Schreibvorgänge als erfolgreich
+  anzeigen, bevor sie tatsächlich lokal dauerhaft gespeichert oder
+  remote bestätigt wurden.
+- Keine unüberprüften absoluten URLs verwenden, die GitHub Pages
+  brechen.
+- Keine Fehler mit `catch(() => undefined)` verstecken, ohne sie an
+  geeigneter Stelle sichtbar zu machen oder kontrolliert zu behandeln.
 
 ## 12. Erste konkrete Aufgabe
 
@@ -923,20 +932,20 @@ aktuellen Repository-Zustand und liefere eine kurze Ist-Analyse.
 
 Dateien/Bereiche, die besonders wichtig sind:
 
--   `package.json`
--   `vite.config.ts`
--   `index.html`
--   `src/main.tsx`
--   `src/App.tsx`
--   `src/components/editor/BlockEditor.tsx` vollständig
--   `src/lib/supabase.ts`
--   `src/lib/auth-provider.tsx`
--   `src/lib/use-auth.tsx`
--   `src/features/pages/`
--   vorhandene Supabase-Migrationen und RLS-Policies für
-    `page_documents`
--   GitHub-Actions-Workflow für GitHub Pages, falls vorhanden
--   vorhandene Tests und ESLint-/TypeScript-Konfiguration
+- `package.json`
+- `vite.config.ts`
+- `index.html`
+- `src/main.tsx`
+- `src/App.tsx`
+- `src/components/editor/BlockEditor.tsx` vollständig
+- `src/lib/supabase.ts`
+- `src/lib/auth-provider.tsx`
+- `src/lib/use-auth.tsx`
+- `src/features/pages/`
+- vorhandene Supabase-Migrationen und RLS-Policies für
+  `page_documents`
+- GitHub-Actions-Workflow für GitHub Pages, falls vorhanden
+- vorhandene Tests und ESLint-/TypeScript-Konfiguration
 
 Die Ist-Analyse ist erledigt (2026-10-16). Vereinbarte Reihenfolge der
 Arbeitspakete, je ein Pull Request:
@@ -963,468 +972,468 @@ Arbeitspakete, je ein Pull Request:
 10. **Notion-Look-and-Feel** (Nutzerwunsch 2026-10-17, nach 7–9).
     Muster und Anmutung wie Notion, aber keine Logos, Icons oder Grafiken
     von Notion übernehmen. Entscheidungen des Nutzers:
-    -   **Seitenleiste:** heller grauer Hintergrund, kompakte Zeilen,
-        Aufklapp-Pfeile, Emoji je Seite, Workspace oben, „Neue Seite“ und
-        Papierkorb unten, Aktionen beim Überfahren (Touch: sichtbar).
-    -   **Seitenkopf:** großer, direkt im Inhalt bearbeitbarer Titel,
-        wählbares Emoji-Icon (Spalte `pages.icon` existiert bereits, keine
-        Migration nötig), schmale Leiste oben mit Pfad, Speicherstatus und
-        „…“-Menü.
-    -   **Optik:** ruhige, neutrale Palette und Abstände, schmale
-        zentrierte Textspalte, Dark Mode automatisch nach
-        Systemeinstellung. **Branding:** neutral, nodi-Indigo `#6366F1`
-        nur als Akzent (Logo, Auswahl, Fokus, Links).
-    -   **Editor auf Deutsch:** BlockNote-Übersetzung aktivieren.
-    -   **Mobil (PWA):** wie die Notion-App. Startansicht ist die
-        Seitenliste als ganzer Bildschirm, eine Seite öffnet sich mit
-        Zurück-Pfeil oben links. Ersetzt die Schublade aus Paket 5 auf
-        kleinen Bildschirmen.
-    -   Nicht im ersten Wurf: Titelbilder (Storage), Verschieben per
-        Drag & Drop (braucht Zyklenprüfung), Suche, Favoriten.
+    - **Seitenleiste:** heller grauer Hintergrund, kompakte Zeilen,
+      Aufklapp-Pfeile, Emoji je Seite, Workspace oben, „Neue Seite“ und
+      Papierkorb unten, Aktionen beim Überfahren (Touch: sichtbar).
+    - **Seitenkopf:** großer, direkt im Inhalt bearbeitbarer Titel,
+      wählbares Emoji-Icon (Spalte `pages.icon` existiert bereits, keine
+      Migration nötig), schmale Leiste oben mit Pfad, Speicherstatus und
+      „…“-Menü.
+    - **Optik:** ruhige, neutrale Palette und Abstände, schmale
+      zentrierte Textspalte, Dark Mode automatisch nach
+      Systemeinstellung. **Branding:** neutral, nodi-Indigo `#6366F1`
+      nur als Akzent (Logo, Auswahl, Fokus, Links).
+    - **Editor auf Deutsch:** BlockNote-Übersetzung aktivieren.
+    - **Mobil (PWA):** wie die Notion-App. Startansicht ist die
+      Seitenliste als ganzer Bildschirm, eine Seite öffnet sich mit
+      Zurück-Pfeil oben links. Ersetzt die Schublade aus Paket 5 auf
+      kleinen Bildschirmen.
+    - Nicht im ersten Wurf: Titelbilder (Storage), Verschieben per
+      Drag & Drop (braucht Zyklenprüfung), Suche, Favoriten.
 11. **Teilen und Berechtigungen nach dem Notion-Modell**
     (Nutzerwunsch 2026-10-18).
-    -   **Verschlüsselung:** keine Ende-zu-Ende-Verschlüsselung; der
-        Server darf Inhalte lesen (Suche, Teilen, Server-Funktionen).
-        Encryption at rest übernimmt die Plattform (Supabase/AWS,
-        AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
-        nur HTTPS-Endpunkte.
-    -   **Klartext in der Datenbank (Nutzerentscheidung 2026-10-18):**
-        Dokumente und Titel stehen lesbar in `page_documents`/`pages`.
-        RLS schützt vor anderen Nutzern, nicht vor Betreibern: Wer das
-        Supabase-Dashboard oder den Service-Role-Key nutzt, umgeht RLS
-        und kann Inhalte lesen; Encryption at rest ändert daran nichts.
-        Gewollt, wie bei Notion. Ausgleich: Dashboard-Zugang klein halten
-        (2FA) und in der Datenschutzerklärung offenlegen. Server- oder
-        Ende-zu-Ende-Verschlüsselung der Inhalte vorerst nicht.
-    -   **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
-        ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
-    -   **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
-        abgesichert: Zugriff nur für Owner, Workspace-Mitglieder oder
-        geteilte Nutzer, inklusive Vererbung über `parent_id`.
-        Berechtigungen nie nur im Frontend prüfen. Der Service-Role-Key
-        nur in Edge Functions, nie im Client.
-    -   **Abgleich mit dem Ist-Stand (2026-10-18):**
-        -   `page_shares` (`read`/`edit`) entspricht dem vorgeschlagenen
-            `page_permissions` (`viewer`/`editor`); der Owner ist
-            `pages.owner_id`. Vorschlag: Tabelle behalten statt umbenennen;
-            eine eigene Rolle `owner` wäre eine zweite Quelle der Wahrheit.
-        -   Der Inhalt liegt in `page_documents` (LWW-RPC, Pakete 6–8),
-            nicht in `pages.content`; so bleibt es.
-        -   RLS gibt es bereits über `can_read_page`/`can_edit_page`.
-            **Neu nötig:** Vererbung: ein Share auf eine Seite gilt für
-            alle Unterseiten (rekursiv über `parent_id`, mit begrenzter
-            Tiefe, solange Verschieben keine Zyklenprüfung hat, §13).
-        -   **Neu nötig:** Oberfläche zum Teilen (Nutzer per E-Mail
-            einladen, Rolle ändern, Zugriff entziehen; nur der Owner).
-        -   **Neu nötig:** Wird der Zugriff entzogen, löscht der Client
-            beim nächsten Kontakt mit dem Server die lokale Kopie und den
-            Eintrag im Seitenbaum-Cache. Offline bleibt eine bereits
-            geladene Kopie bis dahin auf dem Gerät; „sofort“ gilt für den
-            Server.
-        -   Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
-            CI-Check auf `dist/`).
-    -   **Entschieden (Nutzer, 2026-10-18):** (1) Freigaben gelten
-        **nicht** für `private` Unterseiten; die Vererbung endet an einer
-        privaten Seite (sie und alles darunter brauchen eine eigene
-        Freigabe). (2) Öffentliche Links **jetzt**, nur über eine RPC.
-        (3) Nutzer finden per **exakter E-Mail-Eingabe**.
-    -   **Annahme:** Ein öffentlicher Link gilt nur für genau diese Seite,
-        nicht für ihre Unterseiten (später erweiterbar).
-    -   **Aufteilung:** 11a Datenbank (RPCs, Vererbung, Links, pgTAP,
-        Schlüssel-Checks), 11b Oberfläche zum Teilen und „Mit mir
-        geteilt“, lokale Kopie bei Entzug löschen, 11c öffentlicher Link
-        im Teilen-Dialog und öffentliche Seitenansicht ohne Login (der
-        Link-Schalter kam nach 11c, damit ein erzeugter Link sofort
-        funktioniert).
-    -   **Umsetzung 11a** (`20261018120000_page_sharing.sql`):
-        `has_page_share(page, require_edit)` geht rekursiv über
-        `parent_id` nach oben (Stopp an `private`, Tiefe ≤ 50 gegen
-        Zyklen); `can_read_page`/`can_edit_page` nutzen es, damit gelten
-        alle bestehenden Policies und `save_page_document` automatisch.
-        `share_page(page, email, 'read'|'edit')` (nur Owner; `42501`,
-        `22023`, `P0002` unbekannte E-Mail; erneutes Teilen ändert die
-        Rolle), `list_page_shares(page)` mit E-Mails (nur Owner).
-        Ändern/Entziehen über die bestehenden Owner-Policies auf
-        `page_shares`. Tabelle `page_public_links` (ein Token je Seite,
-        nur Owner), `get_public_page(token)` für `anon` (nur diese
-        Seite, nicht archiviert). Die Fehlermeldung bei unbekannter
-        E-Mail verrät dem Owner, ob ein Konto existiert (bewusst, wie bei
-        Einladungen üblich). Deploy lehnt `sb_secret_`- und
-        `service_role`-Schlüssel als Publishable Key ab; CI prüft das
-        Bundle auf `sb_secret_`.
-    -   **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
-        Zeilen (`pages`, `page_documents`), auch für Unterseiten.
-        Viewer kann lesen, aber nicht schreiben (`save_page_document` →
-        `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
-        Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
-    -   **Umsetzung 11b** (nur Frontend, keine Migration):
-        -   `pages.owner_id` wird mitgeladen (`Page.owner_id`; alte
-            Caches ohne Owner gelten als „nicht teilbar“ bis zum
-            nächsten Laden). „Teilen“ im Seitenmenü nur für den Owner
-            und nur online; der Server prüft es ohnehin.
-        -   `ShareDialog`: Einladen per E-Mail mit Rolle „Kann lesen“ /
-            „Kann bearbeiten“ (`share_page`), Liste (`list_page_shares`),
-            Rolle ändern = erneut `share_page`, Entfernen = `delete` auf
-            `page_shares`. Fehlercodes als deutsche Meldungen.
-        -   „Mit mir geteilt“ (`useSharedPages`): lesbare, nicht
-            archivierte Seiten außerhalb der eigenen Workspaces
-            (`workspace_id not in (…)`, RLS entscheidet). Seiten, deren
-            Elternseite nicht sichtbar ist, sind Wurzeln. Cache zuerst
-            (Schlüssel `shared-pages` in `nodi-<userId>-tree`), offline
-            nur lesend. Mit Bearbeitungsrecht (`can_edit_page`) und
-            online sind Titel und Icon änderbar (Update nur per `id`,
-            die zurückgegebenen Zeilen zeigen, ob RLS es erlaubt hat);
-            Breite, Papierkorb und Teilen (Seitenmenü) bleiben dem
-            eigenen Workspace vorbehalten.
-        -   Entzug: `deleteRevokedLocalCopies` fragt beim Start und bei
-            `online` alle lesbaren Seiten-IDs ab und löscht lokal nur
-            **synchronisierte** Kopien anderer Seiten (in einer
-            Transaktion). Ungesyncte Änderungen bleiben (keine stillen
-            Datenverluste; die Sync-Engine meldet `42501`). Ohne
-            vollständige Antwort (Fehler, offline, `count` ≠ Zeilen)
-            wird nichts gelöscht. Seitenbaum- und Geteilt-Cache werden
-            bei der nächsten Serverantwort ersetzt.
-    -   **Umsetzung 11c** (nur Frontend, keine Migration):
-        -   Link: `…/nodi/?p=<token>` (Query-Parameter, braucht auf
-            GitHub Pages keine eigene Route; URL relativ zu `BASE_URL`).
-        -   Teilen-Dialog: „Link erstellen“ (`insert` in
-            `page_public_links`, Token vom Server), „Kopieren“, „Link
-            deaktivieren“ (`delete`, wirkt sofort; ein neuer Link hat
-            einen neuen Token). Nur Owner, nur online.
-        -   `main.tsx` zeigt bei `?p=` die öffentliche Ansicht statt der
-            App, ohne `AuthProvider`: kein Login, keine Sync-Engine,
-            nichts in IndexedDB. Ein ungültiges Token wird nicht
-            angefragt. Inhalt per `get_public_page`, validiert, BlockNote
-            mit `editable={false}`. Fehler: ungültig/deaktiviert/
-            archiviert („Dieser Link ist ungültig oder wurde
-            deaktiviert.“), offline, sonstige.
+    - **Verschlüsselung:** keine Ende-zu-Ende-Verschlüsselung; der
+      Server darf Inhalte lesen (Suche, Teilen, Server-Funktionen).
+      Encryption at rest übernimmt die Plattform (Supabase/AWS,
+      AES-256), keine eigene Krypto im App-Code. In transit nur TLS,
+      nur HTTPS-Endpunkte.
+    - **Klartext in der Datenbank (Nutzerentscheidung 2026-10-18):**
+      Dokumente und Titel stehen lesbar in `page_documents`/`pages`.
+      RLS schützt vor anderen Nutzern, nicht vor Betreibern: Wer das
+      Supabase-Dashboard oder den Service-Role-Key nutzt, umgeht RLS
+      und kann Inhalte lesen; Encryption at rest ändert daran nichts.
+      Gewollt, wie bei Notion. Ausgleich: Dashboard-Zugang klein halten
+      (2FA) und in der Datenschutzerklärung offenlegen. Server- oder
+      Ende-zu-Ende-Verschlüsselung der Inhalte vorerst nicht.
+    - **Zugriff über Berechtigungen, nicht über Schlüssel:** Teilen ist
+      ein Eintrag in einer Berechtigungstabelle, kein Schlüsseltausch.
+    - **Regeln:** Jede Lese- und Schreiboperation ist durch RLS
+      abgesichert: Zugriff nur für Owner, Workspace-Mitglieder oder
+      geteilte Nutzer, inklusive Vererbung über `parent_id`.
+      Berechtigungen nie nur im Frontend prüfen. Der Service-Role-Key
+      nur in Edge Functions, nie im Client.
+    - **Abgleich mit dem Ist-Stand (2026-10-18):**
+      - `page_shares` (`read`/`edit`) entspricht dem vorgeschlagenen
+        `page_permissions` (`viewer`/`editor`); der Owner ist
+        `pages.owner_id`. Vorschlag: Tabelle behalten statt umbenennen;
+        eine eigene Rolle `owner` wäre eine zweite Quelle der Wahrheit.
+      - Der Inhalt liegt in `page_documents` (LWW-RPC, Pakete 6–8),
+        nicht in `pages.content`; so bleibt es.
+      - RLS gibt es bereits über `can_read_page`/`can_edit_page`.
+        **Neu nötig:** Vererbung: ein Share auf eine Seite gilt für
+        alle Unterseiten (rekursiv über `parent_id`, mit begrenzter
+        Tiefe, solange Verschieben keine Zyklenprüfung hat, §13).
+      - **Neu nötig:** Oberfläche zum Teilen (Nutzer per E-Mail
+        einladen, Rolle ändern, Zugriff entziehen; nur der Owner).
+      - **Neu nötig:** Wird der Zugriff entzogen, löscht der Client
+        beim nächsten Kontakt mit dem Server die lokale Kopie und den
+        Eintrag im Seitenbaum-Cache. Offline bleibt eine bereits
+        geladene Kopie bis dahin auf dem Gerät; „sofort“ gilt für den
+        Server.
+      - Prüfen: kein Service-Role-Key im Frontend-Bundle (z. B.
+        CI-Check auf `dist/`).
+    - **Entschieden (Nutzer, 2026-10-18):** (1) Freigaben gelten
+      **nicht** für `private` Unterseiten; die Vererbung endet an einer
+      privaten Seite (sie und alles darunter brauchen eine eigene
+      Freigabe). (2) Öffentliche Links **jetzt**, nur über eine RPC.
+      (3) Nutzer finden per **exakter E-Mail-Eingabe**.
+    - **Annahme:** Ein öffentlicher Link gilt nur für genau diese Seite,
+      nicht für ihre Unterseiten (später erweiterbar).
+    - **Aufteilung:** 11a Datenbank (RPCs, Vererbung, Links, pgTAP,
+      Schlüssel-Checks), 11b Oberfläche zum Teilen und „Mit mir
+      geteilt“, lokale Kopie bei Entzug löschen, 11c öffentlicher Link
+      im Teilen-Dialog und öffentliche Seitenansicht ohne Login (der
+      Link-Schalter kam nach 11c, damit ein erzeugter Link sofort
+      funktioniert).
+    - **Umsetzung 11a** (`20261018120000_page_sharing.sql`):
+      `has_page_share(page, require_edit)` geht rekursiv über
+      `parent_id` nach oben (Stopp an `private`, Tiefe ≤ 50 gegen
+      Zyklen); `can_read_page`/`can_edit_page` nutzen es, damit gelten
+      alle bestehenden Policies und `save_page_document` automatisch.
+      `share_page(page, email, 'read'|'edit')` (nur Owner; `42501`,
+      `22023`, `P0002` unbekannte E-Mail; erneutes Teilen ändert die
+      Rolle), `list_page_shares(page)` mit E-Mails (nur Owner).
+      Ändern/Entziehen über die bestehenden Owner-Policies auf
+      `page_shares`. Tabelle `page_public_links` (ein Token je Seite,
+      nur Owner), `get_public_page(token)` für `anon` (nur diese
+      Seite, nicht archiviert). Die Fehlermeldung bei unbekannter
+      E-Mail verrät dem Owner, ob ein Konto existiert (bewusst, wie bei
+      Einladungen üblich). Deploy lehnt `sb_secret_`- und
+      `service_role`-Schlüssel als Publishable Key ab; CI prüft das
+      Bundle auf `sb_secret_`.
+    - **Erfolgskriterien (pgTAP):** Nutzer ohne Berechtigung bekommt 0
+      Zeilen (`pages`, `page_documents`), auch für Unterseiten.
+      Viewer kann lesen, aber nicht schreiben (`save_page_document` →
+      `42501`). Editor kann beides. Entzug wirkt sofort: nach dem
+      Löschen des Shares 0 Zeilen und `42501`, auch für Unterseiten.
+    - **Umsetzung 11b** (nur Frontend, keine Migration):
+      - `pages.owner_id` wird mitgeladen (`Page.owner_id`; alte
+        Caches ohne Owner gelten als „nicht teilbar“ bis zum
+        nächsten Laden). „Teilen“ im Seitenmenü nur für den Owner
+        und nur online; der Server prüft es ohnehin.
+      - `ShareDialog`: Einladen per E-Mail mit Rolle „Kann lesen“ /
+        „Kann bearbeiten“ (`share_page`), Liste (`list_page_shares`),
+        Rolle ändern = erneut `share_page`, Entfernen = `delete` auf
+        `page_shares`. Fehlercodes als deutsche Meldungen.
+      - „Mit mir geteilt“ (`useSharedPages`): lesbare, nicht
+        archivierte Seiten außerhalb der eigenen Workspaces
+        (`workspace_id not in (…)`, RLS entscheidet). Seiten, deren
+        Elternseite nicht sichtbar ist, sind Wurzeln. Cache zuerst
+        (Schlüssel `shared-pages` in `nodi-<userId>-tree`), offline
+        nur lesend. Mit Bearbeitungsrecht (`can_edit_page`) und
+        online sind Titel und Icon änderbar (Update nur per `id`,
+        die zurückgegebenen Zeilen zeigen, ob RLS es erlaubt hat);
+        Breite, Papierkorb und Teilen (Seitenmenü) bleiben dem
+        eigenen Workspace vorbehalten.
+      - Entzug: `deleteRevokedLocalCopies` fragt beim Start und bei
+        `online` alle lesbaren Seiten-IDs ab und löscht lokal nur
+        **synchronisierte** Kopien anderer Seiten (in einer
+        Transaktion). Ungesyncte Änderungen bleiben (keine stillen
+        Datenverluste; die Sync-Engine meldet `42501`). Ohne
+        vollständige Antwort (Fehler, offline, `count` ≠ Zeilen)
+        wird nichts gelöscht. Seitenbaum- und Geteilt-Cache werden
+        bei der nächsten Serverantwort ersetzt.
+    - **Umsetzung 11c** (nur Frontend, keine Migration):
+      - Link: `…/nodi/?p=<token>` (Query-Parameter, braucht auf
+        GitHub Pages keine eigene Route; URL relativ zu `BASE_URL`).
+      - Teilen-Dialog: „Link erstellen“ (`insert` in
+        `page_public_links`, Token vom Server), „Kopieren“, „Link
+        deaktivieren“ (`delete`, wirkt sofort; ein neuer Link hat
+        einen neuen Token). Nur Owner, nur online.
+      - `main.tsx` zeigt bei `?p=` die öffentliche Ansicht statt der
+        App, ohne `AuthProvider`: kein Login, keine Sync-Engine,
+        nichts in IndexedDB. Ein ungültiges Token wird nicht
+        angefragt. Inhalt per `get_public_page`, validiert, BlockNote
+        mit `editable={false}`. Fehler: ungültig/deaktiviert/
+        archiviert („Dieser Link ist ungültig oder wurde
+        deaktiviert.“), offline, sonstige.
 12. **Workspace-Mitglieder und Bereiche** (Nutzerwunsch 2026-10-18), wie
     Notion: je Workspace ein geteilter Bereich „Workspace“ (alle
     Mitglieder lesen und bearbeiten) und ein Bereich „Privat“ (nur der
     Owner der Seite, plus einzelne Freigaben aus Paket 11).
-    -   **Entschieden (Nutzer, 2026-10-18):** (1) Bestehende Seiten werden
-        privat; geteilt wird gezielt. (2) Verschieben zwischen den
-        Bereichen in beide Richtungen, für oberste Seiten, nur durch
-        deren Owner, Unterseiten wandern mit. (3) Nur der Workspace-Owner
-        lädt ein und entfernt. (4) Bei Austritt/Entfernen gehen geteilte
-        Seiten der Person an den Workspace-Owner, private bleiben
-        unangetastet, aber unsichtbar, bis sie wieder beitritt.
-    -   **Annahmen:** Alle Mitglieder bearbeiten alle geteilten Seiten
-        (keine Rechte je Seite im Workspace). Eingeladen werden nur
-        bestehende Konten per exakter E-Mail, sofort Mitglied (keine
-        Einladung zum Annehmen). Endgültig löschen bleibt beim Owner der
-        Seite.
-    -   **Aufteilung:** 12a Datenbank, 12b Oberfläche (Bereiche in der
-        Seitenleiste, Verschieben im Seitenmenü, Mitglieder-Dialog).
-        Beide zusammen releasen: Nach 12a sehen bestehende Mitglieder
-        nichts mehr, bis Seiten in den Workspace verschoben werden.
-    -   **Umsetzung 12a** (`20261018160000_workspace_members_and_sections.sql`):
-        -   Alle Seiten mit `visibility = 'workspace'` werden einmalig
-            `private`.
-        -   Bereichsregel (Trigger `require_page_section`, läuft nach
-            `protect_page_columns`): Eine Unterseite einer privaten
-            Seite ist privat. Beim Anlegen wird das gesetzt (auch für
-            ältere App-Versionen), Änderungen, die es verletzen, werden
-            mit `22023` abgelehnt. Eine private Unterseite einer
-            geteilten Seite bleibt möglich (11a: Freigaben erreichen sie
-            nicht).
-        -   `has_page_share` geht nur noch an der Grenze geteilt → privat
-            nicht weiter nach oben; innerhalb eines privaten Baums wirkt
-            eine Freigabe auf alle Unterseiten.
-        -   Owner-Zugriff (`can_read_page`, `can_edit_page`, Löschen) nur
-            als Mitglied des Workspace.
-        -   `protect_page_columns` lässt vertrauenswürdige
-            Server-Funktionen (`security definer`, `current_user` ist
-            nicht `authenticated`/`anon`) Owner und Sichtbarkeit ändern;
-            direkte API-Updates bleiben eingeschränkt.
-        -   RPCs: `add_workspace_member(workspace, email)` (nur Owner;
-            `42501`, `P0002`, `22023`), `list_workspace_members(workspace)`
-            mit E-Mail (nur Mitglieder), `remove_workspace_member` (nur
-            Owner, nicht den Owner), `leave_workspace` (nicht der Owner),
-            `set_page_section(page, 'workspace'|'private')` (nur oberste
-            Seiten, nur deren Owner; nach privat werden auch fremde
-            Unterseiten dem Aufrufer übertragen). Austritt und Entfernen
-            übertragen geteilte Seiten an den Workspace-Owner und löschen
-            die Freigaben an die Person in diesem Workspace. Die
-            Delete-Policy auf `workspace_members` ist entfernt, damit die
-            Übertragung nicht umgangen werden kann.
-    -   **Umsetzung 12b** (nur Frontend, keine Migration):
-        -   `Page.visibility` (`PageSection`) wird mitgeladen; alte
-            Caches ohne Bereich gelten als privat.
-        -   Seitenleiste: Bereiche „Workspace“ und „Privat“
-            (`pagesInSection`: jede Wurzel mit ihren Unterseiten), je
-            mit „+“; „Neue Seite“ unten legt eine private Seite an.
-            Unterseiten übernehmen den Bereich der Elternseite.
-        -   Seitenmenü: „In den Workspace verschieben“ / „In Privat
-            verschieben“ (nur oberste eigene Seiten, mit Rückfrage,
-            `set_page_section`).
-        -   Workspace-Menü → „Mitglieder“: Liste mit Rolle, für den
-            Owner Hinzufügen per E-Mail und Entfernen (mit Rückfrage),
-            für Mitglieder „Workspace verlassen“ (mit Warnung; danach
-            Workspace-Liste neu laden und lokale Kopien bereinigen).
+    - **Entschieden (Nutzer, 2026-10-18):** (1) Bestehende Seiten werden
+      privat; geteilt wird gezielt. (2) Verschieben zwischen den
+      Bereichen in beide Richtungen, für oberste Seiten, nur durch
+      deren Owner, Unterseiten wandern mit. (3) Nur der Workspace-Owner
+      lädt ein und entfernt. (4) Bei Austritt/Entfernen gehen geteilte
+      Seiten der Person an den Workspace-Owner, private bleiben
+      unangetastet, aber unsichtbar, bis sie wieder beitritt.
+    - **Annahmen:** Alle Mitglieder bearbeiten alle geteilten Seiten
+      (keine Rechte je Seite im Workspace). Eingeladen werden nur
+      bestehende Konten per exakter E-Mail, sofort Mitglied (keine
+      Einladung zum Annehmen). Endgültig löschen bleibt beim Owner der
+      Seite.
+    - **Aufteilung:** 12a Datenbank, 12b Oberfläche (Bereiche in der
+      Seitenleiste, Verschieben im Seitenmenü, Mitglieder-Dialog).
+      Beide zusammen releasen: Nach 12a sehen bestehende Mitglieder
+      nichts mehr, bis Seiten in den Workspace verschoben werden.
+    - **Umsetzung 12a** (`20261018160000_workspace_members_and_sections.sql`):
+      - Alle Seiten mit `visibility = 'workspace'` werden einmalig
+        `private`.
+      - Bereichsregel (Trigger `require_page_section`, läuft nach
+        `protect_page_columns`): Eine Unterseite einer privaten
+        Seite ist privat. Beim Anlegen wird das gesetzt (auch für
+        ältere App-Versionen), Änderungen, die es verletzen, werden
+        mit `22023` abgelehnt. Eine private Unterseite einer
+        geteilten Seite bleibt möglich (11a: Freigaben erreichen sie
+        nicht).
+      - `has_page_share` geht nur noch an der Grenze geteilt → privat
+        nicht weiter nach oben; innerhalb eines privaten Baums wirkt
+        eine Freigabe auf alle Unterseiten.
+      - Owner-Zugriff (`can_read_page`, `can_edit_page`, Löschen) nur
+        als Mitglied des Workspace.
+      - `protect_page_columns` lässt vertrauenswürdige
+        Server-Funktionen (`security definer`, `current_user` ist
+        nicht `authenticated`/`anon`) Owner und Sichtbarkeit ändern;
+        direkte API-Updates bleiben eingeschränkt.
+      - RPCs: `add_workspace_member(workspace, email)` (nur Owner;
+        `42501`, `P0002`, `22023`), `list_workspace_members(workspace)`
+        mit E-Mail (nur Mitglieder), `remove_workspace_member` (nur
+        Owner, nicht den Owner), `leave_workspace` (nicht der Owner),
+        `set_page_section(page, 'workspace'|'private')` (nur oberste
+        Seiten, nur deren Owner; nach privat werden auch fremde
+        Unterseiten dem Aufrufer übertragen). Austritt und Entfernen
+        übertragen geteilte Seiten an den Workspace-Owner und löschen
+        die Freigaben an die Person in diesem Workspace. Die
+        Delete-Policy auf `workspace_members` ist entfernt, damit die
+        Übertragung nicht umgangen werden kann.
+    - **Umsetzung 12b** (nur Frontend, keine Migration):
+      - `Page.visibility` (`PageSection`) wird mitgeladen; alte
+        Caches ohne Bereich gelten als privat.
+      - Seitenleiste: Bereiche „Workspace“ und „Privat“
+        (`pagesInSection`: jede Wurzel mit ihren Unterseiten), je
+        mit „+“; „Neue Seite“ unten legt eine private Seite an.
+        Unterseiten übernehmen den Bereich der Elternseite.
+      - Seitenmenü: „In den Workspace verschieben“ / „In Privat
+        verschieben“ (nur oberste eigene Seiten, mit Rückfrage,
+        `set_page_section`).
+      - Workspace-Menü → „Mitglieder“: Liste mit Rolle, für den
+        Owner Hinzufügen per E-Mail und Entfernen (mit Rückfrage),
+        für Mitglieder „Workspace verlassen“ (mit Warnung; danach
+        Workspace-Liste neu laden und lokale Kopien bereinigen).
 
 13. **Korrekturen aus dem Code-Review** (Nutzerauftrag 2026-10-18, je
     Teil ein PR, in dieser Reihenfolge).
-    -   **13a Sicherheit (Datenbank)**
-        (`20261018180000_harden_page_tree_and_sharing.sql`):
-        -   `parent_id` ist für API-Clients unveränderlich (`42501`), bis
-            es eine Funktion zum Verschieben mit Prüfungen gibt. Vorher
-            konnte ein Mitglied fremde Workspace-Bäume unter die eigene
-            Seite hängen und mit `set_page_section` übernehmen, und eine
-            Bearbeitungsfreigabe reichte zum Weiterteilen oder für Zyklen.
-        -   Unterseiten nur mit Schreibrecht auf die Elternseite
-            (Insert-Policy `can_edit_page(parent_id)`).
-        -   `set_page_section` lässt private Seiten anderer Mitglieder
-            (samt Unterseiten) in beide Richtungen unverändert.
-        -   Trigger `drop_access_of_previous_owner`: Wechselt der Owner
-            einer Seite (Austritt, Entfernen, Verschieben nach privat),
-            enden Freigaben und öffentlicher Link des bisherigen Owners.
-        -   `is_page_owner(page)` = Owner und Mitglied des Workspace; gilt
-            für `share_page`, `list_page_shares` und die Policies zum
-            Lesen, Anlegen und Ändern von Freigaben und Links. Entziehen
-            bleibt ohne Mitgliedschaft möglich.
-        -   `share_page`/`add_workspace_member` finden nur bestätigte
-            Konten (`email_confirmed_at`).
-        -   Das Token eines öffentlichen Links setzt der Server.
-        -   Workspaces sind per API nicht mehr löschbar (die App bietet
-            es nicht an; Kaskade hätte private Seiten anderer gelöscht).
-        -   pgTAP: `page_tree_hardening.test.sql`.
-    -   **13b Editor-Speichern** unabhängig vom Netz: Lokales Speichern
-        wartet nicht mehr auf Sync oder Netz; eine Eingabe gilt als
-        „wird getippt“, bis sie lokal liegt; `WorkspaceHome` je Konto.
-    -   **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (siehe §4,
-        `hooks/load-cache-then-server.ts`).
-    -   **13d Deploy-Gate:** `build` (Lint, Tests, Build, Bundle-Checks)
-        und `verify-database` (Migrationen, `db lint`, pgTAP) laufen vor
-        `migrate` und `deploy`.
-    -   **13e Aufräumen:** ein natives `<dialog>` für alle Modals
-        (`components/ui/dialog.tsx`), kein doppeltes Absenden bei „Neue
-        Seite“/„Workspace erstellen“, Papierkorb-Korrekturen, Doku.
+    - **13a Sicherheit (Datenbank)**
+      (`20261018180000_harden_page_tree_and_sharing.sql`):
+      - `parent_id` ist für API-Clients unveränderlich (`42501`), bis
+        es eine Funktion zum Verschieben mit Prüfungen gibt. Vorher
+        konnte ein Mitglied fremde Workspace-Bäume unter die eigene
+        Seite hängen und mit `set_page_section` übernehmen, und eine
+        Bearbeitungsfreigabe reichte zum Weiterteilen oder für Zyklen.
+      - Unterseiten nur mit Schreibrecht auf die Elternseite
+        (Insert-Policy `can_edit_page(parent_id)`).
+      - `set_page_section` lässt private Seiten anderer Mitglieder
+        (samt Unterseiten) in beide Richtungen unverändert.
+      - Trigger `drop_access_of_previous_owner`: Wechselt der Owner
+        einer Seite (Austritt, Entfernen, Verschieben nach privat),
+        enden Freigaben und öffentlicher Link des bisherigen Owners.
+      - `is_page_owner(page)` = Owner und Mitglied des Workspace; gilt
+        für `share_page`, `list_page_shares` und die Policies zum
+        Lesen, Anlegen und Ändern von Freigaben und Links. Entziehen
+        bleibt ohne Mitgliedschaft möglich.
+      - `share_page`/`add_workspace_member` finden nur bestätigte
+        Konten (`email_confirmed_at`).
+      - Das Token eines öffentlichen Links setzt der Server.
+      - Workspaces sind per API nicht mehr löschbar (die App bietet
+        es nicht an; Kaskade hätte private Seiten anderer gelöscht).
+      - pgTAP: `page_tree_hardening.test.sql`.
+    - **13b Editor-Speichern** unabhängig vom Netz: Lokales Speichern
+      wartet nicht mehr auf Sync oder Netz; eine Eingabe gilt als
+      „wird getippt“, bis sie lokal liegt; `WorkspaceHome` je Konto.
+    - **13c Seitenbaum-Hooks** und Fehlerzustände der Dialoge (siehe §4,
+      `hooks/load-cache-then-server.ts`).
+    - **13d Deploy-Gate:** `build` (Lint, Tests, Build, Bundle-Checks)
+      und `verify-database` (Migrationen, `db lint`, pgTAP) laufen vor
+      `migrate` und `deploy`.
+    - **13e Aufräumen:** ein natives `<dialog>` für alle Modals
+      (`components/ui/dialog.tsx`), kein doppeltes Absenden bei „Neue
+      Seite“/„Workspace erstellen“, Papierkorb-Korrekturen, Doku.
 
 14. **Datenbanken wie Notion** (Nutzerwunsch 2026-10-18).
-    -   **Entschieden (Nutzer, 2026-10-18):** (1) Eigenschaften gibt es nur
-        an Einträgen einer Datenbank. (2) Eigenschaften (und Ansichten)
-        anlegen, ändern, löschen darf jeder mit Schreibrecht. (3) Ein
-        Eintrag ist eine Seite mit Eigenschaften (eigener Inhalt im
-        Editor). (4) Mehrere Ansichten wie bei Notion; im ersten Wurf
-        Tabelle, Board, Liste, Galerie, Feed, Kalender; „Karte“ heißt
-        Landkarte (Map) und kommt später. (5) Eigenschaften zuerst nur
-        online bearbeitbar; offline werden sie aus dem Cache angezeigt.
-    -   **Annahmen:** Zuerst Datenbanken als eigene Seite (inline im Text
-        später). Einträge haben im ersten Wurf keine eigenen Unterseiten
-        in der Oberfläche. Einen Eintrag anlegen braucht Internet (wie
-        neue Seiten, §2). Ansichten gelten für alle (wie bei Notion).
-    -   **Aufteilung:** 14a Datenbank, 14b Oberfläche: Datenbank anlegen,
-        Ansichts-Tabs, Tabelle (Werte bearbeiten, Spalten anlegen, Filter,
-        Sortierung), Eintrag mit Eigenschaftsleiste; 14c Board, Liste,
-        Galerie; 14d Feed, Kalender. Später: Landkarte (Orts-Eigenschaft,
-        Kartendienst wählen), Person, Dateien (Storage), Relation, Rollup,
-        Formel.
-    -   **Umsetzung 14a** (`20261018200000_databases.sql`):
-        -   `pages.kind` (`page`/`database`, unveränderlich) und
-            `pages.position` (manuelle Reihenfolge, Mittelwert zweier
-            Nachbarn). Einträge sind Unterseiten einer Datenbank; eine
-            Datenbank kann kein Eintrag sein (`22023`).
-        -   `database_properties` (Name, Typ, `options` als JSON-Objekt,
-            Reihenfolge) und `database_views` (Typ, `config` für Filter,
-            Sortierung, Gruppierung, sichtbare Eigenschaften). Lesen mit
-            `can_read_page`, Schreiben mit `can_edit_page` der Datenbank.
-            Eine neue Datenbank bekommt per Trigger die Ansicht „Tabelle“.
-        -   Typen: `text`, `number`, `checkbox`, `select`, `multi_select`,
-            `status`, `date` (`{start, end}`), `url` (nur http/https),
-            `email`, `created_time`, `last_edited_time` (berechnet, nicht
-            setzbar). Ein Typwechsel löscht die Werte der Eigenschaft.
-        -   `page_property_values` (je Eintrag und Eigenschaft ein Wert,
-            JSON `null` = geleert) nur über
-            `set_page_property(page, property, value, edited_at,
-            mutation_id)` → `(applied, stored_edited_at,
-            stored_mutation_id)`: LWW je Feld wie `save_page_document`
-            (Kappung auf `now()`, Gleichstand per Mutation-ID). Fehler:
-            `42501` keine Schreibrechte, `22023` falsche Eigenschaft oder
-            ungültiger Wert, `22004` Argument fehlt. Direkte Schreibrechte
-            sind entzogen.
-        -   pgTAP: `databases.test.sql`.
-    -   **Umsetzung 14b** (nur Frontend, keine Migration):
-        -   `Page` lädt `kind`, `position`, `created_at` mit (alte Caches:
-            `page`, `null`, leer). Seitenleiste: „Neue Datenbank“ (privat,
-            Titel „Unbenannte Datenbank“); Einträge erscheinen nicht im
-            Baum, Datenbanken haben kein „+“ für Unterseiten.
-        -   Eine Datenbank-Seite zeigt statt des Editors Ansichts-Tabs
-            (umbenennen, löschen außer der letzten, „+“ = neue Tabelle),
-            Filter (alle Regeln müssen passen), Sortierung (leere Werte
-            zuletzt, Auswahl/Status nach Reihenfolge der Optionen),
-            ein-/ausblendbare Eigenschaften und die Tabelle. Einstellungen
-            gehören zur Ansicht und gelten für alle.
-        -   Tabelle: Name direkt bearbeitbar, „Öffnen“, Werte je Typ direkt
-            bearbeitbar, Spaltenkopf (umbenennen, Typ ändern mit Rückfrage,
-            ausblenden, löschen mit Rückfrage), „+“ legt eine Eigenschaft
-            an, „Neu“ einen Eintrag (Name hat sofort den Fokus; Einträge
-            dürfen ohne Namen sein, „Ohne Titel“). Neue Einträge hängen
-            hinten an (`position`).
-        -   Ein Eintrag zeigt unter dem Titel die Eigenschaftsleiste
-            (gleiche Wert-Editoren, „Eigenschaft hinzufügen“), darunter den
-            Editor wie bei jeder Seite.
-        -   `useDatabase`: Cache zuerst (`database:<id>` in
-            `nodi-<userId>-tree`, nur vom Server bestätigte Daten), dann
-            Server. Aus dem Cache und ohne `can_edit_page` ist alles nur
-            lesbar. Werte erscheinen sofort; lehnt der Server ab, wird der
-            alte Wert wiederhergestellt (nur wenn kein neuerer Schreibvorgang
-            für das Feld läuft); verdrängt (LWW) → neu laden.
-            „Zuletzt bearbeitet“ = jüngste Änderung an Text oder Werten.
-        -   Noch nicht: Einträge in geteilten Datenbanken anderer Workspaces
-            anlegen (nur ansehen und Werte ändern), manuelle Reihenfolge per
-            Ziehen, Optionen umbenennen/einfärben/löschen.
-    -   **Umsetzung 14c** (nur Frontend, keine Migration):
-        -   Neue Ansichten Board, Liste, Galerie („+“ an den Tabs wählt den
-            Typ). Filter, Sortierung und sichtbare Eigenschaften gelten wie
-            in der Tabelle.
-        -   Board: eine Spalte je Option einer Auswahl- oder
-            Status-Eigenschaft, vorn „Ohne <Name>“ für Einträge ohne
-            (gültigen) Wert. Gruppiert wird nach `config.groupByPropertyId`,
-            sonst nach der ersten Status-, dann Auswahl-Eigenschaft
-            („Gruppieren“ in der Leiste). Ohne passende Eigenschaft bietet
-            das Board „Status-Eigenschaft anlegen“ an. Karten per Ziehen
-            (Maus) in eine andere Spalte = Wert setzen (`set_page_property`,
-            sofort sichtbar); auf Touch-Geräten ändert man den Wert im
-            Eintrag. Die Gruppen-Eigenschaft steht nicht auf den Karten.
-        -   Liste: eine Zeile je Eintrag, Werte rechts (ab `sm`). Galerie:
-            Karten im Raster, ohne Titelbilder.
-        -   „Neu“ in Board, Liste und Galerie legt einen Eintrag an und
-            öffnet ihn; in einer Board-Spalte bekommt er deren Wert.
-        -   Noch nicht: Reihenfolge innerhalb einer Spalte per Ziehen,
-            Spalten ausblenden, Titelbilder in der Galerie.
-    -   **Umsetzung 14d** (nur Frontend, keine Migration):
-        -   Feed: Einträge untereinander mit „Zuletzt bearbeitet“,
-            Eigenschaften und dem Anfang des Textes (`previewText`: Text
-            der ersten drei Blöcke, höchstens 280 Zeichen; Tabellen und
-            Bilder ausgelassen). Die Abfrage holt dafür nur
-            `document->0..2`, keine ganzen Dokumente; die Vorschau wird mit
-            der Datenbank gecacht (`documentPreview`). Sie zeigt den Stand
-            des Servers: ungesyncte lokale Änderungen erscheinen erst nach
-            dem Sync und neuem Laden.
-        -   Kalender: Monatsraster ab Montag mit Vor/Zurück/„Heute“ (Monat
-            nur im Tab, nicht gespeichert). Einträge stehen am Tag einer
-            Datums-Eigenschaft (`config.datePropertyId`, sonst die erste;
-            „Datum“ in der Leiste), Zeiträume an jedem Tag (höchstens 62).
-            „+“ an einem Tag legt einen Eintrag mit diesem Datum an und
-            öffnet ihn. Ohne Datums-Eigenschaft: „Datums-Eigenschaft
-            anlegen“. Einträge ohne Datum erscheinen im Kalender nicht.
-        -   Alle sechs Ansichtstypen der Datenbank sind damit nutzbar.
-        -   Noch nicht: Einträge im Kalender per Ziehen verschieben,
-            Wochenansicht.
-    -   **Landkarte (Nutzerentscheidung 2026-10-18):** Kartendienst
-        OpenStreetMap. Kacheln direkt von `tile.openstreetmap.org` (mit
-        Quellenangabe, ohne Massenabruf; IP-Adresse und Kartenausschnitt
-        gehen an die OSM Foundation, in der Datenschutzerklärung nennen;
-        offline keine Kacheln). Einen Ort setzt man per Adresssuche über
-        Nominatim (Suchtext geht an die OSM Foundation; nur auf Enter,
-        höchstens eine Anfrage pro Sekunde, keine Vorschläge beim Tippen)
-        oder per Klick auf die Karte. Aufteilung: 14e-a Datenbank, 14e-b
-        Oberfläche (Leaflet, nachgeladen).
-    -   **Umsetzung 14e-a** (`20261018220000_place_property_and_map_view.sql`):
-        -   Eigenschaftstyp `place`: `{lat, lng, label}` mit `lat` −90…90,
-            `lng` −180…180 (Zahlen), `label` Text bis 500 Zeichen oder
-            leer; andere Schlüssel werden abgelehnt (`22023`). Geprüft
-            schrittweise, damit falsche Formen `22023` liefern und keinen
-            Cast-Fehler.
-        -   Ansichtstyp `map`. Die Migration erweitert nur die erlaubten
-            Werte (rückwärtskompatibel).
-        -   Achtung: Die Parser aus 14b lehnen unbekannte Typen ab; eine
-            App-Version vor 14e kann eine Datenbank mit Ort oder Landkarte
-            nicht laden. 14e daher zusammen mit 14b–14d releasen; 14e-b
-            lässt unbekannte Typen künftig aus.
-        -   pgTAP: `database_places.test.sql`.
-    -   **Umsetzung 14e-b** (nur Frontend, keine Migration):
-        -   Eigenschaft „Ort“: In Tabelle und Eintrag öffnet ein Klick den
-            Orts-Editor mit Adresssuche (Nominatim, nur auf Enter, eine
-            Anfrage pro Sekunde, deutsche Ergebnisse, höchstens fünf) und
-            kleiner Karte (Klick setzt den Punkt ohne Adresse) sowie
-            „Leeren“. Angezeigt wird die Adresse, sonst die Koordinaten;
-            „Karte“ öffnet den Ort auf openstreetmap.org. Filtern und
-            Sortieren nach dem angezeigten Text.
-        -   Ansicht „Landkarte“: ein Marker je Eintrag mit Ort (Tooltip mit
-            Titel als Text, Klick öffnet den Eintrag), Ausschnitt passt
-            sich den Markern an; „Ort“ in der Leiste wählt die Eigenschaft
-            (`config.placePropertyId`, sonst die erste); ohne
-            Orts-Eigenschaft: „Orts-Eigenschaft anlegen“. Darunter die Zahl
-            der Einträge ohne Ort und „Neu“.
-        -   Leaflet und `leaflet.css` stecken in einem eigenen, nachgeladenen
-            Chunk (`MapCanvas`); Marker sind `circleMarker` (keine
-            Icon-Bilder). Kacheln von `tile.openstreetmap.org` mit
-            Quellenangabe; der Service Worker cached sie nicht, offline
-            zeigt die Karte Marker ohne Hintergrund.
-        -   Die Parser lassen unbekannte Eigenschafts- und Ansichtstypen
-            aus, statt die ganze Datenbank abzulehnen.
-        -   Noch nicht: Marker gruppieren bei vielen Einträgen, Einträge
-            auf der Karte verschieben, Kacheln offline.
-    -   **Formeln (Nutzerentscheidung 2026-10-19):** Schreibweise wie Notion
-        (`prop("Preis") * prop("Menge")`, englische Funktionsnamen).
-        Grundumfang: Rechnen, Vergleiche, `and`/`or`/`not`, `if`, Text
-        (`concat`, `length`, `upper`, `lower`, `contains`, `replace`), Zahlen
-        (`round`, `abs`, `min`, `max`, `floor`, `ceil`), `empty`, `format`,
-        `toNumber`, Datum (`now`, `dateAdd`, `dateBetween`, `formatDate`);
-        Formeln dürfen andere Formeln verwenden. Berechnet wird in der App
-        (auch offline, kein `eval`). Aufteilung: 14f-a Datenbank, 14f-b
-        Oberfläche mit Formel-Engine.
-    -   **Umsetzung 14f-a** (`20261019090000_formula_property.sql`):
-        -   Eigenschaftstyp `formula`; der Ausdruck steht in
-            `options.expression` (Text bis 2000 Zeichen oder noch leer,
-            Check-Constraint, `23514`). Werte gibt es nicht:
-            `set_page_property` lehnt jeden Wert ab (`22023`), wie bei den
-            berechneten Zeit-Eigenschaften.
-        -   Die Migration erweitert nur die erlaubten Werte
-            (rückwärtskompatibel; die App ab 14e lässt den unbekannten Typ
-            aus).
-        -   pgTAP: `database_formulas.test.sql`.
-    -   **Umsetzung 14f-b** (nur Frontend, keine Migration):
-        -   Engine in `features/databases/formula/`: Tokenizer und
-            rekursiver Parser (Rangfolge `?:` < `or`/`||` < `and`/`&&` <
-            `==`/`!=` < Vergleich < `+`/`-` < `*`/`/`/`%` < unär `-`/`not`/`!`
-            < `^`, rechtsassoziativ), Ausdruck bis 2000 Zeichen,
-            Verschachtelung bis 50. `prop()` nur mit festem Namen in
-            Anführungszeichen. Ausgewertet wird der Baum, nie JavaScript;
-            `replace`/`replaceAll` ersetzen reinen Text (keine regulären
-            Ausdrücke).
-        -   Werte: Zahl, Text, Wahrheitswert, Datum, leer. Leer zählt beim
-            Rechnen als 0; `+` mit Text hängt an; falsch, leer, 0 und ""
-            gelten als falsch. Eigenschaften gehen als Zahl, Checkbox als
-            Wahrheitswert, Datum/Zeiten als Datum ein, alles andere als der
-            angezeigte Text (Auswahl: Name der Option). `prop("Name")` ist
-            der Titel, wenn keine Eigenschaft so heißt. Datum: `dateAdd`
-            (Monatsende bleibt Monatsende), `dateBetween` (ganze Einheiten,
-            ohne Sommerzeit-Stunde, wie Notion), `formatDate` (YYYY, MM,
-            DD, HH, mm …).
-        -   Berechnet in `buildRows` für jeden Eintrag (auch offline aus dem
-            Cache); Formeln dürfen Formeln verwenden. Fehler stehen je
-            Eintrag in `row.errors`: Zirkelbezug bei allen beteiligten
-            Formeln, sonst „Die Formel „X“ hat einen Fehler.“ an der
-            verwendenden Formel. Anzeige „Fehler“ (Grund im Tooltip und für
-            Screenreader), leere Formel „Formel fehlt“.
-        -   Ergebnis wird angezeigt, gefiltert (Zahlen und Daten als
-            solche, sonst als Text) und sortiert wie andere Werte.
-        -   Formel-Editor (Dialog): Eingabe, Vorschau für den ersten Eintrag
-            (bzw. den offenen Eintrag) oder Prüfung der Schreibweise,
-            Eigenschaften und Funktionen zum Einfügen, Strg/⌘+Enter
-            speichert. Öffnet sich nach „Formel“ anlegen, über „Formel
-            bearbeiten“ im Spaltenkopf und über den Namen in der
-            Eigenschaftsleiste.
-        -   Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
-            reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
+    - **Entschieden (Nutzer, 2026-10-18):** (1) Eigenschaften gibt es nur
+      an Einträgen einer Datenbank. (2) Eigenschaften (und Ansichten)
+      anlegen, ändern, löschen darf jeder mit Schreibrecht. (3) Ein
+      Eintrag ist eine Seite mit Eigenschaften (eigener Inhalt im
+      Editor). (4) Mehrere Ansichten wie bei Notion; im ersten Wurf
+      Tabelle, Board, Liste, Galerie, Feed, Kalender; „Karte“ heißt
+      Landkarte (Map) und kommt später. (5) Eigenschaften zuerst nur
+      online bearbeitbar; offline werden sie aus dem Cache angezeigt.
+    - **Annahmen:** Zuerst Datenbanken als eigene Seite (inline im Text
+      später). Einträge haben im ersten Wurf keine eigenen Unterseiten
+      in der Oberfläche. Einen Eintrag anlegen braucht Internet (wie
+      neue Seiten, §2). Ansichten gelten für alle (wie bei Notion).
+    - **Aufteilung:** 14a Datenbank, 14b Oberfläche: Datenbank anlegen,
+      Ansichts-Tabs, Tabelle (Werte bearbeiten, Spalten anlegen, Filter,
+      Sortierung), Eintrag mit Eigenschaftsleiste; 14c Board, Liste,
+      Galerie; 14d Feed, Kalender. Später: Landkarte (Orts-Eigenschaft,
+      Kartendienst wählen), Person, Dateien (Storage), Relation, Rollup,
+      Formel.
+    - **Umsetzung 14a** (`20261018200000_databases.sql`):
+      - `pages.kind` (`page`/`database`, unveränderlich) und
+        `pages.position` (manuelle Reihenfolge, Mittelwert zweier
+        Nachbarn). Einträge sind Unterseiten einer Datenbank; eine
+        Datenbank kann kein Eintrag sein (`22023`).
+      - `database_properties` (Name, Typ, `options` als JSON-Objekt,
+        Reihenfolge) und `database_views` (Typ, `config` für Filter,
+        Sortierung, Gruppierung, sichtbare Eigenschaften). Lesen mit
+        `can_read_page`, Schreiben mit `can_edit_page` der Datenbank.
+        Eine neue Datenbank bekommt per Trigger die Ansicht „Tabelle“.
+      - Typen: `text`, `number`, `checkbox`, `select`, `multi_select`,
+        `status`, `date` (`{start, end}`), `url` (nur http/https),
+        `email`, `created_time`, `last_edited_time` (berechnet, nicht
+        setzbar). Ein Typwechsel löscht die Werte der Eigenschaft.
+      - `page_property_values` (je Eintrag und Eigenschaft ein Wert,
+        JSON `null` = geleert) nur über
+        `set_page_property(page, property, value, edited_at,
+mutation_id)` → `(applied, stored_edited_at,
+stored_mutation_id)`: LWW je Feld wie `save_page_document`
+        (Kappung auf `now()`, Gleichstand per Mutation-ID). Fehler:
+        `42501` keine Schreibrechte, `22023` falsche Eigenschaft oder
+        ungültiger Wert, `22004` Argument fehlt. Direkte Schreibrechte
+        sind entzogen.
+      - pgTAP: `databases.test.sql`.
+    - **Umsetzung 14b** (nur Frontend, keine Migration):
+      - `Page` lädt `kind`, `position`, `created_at` mit (alte Caches:
+        `page`, `null`, leer). Seitenleiste: „Neue Datenbank“ (privat,
+        Titel „Unbenannte Datenbank“); Einträge erscheinen nicht im
+        Baum, Datenbanken haben kein „+“ für Unterseiten.
+      - Eine Datenbank-Seite zeigt statt des Editors Ansichts-Tabs
+        (umbenennen, löschen außer der letzten, „+“ = neue Tabelle),
+        Filter (alle Regeln müssen passen), Sortierung (leere Werte
+        zuletzt, Auswahl/Status nach Reihenfolge der Optionen),
+        ein-/ausblendbare Eigenschaften und die Tabelle. Einstellungen
+        gehören zur Ansicht und gelten für alle.
+      - Tabelle: Name direkt bearbeitbar, „Öffnen“, Werte je Typ direkt
+        bearbeitbar, Spaltenkopf (umbenennen, Typ ändern mit Rückfrage,
+        ausblenden, löschen mit Rückfrage), „+“ legt eine Eigenschaft
+        an, „Neu“ einen Eintrag (Name hat sofort den Fokus; Einträge
+        dürfen ohne Namen sein, „Ohne Titel“). Neue Einträge hängen
+        hinten an (`position`).
+      - Ein Eintrag zeigt unter dem Titel die Eigenschaftsleiste
+        (gleiche Wert-Editoren, „Eigenschaft hinzufügen“), darunter den
+        Editor wie bei jeder Seite.
+      - `useDatabase`: Cache zuerst (`database:<id>` in
+        `nodi-<userId>-tree`, nur vom Server bestätigte Daten), dann
+        Server. Aus dem Cache und ohne `can_edit_page` ist alles nur
+        lesbar. Werte erscheinen sofort; lehnt der Server ab, wird der
+        alte Wert wiederhergestellt (nur wenn kein neuerer Schreibvorgang
+        für das Feld läuft); verdrängt (LWW) → neu laden.
+        „Zuletzt bearbeitet“ = jüngste Änderung an Text oder Werten.
+      - Noch nicht: Einträge in geteilten Datenbanken anderer Workspaces
+        anlegen (nur ansehen und Werte ändern), manuelle Reihenfolge per
+        Ziehen, Optionen umbenennen/einfärben/löschen.
+    - **Umsetzung 14c** (nur Frontend, keine Migration):
+      - Neue Ansichten Board, Liste, Galerie („+“ an den Tabs wählt den
+        Typ). Filter, Sortierung und sichtbare Eigenschaften gelten wie
+        in der Tabelle.
+      - Board: eine Spalte je Option einer Auswahl- oder
+        Status-Eigenschaft, vorn „Ohne <Name>“ für Einträge ohne
+        (gültigen) Wert. Gruppiert wird nach `config.groupByPropertyId`,
+        sonst nach der ersten Status-, dann Auswahl-Eigenschaft
+        („Gruppieren“ in der Leiste). Ohne passende Eigenschaft bietet
+        das Board „Status-Eigenschaft anlegen“ an. Karten per Ziehen
+        (Maus) in eine andere Spalte = Wert setzen (`set_page_property`,
+        sofort sichtbar); auf Touch-Geräten ändert man den Wert im
+        Eintrag. Die Gruppen-Eigenschaft steht nicht auf den Karten.
+      - Liste: eine Zeile je Eintrag, Werte rechts (ab `sm`). Galerie:
+        Karten im Raster, ohne Titelbilder.
+      - „Neu“ in Board, Liste und Galerie legt einen Eintrag an und
+        öffnet ihn; in einer Board-Spalte bekommt er deren Wert.
+      - Noch nicht: Reihenfolge innerhalb einer Spalte per Ziehen,
+        Spalten ausblenden, Titelbilder in der Galerie.
+    - **Umsetzung 14d** (nur Frontend, keine Migration):
+      - Feed: Einträge untereinander mit „Zuletzt bearbeitet“,
+        Eigenschaften und dem Anfang des Textes (`previewText`: Text
+        der ersten drei Blöcke, höchstens 280 Zeichen; Tabellen und
+        Bilder ausgelassen). Die Abfrage holt dafür nur
+        `document->0..2`, keine ganzen Dokumente; die Vorschau wird mit
+        der Datenbank gecacht (`documentPreview`). Sie zeigt den Stand
+        des Servers: ungesyncte lokale Änderungen erscheinen erst nach
+        dem Sync und neuem Laden.
+      - Kalender: Monatsraster ab Montag mit Vor/Zurück/„Heute“ (Monat
+        nur im Tab, nicht gespeichert). Einträge stehen am Tag einer
+        Datums-Eigenschaft (`config.datePropertyId`, sonst die erste;
+        „Datum“ in der Leiste), Zeiträume an jedem Tag (höchstens 62).
+        „+“ an einem Tag legt einen Eintrag mit diesem Datum an und
+        öffnet ihn. Ohne Datums-Eigenschaft: „Datums-Eigenschaft
+        anlegen“. Einträge ohne Datum erscheinen im Kalender nicht.
+      - Alle sechs Ansichtstypen der Datenbank sind damit nutzbar.
+      - Noch nicht: Einträge im Kalender per Ziehen verschieben,
+        Wochenansicht.
+    - **Landkarte (Nutzerentscheidung 2026-10-18):** Kartendienst
+      OpenStreetMap. Kacheln direkt von `tile.openstreetmap.org` (mit
+      Quellenangabe, ohne Massenabruf; IP-Adresse und Kartenausschnitt
+      gehen an die OSM Foundation, in der Datenschutzerklärung nennen;
+      offline keine Kacheln). Einen Ort setzt man per Adresssuche über
+      Nominatim (Suchtext geht an die OSM Foundation; nur auf Enter,
+      höchstens eine Anfrage pro Sekunde, keine Vorschläge beim Tippen)
+      oder per Klick auf die Karte. Aufteilung: 14e-a Datenbank, 14e-b
+      Oberfläche (Leaflet, nachgeladen).
+    - **Umsetzung 14e-a** (`20261018220000_place_property_and_map_view.sql`):
+      - Eigenschaftstyp `place`: `{lat, lng, label}` mit `lat` −90…90,
+        `lng` −180…180 (Zahlen), `label` Text bis 500 Zeichen oder
+        leer; andere Schlüssel werden abgelehnt (`22023`). Geprüft
+        schrittweise, damit falsche Formen `22023` liefern und keinen
+        Cast-Fehler.
+      - Ansichtstyp `map`. Die Migration erweitert nur die erlaubten
+        Werte (rückwärtskompatibel).
+      - Achtung: Die Parser aus 14b lehnen unbekannte Typen ab; eine
+        App-Version vor 14e kann eine Datenbank mit Ort oder Landkarte
+        nicht laden. 14e daher zusammen mit 14b–14d releasen; 14e-b
+        lässt unbekannte Typen künftig aus.
+      - pgTAP: `database_places.test.sql`.
+    - **Umsetzung 14e-b** (nur Frontend, keine Migration):
+      - Eigenschaft „Ort“: In Tabelle und Eintrag öffnet ein Klick den
+        Orts-Editor mit Adresssuche (Nominatim, nur auf Enter, eine
+        Anfrage pro Sekunde, deutsche Ergebnisse, höchstens fünf) und
+        kleiner Karte (Klick setzt den Punkt ohne Adresse) sowie
+        „Leeren“. Angezeigt wird die Adresse, sonst die Koordinaten;
+        „Karte“ öffnet den Ort auf openstreetmap.org. Filtern und
+        Sortieren nach dem angezeigten Text.
+      - Ansicht „Landkarte“: ein Marker je Eintrag mit Ort (Tooltip mit
+        Titel als Text, Klick öffnet den Eintrag), Ausschnitt passt
+        sich den Markern an; „Ort“ in der Leiste wählt die Eigenschaft
+        (`config.placePropertyId`, sonst die erste); ohne
+        Orts-Eigenschaft: „Orts-Eigenschaft anlegen“. Darunter die Zahl
+        der Einträge ohne Ort und „Neu“.
+      - Leaflet und `leaflet.css` stecken in einem eigenen, nachgeladenen
+        Chunk (`MapCanvas`); Marker sind `circleMarker` (keine
+        Icon-Bilder). Kacheln von `tile.openstreetmap.org` mit
+        Quellenangabe; der Service Worker cached sie nicht, offline
+        zeigt die Karte Marker ohne Hintergrund.
+      - Die Parser lassen unbekannte Eigenschafts- und Ansichtstypen
+        aus, statt die ganze Datenbank abzulehnen.
+      - Noch nicht: Marker gruppieren bei vielen Einträgen, Einträge
+        auf der Karte verschieben, Kacheln offline.
+    - **Formeln (Nutzerentscheidung 2026-10-19):** Schreibweise wie Notion
+      (`prop("Preis") * prop("Menge")`, englische Funktionsnamen).
+      Grundumfang: Rechnen, Vergleiche, `and`/`or`/`not`, `if`, Text
+      (`concat`, `length`, `upper`, `lower`, `contains`, `replace`), Zahlen
+      (`round`, `abs`, `min`, `max`, `floor`, `ceil`), `empty`, `format`,
+      `toNumber`, Datum (`now`, `dateAdd`, `dateBetween`, `formatDate`);
+      Formeln dürfen andere Formeln verwenden. Berechnet wird in der App
+      (auch offline, kein `eval`). Aufteilung: 14f-a Datenbank, 14f-b
+      Oberfläche mit Formel-Engine.
+    - **Umsetzung 14f-a** (`20261019090000_formula_property.sql`):
+      - Eigenschaftstyp `formula`; der Ausdruck steht in
+        `options.expression` (Text bis 2000 Zeichen oder noch leer,
+        Check-Constraint, `23514`). Werte gibt es nicht:
+        `set_page_property` lehnt jeden Wert ab (`22023`), wie bei den
+        berechneten Zeit-Eigenschaften.
+      - Die Migration erweitert nur die erlaubten Werte
+        (rückwärtskompatibel; die App ab 14e lässt den unbekannten Typ
+        aus).
+      - pgTAP: `database_formulas.test.sql`.
+    - **Umsetzung 14f-b** (nur Frontend, keine Migration):
+      - Engine in `features/databases/formula/`: Tokenizer und
+        rekursiver Parser (Rangfolge `?:` < `or`/`||` < `and`/`&&` <
+        `==`/`!=` < Vergleich < `+`/`-` < `*`/`/`/`%` < unär `-`/`not`/`!`
+        < `^`, rechtsassoziativ), Ausdruck bis 2000 Zeichen,
+        Verschachtelung bis 50. `prop()` nur mit festem Namen in
+        Anführungszeichen. Ausgewertet wird der Baum, nie JavaScript;
+        `replace`/`replaceAll` ersetzen reinen Text (keine regulären
+        Ausdrücke).
+      - Werte: Zahl, Text, Wahrheitswert, Datum, leer. Leer zählt beim
+        Rechnen als 0; `+` mit Text hängt an; falsch, leer, 0 und ""
+        gelten als falsch. Eigenschaften gehen als Zahl, Checkbox als
+        Wahrheitswert, Datum/Zeiten als Datum ein, alles andere als der
+        angezeigte Text (Auswahl: Name der Option). `prop("Name")` ist
+        der Titel, wenn keine Eigenschaft so heißt. Datum: `dateAdd`
+        (Monatsende bleibt Monatsende), `dateBetween` (ganze Einheiten,
+        ohne Sommerzeit-Stunde, wie Notion), `formatDate` (YYYY, MM,
+        DD, HH, mm …).
+      - Berechnet in `buildRows` für jeden Eintrag (auch offline aus dem
+        Cache); Formeln dürfen Formeln verwenden. Fehler stehen je
+        Eintrag in `row.errors`: Zirkelbezug bei allen beteiligten
+        Formeln, sonst „Die Formel „X“ hat einen Fehler.“ an der
+        verwendenden Formel. Anzeige „Fehler“ (Grund im Tooltip und für
+        Screenreader), leere Formel „Formel fehlt“.
+      - Ergebnis wird angezeigt, gefiltert (Zahlen und Daten als
+        solche, sonst als Text) und sortiert wie andere Werte.
+      - Formel-Editor (Dialog): Eingabe, Vorschau für den ersten Eintrag
+        (bzw. den offenen Eintrag) oder Prüfung der Schreibweise,
+        Eigenschaften und Funktionen zum Einfügen, Strg/⌘+Enter
+        speichert. Öffnet sich nach „Formel“ anlegen, über „Formel
+        bearbeiten“ im Spaltenkopf und über den Namen in der
+        Eigenschaftsleiste.
+      - Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
+        reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
 
-------------------------------------------------------------------------
+---
 
 ## 13. Aktuelle offene Fragen / bekannte Lücken
 
 Bekannte Lücken (geprüft 2026-10-16, Behebung siehe §12):
 
--   (Behoben in Paket 7) `BlockEditor` lud nur von Supabase und
-    speicherte nur im Speicher.
--   (Behoben in Paket 7) Read-only geteilte Seiten waren im Editor
-    bearbeitbar.
+- (Behoben in Paket 7) `BlockEditor` lud nur von Supabase und
+  speicherte nur im Speicher.
+- (Behoben in Paket 7) Read-only geteilte Seiten waren im Editor
+  bearbeitbar.
 
 Behoben in Paket 2 (`20261016175500_protect_page_columns.sql`):
 Trigger erzwingen, dass nur der Owner `owner_id`/`visibility` ändert,
@@ -1438,79 +1447,79 @@ archivierten Elternseiten wieder her (Variante A, Nutzerentscheidung
 
 Noch nicht abschließend geprüft:
 
--   (Behoben, `20261018140000_restore_archived_ancestors.sql`,
-    Nutzerentscheidung 2026-10-18) Aktive Seiten unter archivierten
-    Elternseiten (alter Papierkorb-Bug) waren unsichtbar und wären beim
-    endgültigen Löschen der Eltern mitgelöscht worden. Die Migration
-    stellt einmalig alle archivierten Vorfahren aktiver Seiten wieder
-    her, wie Variante A aus Paket 3. Die Funktion
-    `restore_archived_ancestors_of_active_pages()` bleibt für Wartung und
-    Tests (nicht per API aufrufbar).
--   (Entschieden und umgesetzt, Nutzer 2026-10-18,
-    `20261018150000_owner_only_permanent_delete.sql`) Endgültig löschen
-    darf nur der Owner der Seite (Delete-Policy `owner_id = auth.uid()`).
-    Papierkorb und Wiederherstellen bleiben für alle mit Schreibrecht.
-    Unterseiten fremder Owner werden weiterhin mit der Elternseite
-    gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
-    löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
-    filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
--   Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
-    gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
-    Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
--   RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
-    die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
-    prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
--   Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
-    lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
--   Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
-    dauern (kein eigener Timeout). Scheitert `signOut()`, läuft die
-    Sync-Engine weiter (13b). Was während des Abmeldens noch getippt
-    wird, kann verloren gehen (Editor ist dabei nicht gesperrt).
--   Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
-    ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
-    bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
--   Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
-    und 5 nur in Chromium mit Geräte-Emulation geprüft).
--   Paket 10 nicht umgesetzt (bewusst): Titelbilder, Verschieben per
-    Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
-    Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
-    (Workspace-Menü) erreichbar.
--   (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
-    der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt
-    `LoadErrorBoundary` ihn ab: Pfad und Zurück bleiben, Hinweis mit
-    „Neu laden“ (ein abgelehnter `import()` bleibt bis zum Neuladen
-    abgelehnt). Je Seite eine eigene Boundary (`key={page.id}`).
--   Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
-    entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
-    Apps älter als Paket 7 können erst nach Bestätigung des
-    Update-Hinweises wieder speichern.
--   Der Hinweis „auf einem anderen Gerät geändert" erscheint auch, wenn
-    eine neuere Änderung aus einem anderen Tab desselben Geräts gewinnt.
--   Der Client vergleicht Versionen mit Millisekunden, der Server mit
-    Mikrosekunden (nur bei gekappten Zeitstempeln relevant). Das
-    betrifft nur die lokale Entscheidung, ob eine synchronisierte Kopie
-    ersetzt wird; maßgeblich bleibt die Serverordnung.
--   Grenzfall der Kappung: Wird eine Mutation mit Zeitstempel aus der
-    Zukunft nach einem verlorenen Response wiederholt und wurde sie
-    inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
-    und kann gewinnen.
--   UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
--   Teilen (11b): Lokale Kopien entzogener Seiten werden nur beim Start
-    und bei `online` bereinigt, nicht während die App lange offen ist.
-    Mehr als 1000 lesbare Seiten (`max_rows`) → keine Bereinigung.
-    Ungesyncte Änderungen an einer entzogenen Seite bleiben mit Fehler
-    stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
-    (Behoben) Editoren aus anderen Workspaces können Titel und Icon
-    geteilter Seiten ändern; Breite, Papierkorb und Teilen nicht.
--   Paket 12a: Freigaben und öffentliche Links, die eine ausgetretene
-    Person auf ihren privaten Seiten vergeben hat, bleiben gültig (die
-    Seiten bleiben ja unangetastet). Zwischen Deploy von 12a und 12b
-    legt die alte Oberfläche oberste Seiten weiter als geteilt an.
--   Öffentliche Links (11c): Seiten haben kein `noindex`; wer den Link
-    öffentlich postet, macht die Seite für Suchmaschinen auffindbar.
-    Öffentliche Seiten sind offline nicht verfügbar (bewusst nicht
-    gespeichert). Auch angemeldete Nutzer sehen unter `?p=` nur die
-    öffentliche Ansicht.
+- (Behoben, `20261018140000_restore_archived_ancestors.sql`,
+  Nutzerentscheidung 2026-10-18) Aktive Seiten unter archivierten
+  Elternseiten (alter Papierkorb-Bug) waren unsichtbar und wären beim
+  endgültigen Löschen der Eltern mitgelöscht worden. Die Migration
+  stellt einmalig alle archivierten Vorfahren aktiver Seiten wieder
+  her, wie Variante A aus Paket 3. Die Funktion
+  `restore_archived_ancestors_of_active_pages()` bleibt für Wartung und
+  Tests (nicht per API aufrufbar).
+- (Entschieden und umgesetzt, Nutzer 2026-10-18,
+  `20261018150000_owner_only_permanent_delete.sql`) Endgültig löschen
+  darf nur der Owner der Seite (Delete-Policy `owner_id = auth.uid()`).
+  Papierkorb und Wiederherstellen bleiben für alle mit Schreibrecht.
+  Unterseiten fremder Owner werden weiterhin mit der Elternseite
+  gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
+  löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
+  filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
+- Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
+  gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
+  Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
+- RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
+  die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
+  prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
+- Offline-Abmelden widerruft die Sitzung nicht auf dem Server (nur
+  lokal entfernt); andere offene Tabs merken das erst beim Neuladen.
+- Abmelden wartet auf `syncAll()`; bei sehr langsamem Netz kann das
+  dauern (kein eigener Timeout). Scheitert `signOut()`, läuft die
+  Sync-Engine weiter (13b). Was während des Abmeldens noch getippt
+  wird, kann verloren gehen (Editor ist dabei nicht gesperrt).
+- Wird ein Refresh-Token serverseitig widerrufen, meldet Supabase ab,
+  ohne die Logout-Policy zu durchlaufen; lokale Daten dieses Kontos
+  bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
+- Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
+  und 5 nur in Chromium mit Geräte-Emulation geprüft).
+- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Verschieben per
+  Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
+  Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
+  (Workspace-Menü) erreichbar.
+- (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
+  der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt
+  `LoadErrorBoundary` ihn ab: Pfad und Zurück bleiben, Hinweis mit
+  „Neu laden“ (ein abgelehnter `import()` bleibt bis zum Neuladen
+  abgelehnt). Je Seite eine eigene Boundary (`key={page.id}`).
+- Seit Paket 8 sind direkte Schreibrechte auf `page_documents`
+  entzogen (Nutzerentscheidung 2026-10-18, Option A). Installierte
+  Apps älter als Paket 7 können erst nach Bestätigung des
+  Update-Hinweises wieder speichern.
+- Der Hinweis „auf einem anderen Gerät geändert" erscheint auch, wenn
+  eine neuere Änderung aus einem anderen Tab desselben Geräts gewinnt.
+- Der Client vergleicht Versionen mit Millisekunden, der Server mit
+  Mikrosekunden (nur bei gekappten Zeitstempeln relevant). Das
+  betrifft nur die lokale Entscheidung, ob eine synchronisierte Kopie
+  ersetzt wird; maßgeblich bleibt die Serverordnung.
+- Grenzfall der Kappung: Wird eine Mutation mit Zeitstempel aus der
+  Zukunft nach einem verlorenen Response wiederholt und wurde sie
+  inzwischen verdrängt, bekommt die Wiederholung ein neues `now()`
+  und kann gewinnen.
+- UI für verdrängte Schreibvorgänge: Option A umgesetzt in Paket 7.
+- Teilen (11b): Lokale Kopien entzogener Seiten werden nur beim Start
+  und bei `online` bereinigt, nicht während die App lange offen ist.
+  Mehr als 1000 lesbare Seiten (`max_rows`) → keine Bereinigung.
+  Ungesyncte Änderungen an einer entzogenen Seite bleiben mit Fehler
+  stehen, bis der Nutzer sich abmeldet (Dialog bietet Verwerfen).
+  (Behoben) Editoren aus anderen Workspaces können Titel und Icon
+  geteilter Seiten ändern; Breite, Papierkorb und Teilen nicht.
+- Paket 12a: Freigaben und öffentliche Links, die eine ausgetretene
+  Person auf ihren privaten Seiten vergeben hat, bleiben gültig (die
+  Seiten bleiben ja unangetastet). Zwischen Deploy von 12a und 12b
+  legt die alte Oberfläche oberste Seiten weiter als geteilt an.
+- Öffentliche Links (11c): Seiten haben kein `noindex`; wer den Link
+  öffentlich postet, macht die Seite für Suchmaschinen auffindbar.
+  Öffentliche Seiten sind offline nicht verfügbar (bewusst nicht
+  gespeichert). Auch angemeldete Nutzer sehen unter `?p=` nur die
+  öffentliche Ansicht.
 
 **Arbeitsregel:** Wenn diese Datei und der aktuelle Code
 auseinanderlaufen, ist der aktuelle Code die Quelle für den Ist-Zustand.

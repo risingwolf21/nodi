@@ -1,8 +1,4 @@
-import {
-    useEffect,
-    useState,
-    type ReactNode,
-} from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { isAuthRetryableFetchError, type Session } from "@supabase/supabase-js";
 import { authStorageKey, supabase } from "@/lib/supabase";
 import { AuthContext, type Account } from "./auth-context";

@@ -86,9 +86,7 @@ export function OptionPicker({
                     </li>
                 ))}
                 {needle && !exact && (
-                    <li className="px-2 py-1 text-xs text-muted-foreground">
-                        Enter legt „{query.trim()}“ an
-                    </li>
+                    <li className="px-2 py-1 text-xs text-muted-foreground">Enter legt „{query.trim()}“ an</li>
                 )}
             </ul>
             {selectedIds.length > 0 && (

@@ -45,11 +45,8 @@ export class LocalDocumentStore {
     private readonly connection: DatabaseConnection;
 
     constructor(userId: string, factory: IDBFactory = indexedDB) {
-        this.connection = new DatabaseConnection(
-            factory,
-            localDatabaseName(userId),
-            DATABASE_VERSION,
-            (database) => database.createObjectStore(DOCUMENTS, { keyPath: "pageId" }),
+        this.connection = new DatabaseConnection(factory, localDatabaseName(userId), DATABASE_VERSION, (database) =>
+            database.createObjectStore(DOCUMENTS, { keyPath: "pageId" }),
         );
     }
 
@@ -63,9 +60,7 @@ export class LocalDocumentStore {
 
     async get(pageId: string): Promise<LocalDocument | null> {
         const database = await this.open();
-        const stored: unknown = await promisify(
-            database.transaction(DOCUMENTS).objectStore(DOCUMENTS).get(pageId),
-        );
+        const stored: unknown = await promisify(database.transaction(DOCUMENTS).objectStore(DOCUMENTS).get(pageId));
 
         if (stored === undefined) return null;
 
@@ -79,9 +74,7 @@ export class LocalDocumentStore {
     /** Every document with a local edit the server has not confirmed yet. */
     async listUnsynced(): Promise<LocalDocument[]> {
         const database = await this.open();
-        const stored: unknown[] = await promisify(
-            database.transaction(DOCUMENTS).objectStore(DOCUMENTS).getAll(),
-        );
+        const stored: unknown[] = await promisify(database.transaction(DOCUMENTS).objectStore(DOCUMENTS).getAll());
 
         return stored
             .map(parseLocalDocument)

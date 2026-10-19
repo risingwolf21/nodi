@@ -286,10 +286,7 @@ export class SyncEngine {
         }
 
         const next = { unsyncedPages, failure: unsyncedPages > 0 ? failure : null };
-        if (
-            next.unsyncedPages === this.overview.unsyncedPages &&
-            next.failure === this.overview.failure
-        ) {
+        if (next.unsyncedPages === this.overview.unsyncedPages && next.failure === this.overview.failure) {
             return;
         }
 
@@ -300,10 +297,7 @@ export class SyncEngine {
     private scheduleRetry(): void {
         if (this.stopped || this.failedPasses >= SYNC_MAX_ATTEMPTS) return;
 
-        const delay = Math.min(
-            SYNC_RETRY_BASE_MS * 2 ** (this.failedPasses - 1),
-            SYNC_RETRY_MAX_MS,
-        );
+        const delay = Math.min(SYNC_RETRY_BASE_MS * 2 ** (this.failedPasses - 1), SYNC_RETRY_MAX_MS);
         this.retryTimer = setTimeout(() => {
             this.retryTimer = null;
             void this.requestSync();

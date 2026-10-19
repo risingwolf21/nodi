@@ -1,11 +1,5 @@
 import { RemoteRequestError } from "@/lib/request-errors";
-import type {
-    DocumentContent,
-    DocumentVersion,
-    LocalDocument,
-    RemoteDocument,
-    SaveOutcome,
-} from "./types";
+import type { DocumentContent, DocumentVersion, LocalDocument, RemoteDocument, SaveOutcome } from "./types";
 
 // Same fallback the server uses for documents without a mutation id.
 const NIL_MUTATION_ID = "00000000-0000-0000-0000-000000000000";
@@ -24,10 +18,7 @@ export function compareVersions(a: DocumentVersion, b: DocumentVersion): number 
 }
 
 export function isDocumentContent(value: unknown): value is DocumentContent {
-    return (
-        Array.isArray(value) &&
-        value.every((block) => typeof block === "object" && block !== null)
-    );
+    return Array.isArray(value) && value.every((block) => typeof block === "object" && block !== null);
 }
 
 function isTimestamp(value: unknown): value is string {
@@ -97,10 +88,7 @@ export function parseLocalDocument(value: unknown): LocalDocument | null {
  * Interprets the row returned by `save_page_document`. A rejected write
  * whose stored mutation id is our own was already applied earlier (retry).
  */
-export function interpretSaveResult(
-    row: unknown,
-    ownMutationId: string,
-): SaveOutcome {
+export function interpretSaveResult(row: unknown, ownMutationId: string): SaveOutcome {
     if (
         typeof row !== "object" ||
         row === null ||

@@ -51,8 +51,7 @@ let remoteContent: ReturnType<typeof vi.fn<PageDocumentSessionOptions["onRemoteC
 function createChanges(): DocumentChanges {
     const listeners = new Set<(pageId: string) => void>();
     return {
-        announce: (changedPageId) =>
-            queueMicrotask(() => listeners.forEach((listener) => listener(changedPageId))),
+        announce: (changedPageId) => queueMicrotask(() => listeners.forEach((listener) => listener(changedPageId))),
         subscribe(listener) {
             listeners.add(listener);
             return () => {
@@ -103,11 +102,10 @@ describe("PageDocumentSession", () => {
         await session.flush();
 
         await vi.waitFor(() => expect(lastStatus()).toEqual({ kind: "synced" }));
-        expect(remote.save).toHaveBeenCalledWith(
-            pageId,
-            [{ type: "paragraph", content: "edit" }],
-            { editedAt: "2026-10-17T10:00:00.000Z", mutationId: ownId },
-        );
+        expect(remote.save).toHaveBeenCalledWith(pageId, [{ type: "paragraph", content: "edit" }], {
+            editedAt: "2026-10-17T10:00:00.000Z",
+            mutationId: ownId,
+        });
         expect(await store.get(pageId)).toMatchObject({ synced: true, mutationId: ownId });
     });
 

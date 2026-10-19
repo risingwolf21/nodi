@@ -29,9 +29,9 @@ npm run dev                  # http://localhost:5173/nodi/
 
 `.env.local` braucht nur öffentliche Client-Werte:
 
-| Variable | Wert |
-|---|---|
-| `VITE_SUPABASE_URL` | Projekt-URL, lokal `http://127.0.0.1:54321` |
+| Variable                        | Wert                                                      |
+| ------------------------------- | --------------------------------------------------------- |
+| `VITE_SUPABASE_URL`             | Projekt-URL, lokal `http://127.0.0.1:54321`               |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Publishable Key des Projekts, lokal aus `supabase status` |
 
 Niemals den Service-Role-Key ins Frontend oder ins Repository legen.
@@ -50,13 +50,14 @@ einem pgTAP-Test absichern.
 
 ## Skripte
 
-| Befehl | Zweck |
-|---|---|
-| `npm run dev` | Entwicklungsserver |
-| `npm run lint` | ESLint |
-| `npm test` | Unit-Tests (Vitest) |
-| `npm run build` | Typprüfung (`tsc -b`) und Produktionsbuild nach `dist/` |
-| `npm run preview` | Produktionsbuild lokal ausliefern |
+| Befehl            | Zweck                                                   |
+| ----------------- | ------------------------------------------------------- |
+| `npm run dev`     | Entwicklungsserver                                      |
+| `npm run lint`    | ESLint                                                  |
+| `npm run format`  | Prettier (`format:check` nur prüfen, wie in der CI)     |
+| `npm test`        | Unit-Tests (Vitest)                                     |
+| `npm run build`   | Typprüfung (`tsc -b`) und Produktionsbuild nach `dist/` |
+| `npm run preview` | Produktionsbuild lokal ausliefern                       |
 
 ## CI und Deployment
 
@@ -72,12 +73,12 @@ einem pgTAP-Test absichern.
   ein Schritt fehl, bleiben Datenbank und Seite unverändert.
   Benötigte Repository-Secrets:
 
-  | Secret | Wofür |
-  |---|---|
-  | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Build des Frontends |
-  | `SUPABASE_ACCESS_TOKEN` | Supabase-CLI (persönlicher Access Token) |
-  | `SUPABASE_DB_PASSWORD` | Passwort der Produktiv-Datenbank |
-  | `SUPABASE_PROJECT_ID` | Project Ref des Supabase-Projekts |
+  | Secret                                               | Wofür                                    |
+  | ---------------------------------------------------- | ---------------------------------------- |
+  | `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | Build des Frontends                      |
+  | `SUPABASE_ACCESS_TOKEN`                              | Supabase-CLI (persönlicher Access Token) |
+  | `SUPABASE_DB_PASSWORD`                               | Passwort der Produktiv-Datenbank         |
+  | `SUPABASE_PROJECT_ID`                                | Project Ref des Supabase-Projekts        |
 
 ## PWA
 

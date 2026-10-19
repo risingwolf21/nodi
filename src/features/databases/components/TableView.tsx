@@ -146,7 +146,11 @@ export function TableView({
                             </span>
                         </th>
                         {properties.map((property) => (
-                            <th key={property.id} scope="col" className="w-48 min-w-48 border-r p-0 text-left font-normal">
+                            <th
+                                key={property.id}
+                                scope="col"
+                                className="w-48 min-w-48 border-r p-0 text-left font-normal"
+                            >
                                 <PropertyHeader
                                     property={property}
                                     editable={editable}

@@ -1,6 +1,4 @@
-import {
-    createContext
-} from "react";
+import { createContext } from "react";
 import type { Session } from "@supabase/supabase-js";
 
 /** The signed-in account; also known offline, when no session is usable. */
@@ -21,6 +19,4 @@ type AuthContextValue = {
     signOut: () => Promise<void>;
 };
 
-export const AuthContext = createContext<AuthContextValue | undefined>(
-    undefined,
-);
+export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

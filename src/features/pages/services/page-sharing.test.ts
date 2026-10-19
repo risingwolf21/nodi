@@ -9,7 +9,11 @@ vi.mock("@/lib/supabase", () => ({
         from: () => ({
             insert: (row: unknown) => {
                 insert(row);
-                return { select: () => ({ single: () => Promise.resolve({ data: { token: "t1" }, error: null, status: 201 }) }) };
+                return {
+                    select: () => ({
+                        single: () => Promise.resolve({ data: { token: "t1" }, error: null, status: 201 }),
+                    }),
+                };
             },
         }),
     },
@@ -19,9 +23,9 @@ const { pageSharing, parseShares, shareErrorMessage } = await import("./page-sha
 
 describe("parseShares", () => {
     it("reads the rows of list_page_shares", () => {
-        expect(
-            parseShares([{ user_id: "u2", email: "a@nodi.test", permission: "edit", created_at: "x" }]),
-        ).toEqual([{ userId: "u2", email: "a@nodi.test", permission: "edit" }]);
+        expect(parseShares([{ user_id: "u2", email: "a@nodi.test", permission: "edit", created_at: "x" }])).toEqual([
+            { userId: "u2", email: "a@nodi.test", permission: "edit" },
+        ]);
     });
 
     it("rejects unexpected rows instead of skipping them", () => {

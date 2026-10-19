@@ -5,9 +5,7 @@ import { DatabaseConnection, deleteDatabase } from "./indexed-db";
 let factory: IDBFactory;
 
 const connect = () =>
-    new DatabaseConnection(factory, "nodi-test", 1, (database) =>
-        database.createObjectStore("items"),
-    );
+    new DatabaseConnection(factory, "nodi-test", 1, (database) => database.createObjectStore("items"));
 
 async function databaseNames(): Promise<string[]> {
     return (await factory.databases()).map((info) => info.name ?? "");

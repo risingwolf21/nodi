@@ -9,11 +9,7 @@ type SignOutDialogProps = {
 };
 
 /** Asked when edits could not be synced before signing out (CLAUDE.md §2). */
-export function SignOutDialog({
-    unsyncedPages,
-    onCancel,
-    onDiscardAndSignOut,
-}: SignOutDialogProps) {
+export function SignOutDialog({ unsyncedPages, onCancel, onDiscardAndSignOut }: SignOutDialogProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -44,9 +40,8 @@ export function SignOutDialog({
             </h2>
 
             <p id="sign-out-description" className="text-sm text-muted-foreground">
-                {pages} Änderungen, die noch nicht auf dem Server sind. Beim
-                Abmelden werden sie zusammen mit allen lokalen Daten dieses
-                Kontos auf diesem Gerät gelöscht.
+                {pages} Änderungen, die noch nicht auf dem Server sind. Beim Abmelden werden sie zusammen mit allen
+                lokalen Daten dieses Kontos auf diesem Gerät gelöscht.
             </p>
 
             {error && (
@@ -56,13 +51,7 @@ export function SignOutDialog({
             )}
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                    type="button"
-                    variant="outline"
-                    onClick={onCancel}
-                    disabled={loading}
-                    autoFocus
-                >
+                <Button type="button" variant="outline" onClick={onCancel} disabled={loading} autoFocus>
                     Abbrechen
                 </Button>
                 <Button
@@ -72,9 +61,7 @@ export function SignOutDialog({
                     onClick={() => void handleDiscard()}
                     disabled={loading}
                 >
-                    {loading
-                        ? "Meldet ab …"
-                        : "Trotzdem abmelden und lokale Änderungen verwerfen"}
+                    {loading ? "Meldet ab …" : "Trotzdem abmelden und lokale Änderungen verwerfen"}
                 </Button>
             </div>
         </Dialog>

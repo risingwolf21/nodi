@@ -162,15 +162,17 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 : isObject(row.options) && typeof row.options.expression === "string"
                   ? row.options.expression
                   : "";
-        return [{
-            id: row.id,
-            databaseId: row.databaseId,
-            name: row.name,
-            type: row.type,
-            options: parseOptions(row.options),
-            position: numberOrZero(row.position),
-            ...(row.type === "formula" ? { formula: expression } : {}),
-        }];
+        return [
+            {
+                id: row.id,
+                databaseId: row.databaseId,
+                name: row.name,
+                type: row.type,
+                options: parseOptions(row.options),
+                position: numberOrZero(row.position),
+                ...(row.type === "formula" ? { formula: expression } : {}),
+            },
+        ];
     });
 }
 
@@ -234,14 +236,16 @@ export function parseViews(rows: unknown): DatabaseView[] {
             throw new Error(INVALID_DATA);
         }
         if (!isViewType(row.type)) return [];
-        return [{
-            id: row.id,
-            databaseId: row.databaseId,
-            name: row.name,
-            type: row.type,
-            config: parseViewConfig(row.config),
-            position: numberOrZero(row.position),
-        }];
+        return [
+            {
+                id: row.id,
+                databaseId: row.databaseId,
+                name: row.name,
+                type: row.type,
+                config: parseViewConfig(row.config),
+                position: numberOrZero(row.position),
+            },
+        ];
     });
 }
 
@@ -592,14 +596,21 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
                 ? value.map((id) => property.options.find((option) => option.id === id)?.name ?? "").join(", ")
                 : "";
         case "date":
-            return isDateValue(value) ? [value.start, value.end].filter(Boolean).map((day) => formatDay(day ?? "")).join(" – ") : "";
+            return isDateValue(value)
+                ? [value.start, value.end]
+                      .filter(Boolean)
+                      .map((day) => formatDay(day ?? ""))
+                      .join(" – ")
+                : "";
         case "place":
             return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
         case "formula":
             return formatFormulaResult(value);
         case "created_time":
         case "last_edited_time":
-            return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? dateTimeFormat.format(new Date(value)) : "";
+            return typeof value === "string" && !Number.isNaN(Date.parse(value))
+                ? dateTimeFormat.format(new Date(value))
+                : "";
         default:
             return typeof value === "string" ? value : "";
     }
@@ -672,7 +683,12 @@ function formulaFilterType(value: PropertyValue): "number" | "date" | "formula" 
 
 export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: DatabaseProperty | undefined): boolean {
     const value = fieldValue(row, rule.propertyId);
-    const type = rule.propertyId === TITLE_FIELD ? "text" : property?.type === "formula" ? formulaFilterType(value) : property?.type;
+    const type =
+        rule.propertyId === TITLE_FIELD
+            ? "text"
+            : property?.type === "formula"
+              ? formulaFilterType(value)
+              : property?.type;
     // A rule for a deleted property does not hide anything.
     if (!type) return true;
     const needle = rule.value.trim().toLocaleLowerCase("de");
@@ -811,7 +827,9 @@ export function groupProperty(properties: DatabaseProperty[], config: ViewConfig
     const sorted = [...properties].sort((a, b) => a.position - b.position);
     const chosen = sorted.find((property) => property.id === config.groupByPropertyId);
     if (chosen && canGroupBy(chosen.type)) return chosen;
-    return sorted.find((property) => property.type === "status") ?? sorted.find((property) => property.type === "select");
+    return (
+        sorted.find((property) => property.type === "status") ?? sorted.find((property) => property.type === "select")
+    );
 }
 
 /** One board column; `option` null collects the entries without a value. */
@@ -822,7 +840,10 @@ export type RowGroup = {
 
 /** Columns in the order of the options, "no value" first (like Notion); rows keep their order. */
 export function groupRows(rows: DatabaseRow[], property: DatabaseProperty): RowGroup[] {
-    const groups: RowGroup[] = [{ option: null, rows: [] }, ...property.options.map((option) => ({ option, rows: [] }))];
+    const groups: RowGroup[] = [
+        { option: null, rows: [] },
+        ...property.options.map((option) => ({ option, rows: [] })),
+    ];
     for (const row of rows) {
         const value = row.values[property.id];
         const group = groups.find((item) => item.option?.id === value) ?? groups[0];
@@ -865,7 +886,9 @@ export function previewText(blocks: unknown[]): string {
 
 /** The chosen date property, otherwise the first one. */
 export function dateProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
-    const dates = [...properties].sort((a, b) => a.position - b.position).filter((property) => property.type === "date");
+    const dates = [...properties]
+        .sort((a, b) => a.position - b.position)
+        .filter((property) => property.type === "date");
     return dates.find((property) => property.id === config.datePropertyId) ?? dates[0];
 }
 
@@ -923,7 +946,9 @@ export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<
 
 /** The chosen place property, otherwise the first one. */
 export function placeProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
-    const places = [...properties].sort((a, b) => a.position - b.position).filter((property) => property.type === "place");
+    const places = [...properties]
+        .sort((a, b) => a.position - b.position)
+        .filter((property) => property.type === "place");
     return places.find((property) => property.id === config.placePropertyId) ?? places[0];
 }
 

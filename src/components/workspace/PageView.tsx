@@ -115,55 +115,56 @@ export function PageView({
         </>
     );
 
-    const topBarEnd = readOnly || !showPageMenu ? null : (
-        <div className="relative shrink-0">
-            <button
-                type="button"
-                aria-label="Seitenmenü"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
-                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-                <MoreHorizontal className="size-5" />
-            </button>
-            <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
-                {onShare && (
-                    <MenuItem
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onShare(page);
-                        }}
-                    >
-                        Teilen
-                    </MenuItem>
-                )}
-                {onMoveSection && (
-                    <MenuItem
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
-                        }}
-                    >
-                        {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
-                    </MenuItem>
-                )}
-                <MenuItem onSelect={toggleFullWidth}>
-                    <span className="flex-1">Volle Breite</span>
-                    {page.full_width && <Check className="size-4 text-brand" />}
-                </MenuItem>
-                <div className="my-1 border-t" />
-                <MenuItem
-                    destructive
-                    onSelect={() => {
-                        setMenuOpen(false);
-                        onArchive(page);
-                    }}
+    const topBarEnd =
+        readOnly || !showPageMenu ? null : (
+            <div className="relative shrink-0">
+                <button
+                    type="button"
+                    aria-label="Seitenmenü"
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((open) => !open)}
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
-                    In den Papierkorb
-                </MenuItem>
-            </Menu>
-        </div>
-    );
+                    <MoreHorizontal className="size-5" />
+                </button>
+                <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                    {onShare && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onShare(page);
+                            }}
+                        >
+                            Teilen
+                        </MenuItem>
+                    )}
+                    {onMoveSection && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
+                            }}
+                        >
+                            {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
+                        </MenuItem>
+                    )}
+                    <MenuItem onSelect={toggleFullWidth}>
+                        <span className="flex-1">Volle Breite</span>
+                        {page.full_width && <Check className="size-4 text-brand" />}
+                    </MenuItem>
+                    <div className="my-1 border-t" />
+                    <MenuItem
+                        destructive
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onArchive(page);
+                        }}
+                    >
+                        In den Papierkorb
+                    </MenuItem>
+                </Menu>
+            </div>
+        );
 
     const renderHeader = (canEdit: boolean) => (
         <>
@@ -217,9 +218,7 @@ export function PageView({
                 fallback={
                     <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
                         {renderHeader(false)}
-                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                            Editor wird geladen …
-                        </p>
+                        <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">Editor wird geladen …</p>
                     </EditorFrame>
                 }
             >

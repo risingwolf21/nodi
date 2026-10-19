@@ -80,7 +80,9 @@ export function PlacePicker({ property, value, onClose, onChange }: PlacePickerP
             )}
             {results && !searching && (
                 <ul className="max-h-40 overflow-y-auto py-1" aria-label="Suchergebnisse">
-                    {results.length === 0 && <li className="px-1 py-1 text-xs text-muted-foreground">Nichts gefunden.</li>}
+                    {results.length === 0 && (
+                        <li className="px-1 py-1 text-xs text-muted-foreground">Nichts gefunden.</li>
+                    )}
                     {results.map((place) => (
                         <li key={`${place.lat},${place.lng}`}>
                             <button

@@ -48,7 +48,11 @@ export function CalendarView({
                         type="button"
                         onClick={() =>
                             onAddDateProperty().catch((err: unknown) =>
-                                onError(err instanceof Error ? err.message : "Die Eigenschaft konnte nicht angelegt werden."),
+                                onError(
+                                    err instanceof Error
+                                        ? err.message
+                                        : "Die Eigenschaft konnte nicht angelegt werden.",
+                                ),
                             )
                         }
                         className="mt-2 flex h-8 items-center gap-1.5 rounded border px-2 text-foreground hover:bg-accent/60"
@@ -102,7 +106,11 @@ export function CalendarView({
             </div>
             <section className="grid grid-cols-7 border-t border-l text-xs" aria-label="Kalender">
                 {WEEKDAYS.map((weekday) => (
-                    <div key={weekday} aria-hidden="true" className="border-r border-b px-1.5 py-1 text-muted-foreground">
+                    <div
+                        key={weekday}
+                        aria-hidden="true"
+                        className="border-r border-b px-1.5 py-1 text-muted-foreground"
+                    >
                         {weekday}
                     </div>
                 ))}

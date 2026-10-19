@@ -1,4 +1,3 @@
-
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -15,30 +14,20 @@ type TrashViewProps = {
     onDelete: (pageId: string) => Promise<string[]>;
 };
 
-export function TrashView({
-    pages,
-    userId,
-    onRestore,
-    onDelete,
-}: TrashViewProps) {
+export function TrashView({ pages, userId, onRestore, onDelete }: TrashViewProps) {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [pageToDelete, setPageToDelete] = useState<Page | null>(null);
     const [pageToRestore, setPageToRestore] = useState<Page | null>(null);
 
     // Root first, so the dialog reads like a breadcrumb.
-    const ancestorsToRestore = pageToRestore
-        ? findArchivedAncestors(pageToRestore.id, pages).reverse()
-        : [];
+    const ancestorsToRestore = pageToRestore ? findArchivedAncestors(pageToRestore.id, pages).reverse() : [];
 
     const pageIds = new Set(pages.map((page) => page.id));
     const childrenByParent = new Map<string | null, Page[]>();
 
     for (const page of pages) {
-        const parentId =
-            page.parent_id && pageIds.has(page.parent_id)
-                ? page.parent_id
-                : null;
+        const parentId = page.parent_id && pageIds.has(page.parent_id) ? page.parent_id : null;
 
         const siblings = childrenByParent.get(parentId) ?? [];
         siblings.push(page);
@@ -48,10 +37,7 @@ export function TrashView({
     function countDescendants(pageId: string): number {
         const children = childrenByParent.get(pageId) ?? [];
 
-        return children.reduce(
-            (count, child) => count + 1 + countDescendants(child.id),
-            0,
-        );
+        return children.reduce((count, child) => count + 1 + countDescendants(child.id), 0);
     }
 
     async function handleRestore(pageId: string) {
@@ -62,11 +48,7 @@ export function TrashView({
             await onRestore(pageId);
             setPageToRestore(null);
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Die Seite konnte nicht wiederhergestellt werden.",
-            );
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht wiederhergestellt werden.");
         } finally {
             setBusyId(null);
         }
@@ -95,11 +77,7 @@ export function TrashView({
             await onDelete(page.id);
             setPageToDelete(null);
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Die Seite konnte nicht endgültig gelöscht werden.",
-            );
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht endgültig gelöscht werden.");
         } finally {
             setBusyId(null);
         }
@@ -153,8 +131,7 @@ export function TrashView({
             <div>
                 <h2 className="text-sm font-semibold">Papierkorb</h2>
                 <p className="text-xs text-muted-foreground">
-                    Archivierte Seiten und ihre Unterseiten. Endgültig
-                    löschen kann nur, wem die Seite gehört.
+                    Archivierte Seiten und ihre Unterseiten. Endgültig löschen kann nur, wem die Seite gehört.
                 </p>
             </div>
 
@@ -165,9 +142,7 @@ export function TrashView({
             )}
 
             {pages.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                    Der Papierkorb ist leer.
-                </p>
+                <p className="py-6 text-center text-sm text-muted-foreground">Der Papierkorb ist leer.</p>
             ) : (
                 <ul className="space-y-1">{renderPages(null)}</ul>
             )}
@@ -180,22 +155,15 @@ export function TrashView({
                     busy={busyId !== null}
                     className="max-w-md"
                 >
-                    <h3
-                        id="restore-with-parents-title"
-                        className="text-lg font-semibold"
-                    >
+                    <h3 id="restore-with-parents-title" className="text-lg font-semibold">
                         Mit übergeordneten Seiten wiederherstellen?
                     </h3>
 
                     <p className="text-sm text-muted-foreground">
-                        „{pageToRestore.title}“ liegt in einer Seite, die
-                        sich ebenfalls im Papierkorb befindet. Damit sie
-                        wieder an ihrem Platz erscheint, werden auch diese
-                        Seiten wiederhergestellt:{" "}
-                        {ancestorsToRestore
-                            .map((ancestor) => `„${ancestor.title}“`)
-                            .join(" › ")}
-                        . Andere Unterseiten bleiben im Papierkorb.
+                        „{pageToRestore.title}“ liegt in einer Seite, die sich ebenfalls im Papierkorb befindet. Damit
+                        sie wieder an ihrem Platz erscheint, werden auch diese Seiten wiederhergestellt:{" "}
+                        {ancestorsToRestore.map((ancestor) => `„${ancestor.title}“`).join(" › ")}. Andere Unterseiten
+                        bleiben im Papierkorb.
                     </p>
 
                     {error && (
@@ -205,21 +173,12 @@ export function TrashView({
                     )}
 
                     <div className="flex justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={busyId !== null}
-                            onClick={() => setPageToRestore(null)}
-                        >
+                        <Button variant="outline" disabled={busyId !== null} onClick={() => setPageToRestore(null)}>
                             Abbrechen
                         </Button>
 
-                        <Button
-                            disabled={busyId !== null}
-                            onClick={() => void handleRestore(pageToRestore.id)}
-                        >
-                            {busyId === pageToRestore.id
-                                ? "Stellt wieder her …"
-                                : "Wiederherstellen"}
+                        <Button disabled={busyId !== null} onClick={() => void handleRestore(pageToRestore.id)}>
+                            {busyId === pageToRestore.id ? "Stellt wieder her …" : "Wiederherstellen"}
                         </Button>
                     </div>
                 </Dialog>
@@ -233,19 +192,15 @@ export function TrashView({
                     busy={busyId !== null}
                     className="max-w-md"
                 >
-                    <h3
-                        id="permanent-delete-title"
-                        className="text-lg font-semibold"
-                    >
+                    <h3 id="permanent-delete-title" className="text-lg font-semibold">
                         Endgültig löschen?
                     </h3>
 
                     <p className="text-sm text-muted-foreground">
                         „{pageToDelete.title}“ wird dauerhaft gelöscht.
                         {countDescendants(pageToDelete.id) > 0 &&
-                            ` Zusätzlich werden ${countDescendants(pageToDelete.id)} Unterseite(n) gelöscht.`}
-                        {" "}Gespeicherte Inhalte können danach nicht
-                        wiederhergestellt werden.
+                            ` Zusätzlich werden ${countDescendants(pageToDelete.id)} Unterseite(n) gelöscht.`}{" "}
+                        Gespeicherte Inhalte können danach nicht wiederhergestellt werden.
                     </p>
 
                     {error && (
@@ -255,22 +210,12 @@ export function TrashView({
                     )}
 
                     <div className="flex justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            disabled={busyId !== null}
-                            onClick={() => setPageToDelete(null)}
-                        >
+                        <Button variant="outline" disabled={busyId !== null} onClick={() => setPageToDelete(null)}>
                             Abbrechen
                         </Button>
 
-                        <Button
-                            variant="destructive"
-                            disabled={busyId !== null}
-                            onClick={() => void handleDelete()}
-                        >
-                            {busyId === pageToDelete.id
-                                ? "Löscht …"
-                                : "Endgültig löschen"}
+                        <Button variant="destructive" disabled={busyId !== null} onClick={() => void handleDelete()}>
+                            {busyId === pageToDelete.id ? "Löscht …" : "Endgültig löschen"}
                         </Button>
                     </div>
                 </Dialog>

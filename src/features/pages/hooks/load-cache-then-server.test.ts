@@ -17,11 +17,7 @@ const { loadCacheThenServer } = await import("./load-cache-then-server");
 
 type Shown = { value: string; fromCache: boolean };
 
-function load(options: {
-    cache?: string | null;
-    server?: () => Promise<string>;
-    cacheFirst?: boolean;
-}) {
+function load(options: { cache?: string | null; server?: () => Promise<string>; cacheFirst?: boolean }) {
     const shown: Shown[] = [];
     const fetchServer = vi.fn(options.server ?? (async () => "server"));
     const result = loadCacheThenServer({

@@ -65,9 +65,7 @@ export default function WorkspaceHome() {
     const creatingPage = useRef(false);
     const [error, setError] = useState("");
     const [signOutStep, setSignOutStep] = useState<
-        | { kind: "idle" }
-        | { kind: "syncing" }
-        | { kind: "confirm"; unsyncedPages: number }
+        { kind: "idle" } | { kind: "syncing" } | { kind: "confirm"; unsyncedPages: number }
     >({ kind: "idle" });
 
     const {
@@ -90,10 +88,7 @@ export default function WorkspaceHome() {
         fromCache: sharedPagesFromCache,
         renamePage: renameSharedPage,
         updatePage: updateSharedPage,
-    } = useSharedPages(
-        user?.id,
-        loading ? undefined : workspaces.map((workspace) => workspace.id),
-    );
+    } = useSharedPages(user?.id, loading ? undefined : workspaces.map((workspace) => workspace.id));
 
     const [activePageAction, setActivePageAction] = useState<{
         page: Page;
@@ -322,7 +317,9 @@ export default function WorkspaceHome() {
                                         : undefined
                                 }
                                 userId={user?.id}
-                                entries={(sharedPage ? sharedPages : pages).filter((item) => item.parent_id === page.id)}
+                                entries={(sharedPage ? sharedPages : pages).filter(
+                                    (item) => item.parent_id === page.id,
+                                )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
                             />
