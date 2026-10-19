@@ -283,7 +283,7 @@ src/
       types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
       database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
       services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property
-      hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch
+      hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch, Einträge anlegen
       components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
       components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
       components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
@@ -324,6 +324,7 @@ src/
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
+      hooks/usePageNavigation.ts    # offene Seite als History-Eintrag (pushState/popstate)
       hooks/useSharedPages.ts       # „Mit mir geteilt“, Cache zuerst, nur lesend
       hooks/useWorkspaces.ts
       services/page-tree-cache.ts   # IndexedDB `nodi-<userId>-tree`
@@ -336,7 +337,7 @@ src/
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
-    auth-provider.tsx       # inkl. Offline-Modus und Offline-Abmelden
+    auth-provider.tsx       # Anmelden, Registrieren, Abmelden; Offline-Modus
     remembered-account.ts   # id/E-Mail des Kontos (keine Tokens)
     indexed-db.ts           # Verbindung, die ein Logout schließen kann
     request-errors.ts       # Fehlerklassen offline/auth/temporär/dauerhaft
