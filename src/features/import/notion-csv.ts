@@ -4,10 +4,11 @@
 // multi-select as "A, B", checkboxes as "Yes"/"No", dates in the user's
 // date format and relations as "Title (Path.md)".
 import { OPTION_COLORS } from "@/features/databases/database-model";
-import type { DateValue, PropertyOption } from "@/features/databases/types";
+import type { DateValue, OptionColor, PropertyOption } from "@/features/databases/types";
 
 /** Property types a column can become; Notion's other types arrive as text. */
-export type ImportedType = "text" | "number" | "checkbox" | "select" | "multi_select" | "date" | "url" | "email";
+export type ImportedType =
+    "text" | "number" | "checkbox" | "select" | "multi_select" | "status" | "date" | "url" | "email";
 
 export type ImportedColumn = {
     name: string;
@@ -175,6 +176,30 @@ function asChoice(values: string[]): string[] | null {
     return fits && distinct.length < values.length ? distinct : null;
 }
 
+// Notion's status values (English and German) with the colors Notion gives them.
+const STATUS_COLORS = new Map<string, OptionColor>([
+    ["not started", "gray"],
+    ["nicht begonnen", "gray"],
+    ["in progress", "blue"],
+    ["in bearbeitung", "blue"],
+    ["in arbeit", "blue"],
+    ["done", "green"],
+    ["erledigt", "green"],
+    ["fertig", "green"],
+]);
+
+/** A column "Status", or one with only Notion's status values (the CSV does not tell status from select). */
+function isStatusColumn(name: string, values: string[]): boolean {
+    return name.trim().toLowerCase() === "status" || values.every((value) => STATUS_COLORS.has(value.toLowerCase()));
+}
+
+function statusOptions(names: string[]): PropertyOption[] {
+    return choiceOptions(names).map((option) => ({
+        ...option,
+        color: STATUS_COLORS.get(option.name.toLowerCase()) ?? option.color,
+    }));
+}
+
 function choiceOptions(names: string[]): PropertyOption[] {
     return names.map((name, index) => ({
         id: crypto.randomUUID(),
@@ -206,6 +231,11 @@ export function inferColumn(name: string, values: readonly string[]): ImportedCo
     if (filled.every((value) => URL_VALUE.test(value) && value.length <= MAX_URL_LENGTH)) return column("url");
     if (filled.every((value) => EMAIL.test(value) && value.length <= MAX_EMAIL_LENGTH)) return column("email");
 
+    const distinct = [...new Set(filled)];
+    const fitsChoice = distinct.length <= MAX_OPTIONS && distinct.every((value) => value.length <= MAX_OPTION_LENGTH);
+    // A status column is one even if every value occurs only once.
+    if (fitsChoice && isStatusColumn(name, filled)) return column("status", statusOptions(distinct));
+
     if (filled.some((value) => value.includes(","))) {
         const parts = filled.flatMap(splitMulti);
         const choices = asChoice(parts);
@@ -231,6 +261,7 @@ export function columnValue(column: ImportedColumn, raw: string): unknown {
         case "date":
             return parseNotionDate(value, column.dayFirst) ?? undefined;
         case "select":
+        case "status":
             return optionId(value);
         case "multi_select": {
             const ids = [...new Set(splitMulti(value).map(optionId))].filter((id) => id !== undefined);

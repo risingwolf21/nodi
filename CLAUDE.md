@@ -1607,7 +1607,38 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         Relation, Zeitraum und Eintrag mit Bild geprüft.
       - Noch nicht: Ansichten (Board, Kalender …) aus Notion (nur die
         Tabelle), Status-Typ, Relationen als Verknüpfung, Uhrzeiten,
-        Zahlen mit Tausendertrennern oder Währung (werden Text).
+        Zahlen mit Tausendertrennern oder Währung (werden Text). Siehe
+        Paket 17.
+
+17. **Notion-Import und Datenbanken ergänzen** (Nutzerwunsch 2026-10-19,
+    je Teil ein PR).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Ansichten: Der Export
+      enthält keine; abgeleitet werden ausgeblendete Spalten (aus der
+      CSV der Ansicht) sowie ein Board (Status/Auswahl) und ein Kalender
+      (Datum). (2) Relationen als eigener Eigenschaftstyp
+      „Verknüpfung“, **beidseitig wie Notion** (der Server hält beide
+      Seiten gleich). (3) Uhrzeiten **je Wert ein-/ausschaltbar** wie
+      Notion; Anzeige, Kalender, Filter, Sortierung berücksichtigen sie.
+      (4) Zahl-Eigenschaften bekommen ein **Zahlenformat** (Zahl,
+      Prozent, Euro, Dollar …); der Import erkennt Trennzeichen und
+      Symbole. Status-Spalten erkennt der Import am Namen oder an
+      Notions Statuswerten.
+    - **Aufteilung:** 17a Import: Status und Ansichten; 17b Zahlenformat;
+      17c Uhrzeiten; 17d Verknüpfung (Datenbank); 17e Verknüpfung
+      (Oberfläche und Import).
+    - **Umsetzung 17a** (nur Frontend, keine Migration):
+      - Status: Eine Spalte wird Status, wenn sie „Status“ heißt oder nur
+        Notions Statuswerte hat (Not started/In progress/Done, deutsch
+        Nicht begonnen/In Bearbeitung/Erledigt), auch wenn jeder Wert
+        nur einmal vorkommt. Bekannte Werte bekommen Notions Farben
+        (grau, blau, grün).
+      - Ansichten: Die Tabelle blendet Eigenschaften aus, die in der CSV
+        der exportierten Ansicht fehlen (nur wenn es eine `_all.csv`
+        gibt). Dazu ein Board (gruppiert nach der ersten Status-, sonst
+        Auswahl-Eigenschaft) und ein Kalender (erste Datums-Eigenschaft),
+        mit denselben ausgeblendeten Eigenschaften.
+        `databaseRepository.listViews` findet die vom Server angelegte
+        Tabelle.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
