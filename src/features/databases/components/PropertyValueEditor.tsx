@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Clock } from "lucide-react";
+import { displayTitle } from "@/features/pages/page-display";
 import {
     dateFromInput,
     dateHasTime,
@@ -9,6 +10,7 @@ import {
     isComputed,
     isDateValue,
     isPlaceValue,
+    relatedEntries,
     setDateTime,
 } from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
@@ -16,6 +18,7 @@ import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
 import { FormulaErrorText } from "./FormulaErrorText";
 import { PlacePicker } from "./PlacePicker";
+import { RelationPicker } from "./RelationPicker";
 
 const OSM_ZOOM = 16;
 
@@ -78,6 +81,46 @@ export function PropertyValueEditor({
                     className="size-4 accent-[var(--brand)]"
                 />
             </label>
+        );
+    }
+
+    if (property.type === "relation") {
+        const selectedIds = Array.isArray(value) ? value : [];
+        const linked = relatedEntries(property, value);
+        return (
+            <div className="relative min-w-0">
+                <button
+                    type="button"
+                    disabled={!canChange}
+                    aria-label={`${property.name} wählen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} flex-wrap gap-1 hover:bg-accent/60 disabled:hover:bg-transparent`}
+                >
+                    {linked.map((entry) => (
+                        <span key={entry.id} className="max-w-full truncate rounded border px-1.5 py-0.5 text-xs">
+                            {entry.icon ? `${entry.icon} ` : ""}
+                            {displayTitle(entry)}
+                        </span>
+                    ))}
+                </button>
+                {pickerOpen && (
+                    <RelationPicker
+                        open
+                        entries={property.relation?.entries ?? []}
+                        selectedIds={selectedIds}
+                        label={property.name}
+                        onClose={() => setPickerOpen(false)}
+                        onClear={() => save(null)}
+                        onToggle={(entryId) => {
+                            const next = selectedIds.includes(entryId)
+                                ? selectedIds.filter((id) => id !== entryId)
+                                : [...selectedIds, entryId];
+                            save(next.length > 0 ? next : null);
+                        }}
+                    />
+                )}
+            </div>
         );
     }
 

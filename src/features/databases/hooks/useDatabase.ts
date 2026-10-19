@@ -34,6 +34,8 @@ export type UseDatabaseResult = {
     /** Shown from the cache: nothing can be changed (CLAUDE.md §12 P14). */
     fromCache: boolean;
     addProperty: (type: PropertyType) => Promise<DatabaseProperty>;
+    /** A relation to another database (or this one), with its other side there (package 17d). */
+    addRelation: (target: { id: string; title: string }, ownTitle: string) => Promise<void>;
     updateProperty: (propertyId: string, changes: PropertyChanges) => Promise<void>;
     deleteProperty: (propertyId: string) => Promise<void>;
     /** A new choice of a select, multi-select or status property. */
@@ -162,7 +164,12 @@ export function useDatabase(
         async (propertyId: string, changes: PropertyChanges) => {
             const current = requireEditable();
             const before = current.properties.find((item) => item.id === propertyId);
-            const property = await databaseRepository.updateProperty(propertyId, changes);
+            const updated = await databaseRepository.updateProperty(propertyId, changes);
+            // The related entries are loaded with the database, not with the property.
+            const property =
+                updated.relation && before?.relation
+                    ? { ...updated, relation: { ...updated.relation, entries: before.relation.entries } }
+                    : updated;
             // The server clears the values when the type changes.
             const typeChanged = before !== undefined && before.type !== property.type;
             change((latest) => ({
@@ -174,17 +181,39 @@ export function useDatabase(
         [requireEditable],
     );
 
+    const addRelation = useCallback(
+        async (target: { id: string; title: string }, ownTitle: string) => {
+            const current = requireEditable();
+            const name = uniqueName(
+                target.title.trim() || PROPERTY_TYPE_LABELS.relation,
+                current.properties.map((item) => item.name),
+            );
+            await databaseRepository.addRelation(
+                databaseId,
+                name,
+                target.id,
+                ownTitle.trim() || PROPERTY_TYPE_LABELS.relation,
+            );
+            // Both sides and the related entries come with the database.
+            setManualReloads((count) => count + 1);
+        },
+        [databaseId, requireEditable],
+    );
+
     const deleteProperty = useCallback(
         async (propertyId: string) => {
-            requireEditable();
+            const current = requireEditable();
+            const relation = current.properties.find((item) => item.id === propertyId)?.relation;
             await databaseRepository.deleteProperty(propertyId);
+            // The other side of a relation within this database is gone as well.
+            if (relation?.databaseId === databaseId) setManualReloads((count) => count + 1);
             change((latest) => ({
                 ...latest,
                 properties: latest.properties.filter((item) => item.id !== propertyId),
                 values: latest.values.filter((value) => value.propertyId !== propertyId),
             }));
         },
-        [requireEditable],
+        [databaseId, requireEditable],
     );
 
     const addOption = useCallback(
@@ -266,8 +295,12 @@ export function useDatabase(
 
             try {
                 const result = await databaseRepository.setValue(pageId, propertyId, value, editedAt, mutationId);
-                // Another device was later (LWW): show what the server keeps.
-                if (result === "superseded") setManualReloads((count) => count + 1);
+                const relation = current.properties.find((item) => item.id === propertyId)?.relation;
+                // Another device was later (LWW): show what the server keeps. A relation within this
+                // database changed its other side here as well.
+                if (result === "superseded" || relation?.databaseId === databaseId) {
+                    setManualReloads((count) => count + 1);
+                }
             } catch (err) {
                 if (latestWrite.current.get(field) === mutationId) {
                     change((latest) => replaceValue(latest, previous));
@@ -275,7 +308,7 @@ export function useDatabase(
                 throw err;
             }
         },
-        [requireEditable],
+        [databaseId, requireEditable],
     );
 
     // Repeated taps on "Neu" while an entry is being created add nothing.
@@ -301,6 +334,7 @@ export function useDatabase(
         error,
         fromCache,
         addProperty,
+        addRelation,
         updateProperty,
         deleteProperty,
         addOption,

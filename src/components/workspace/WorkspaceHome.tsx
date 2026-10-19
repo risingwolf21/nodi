@@ -294,6 +294,8 @@ export default function WorkspaceHome() {
                                 )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
+                                // Relations stay within the workspace (package 17d).
+                                databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
