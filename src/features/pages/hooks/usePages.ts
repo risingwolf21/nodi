@@ -99,6 +99,12 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
     // Server data shown for this workspace: a reload does not show the cache first.
     const shownFromServerFor = useRef("");
     const reloadCount = useServerReload(fromCache || error !== "");
+    // The newest pages for createPage, which may run several times before
+    // React renders again (Notion import: a database, then its entries).
+    const latestPages = useRef<Page[]>([]);
+    useEffect(() => {
+        latestPages.current = pages;
+    }, [pages]);
 
     useEffect(() => {
         let active = true;
@@ -210,7 +216,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             const normalizedTitle = title.trim();
             // The server enforces it for private parents; a shared parent's
             // subpage is shared as well.
-            const parent = parentId ? pages.find((page) => page.id === parentId) : undefined;
+            const parent = parentId ? latestPages.current.find((page) => page.id === parentId) : undefined;
             const isEntry = parent?.kind === "database";
 
             if (!normalizedTitle && !isEntry) {
@@ -219,7 +225,9 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
 
             const visibility = parent ? parent.visibility : section;
             // A new entry goes to the end of its database.
-            const position = isEntry ? nextPosition(pages.filter((page) => page.parent_id === parentId)) : null;
+            const position = isEntry
+                ? nextPosition(latestPages.current.filter((page) => page.parent_id === parentId))
+                : null;
 
             const createdPage: Page = {
                 id: crypto.randomUUID(),
@@ -251,11 +259,14 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
             if (failure) throw failure;
 
-            if (!switchedSince(workspaceId)) setPages((current) => [...current, createdPage]);
+            if (!switchedSince(workspaceId)) {
+                latestPages.current = [...latestPages.current, createdPage];
+                setPages((current) => [...current, createdPage]);
+            }
 
             return createdPage;
         },
-        [userId, workspaceId, pages, requireOnline, switchedSince],
+        [userId, workspaceId, requireOnline, switchedSince],
     );
 
     const setPageSection = useCallback(

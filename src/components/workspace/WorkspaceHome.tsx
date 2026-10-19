@@ -375,7 +375,9 @@ export default function WorkspaceHome() {
                     <Suspense fallback={null}>
                         <NotionImportDialog
                             // Imported pages are private (decision of the user, CLAUDE.md §12 P16).
-                            createPage={(title, parentId) => createWorkspacePage(title, parentId, "private")}
+                            createPage={(title, parentId, kind) =>
+                                createWorkspacePage(title, parentId, "private", kind)
+                            }
                             onOpen={(pageId) => openPage(pageId)}
                             onClose={() => setImportOpen(false)}
                         />

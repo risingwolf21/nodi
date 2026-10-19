@@ -1,7 +1,8 @@
 // The structure of a Notion export ("Markdown & CSV", decision of the user,
 // CLAUDE.md §12 P16): every page is `Title <32 hex id>.md`; its subpages,
 // images and attachments sit in a folder of the same name next to it. A
-// database is `Title <id>.csv` with a folder of entry pages (package 16b).
+// database is `Title <id>.csv` (and `…_all.csv` with all properties) with a
+// folder of entry pages next to it.
 
 const NOTION_ID = /\s+[0-9a-f]{32}$/i;
 
@@ -50,32 +51,46 @@ export function splitTitle(markdown: string): { title: string | null; body: stri
 }
 
 export type PlannedPage = {
+    kind: "page";
     /** Path of the Markdown file in the export. */
     path: string;
     title: string;
     parentPath: string | null;
 };
 
-export type SkippedDatabase = { path: string; title: string };
+export type PlannedDatabase = {
+    kind: "database";
+    /** `Title <id>.csv`; links in pages point here. */
+    path: string;
+    /** The CSV to read: `…_all.csv` (all properties) if the export has it. */
+    dataPath: string;
+    title: string;
+    parentPath: string | null;
+    /** Markdown files of the entries (their text); their subpages are not imported. */
+    entryPaths: string[];
+};
 
 export type ImportPlan = {
     /** Parents come before their subpages, siblings in Notion's order. */
-    pages: PlannedPage[];
-    /** Databases (CSV) and their entries follow with package 16b. */
-    databases: SkippedDatabase[];
+    items: (PlannedPage | PlannedDatabase)[];
+    /** Pages and databases inside database entries; entries have no subpages in Nodi. */
+    skippedInEntries: number;
 };
 
 const MARKDOWN_LINK = /\]\(([^)\s]+)\)/g;
 
-/** Plans which pages to create, from the Markdown files of an export. */
+/** Plans which pages and databases to create, from the Markdown files of an export. */
 export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: Iterable<string>): ImportPlan {
     const paths = new Set(allPaths);
-    const isDatabase = (path: string) => path.toLowerCase().endsWith(".csv") && !/_all\.csv$/i.test(path);
-    const databasePaths = [...paths].filter(isDatabase);
-    const databaseFolders = databasePaths.map((path) => path.slice(0, -".csv".length));
+    // `X.csv` and `X_all.csv` are one database, known as `X.csv`.
+    const csvPaths = [...paths].filter((path) => path.toLowerCase().endsWith(".csv"));
+    const databasePaths = [...new Set(csvPaths.map((path) => path.replace(/_all(\.csv)$/i, "$1")))];
+    const folderOf = (csvPath: string) => csvPath.slice(0, -".csv".length);
 
-    const insideDatabase = (path: string) => databaseFolders.some((folder) => path.startsWith(`${folder}/`));
+    const insideDatabase = (path: string) =>
+        databasePaths.some((database) => path.startsWith(`${folderOf(database)}/`));
     const markdownPaths = [...files.keys()].filter((path) => !insideDatabase(path));
+    const topDatabases = databasePaths.filter((path) => !insideDatabase(path));
 
     // A page's subpages live in the folder named like the page.
     const parentOf = (path: string): string | null => {
@@ -102,28 +117,52 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
         return order;
     };
 
+    const databaseTitle = (path: string) => titleFromFileName(path) || "Ohne Titel";
+    const isDatabase = (path: string) => path.toLowerCase().endsWith(".csv");
+    const itemTitle = (path: string) => (isDatabase(path) ? databaseTitle(path) : title(path));
+
     const childrenOf = new Map<string | null, string[]>();
-    for (const path of markdownPaths) {
+    for (const path of [...markdownPaths, ...topDatabases]) {
         const parent = parentOf(path);
         childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), path]);
     }
 
-    const pages: PlannedPage[] = [];
+    const database = (path: string, parentPath: string | null): PlannedDatabase => {
+        const allPath = path.replace(/\.csv$/i, "_all.csv");
+        const folder = `${folderOf(path)}/`;
+        return {
+            kind: "database",
+            path,
+            dataPath: paths.has(allPath) ? allPath : path,
+            title: databaseTitle(path),
+            parentPath,
+            entryPaths: [...files.keys()].filter(
+                (file) => file.startsWith(folder) && !file.slice(folder.length).includes("/"),
+            ),
+        };
+    };
+
+    const items: (PlannedPage | PlannedDatabase)[] = [];
     const visit = (parentPath: string | null) => {
         const order = parentPath ? linkOrder(parentPath) : new Map<string, number>();
         const children = [...(childrenOf.get(parentPath) ?? [])].sort((a, b) => {
             const byLink = (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity);
-            return byLink !== 0 && !Number.isNaN(byLink) ? byLink : title(a).localeCompare(title(b), "de");
+            return byLink !== 0 && !Number.isNaN(byLink) ? byLink : itemTitle(a).localeCompare(itemTitle(b), "de");
         });
         for (const path of children) {
-            pages.push({ path, title: title(path), parentPath });
-            visit(path);
+            if (isDatabase(path)) {
+                items.push(database(path, parentPath));
+            } else {
+                items.push({ kind: "page", path, title: title(path), parentPath });
+                visit(path);
+            }
         }
     };
     visit(null);
 
-    const databases = databasePaths
-        .map((path) => ({ path, title: titleFromFileName(path) || "Ohne Titel" }))
-        .sort((a, b) => a.path.localeCompare(b.path));
-    return { pages, databases };
+    const entryPaths = new Set(items.flatMap((item) => (item.kind === "database" ? item.entryPaths : [])));
+    const skippedInEntries =
+        [...files.keys()].filter((path) => insideDatabase(path) && !entryPaths.has(path)).length +
+        databasePaths.filter(insideDatabase).length;
+    return { items, skippedInEntries };
 }
