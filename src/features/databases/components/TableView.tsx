@@ -2,7 +2,14 @@ import { useState, type KeyboardEvent } from "react";
 import { FileText, Maximize2, Plus } from "lucide-react";
 import { displayTitle } from "@/features/pages/page-display";
 import type { DatabaseRow } from "../database-model";
-import type { DatabaseProperty, NumberFormat, PropertyOption, PropertyType, PropertyValue } from "../types";
+import type {
+    DatabaseProperty,
+    NumberFormat,
+    PropertyOption,
+    PropertyType,
+    PropertyValue,
+    RelatedEntry,
+} from "../types";
 import { AddPropertyButton } from "./AddPropertyButton";
 import { PropertyHeader } from "./PropertyHeader";
 import { PropertyValueEditor } from "./PropertyValueEditor";
@@ -20,6 +27,8 @@ export type TableViewProps = {
     onSetValue: (pageId: string, propertyId: string, value: PropertyValue) => Promise<void>;
     onCreateOption: (propertyId: string, name: string) => Promise<PropertyOption>;
     onAddProperty: (type: PropertyType) => Promise<void>;
+    relationTargets?: RelatedEntry[];
+    onAddRelation?: (target: RelatedEntry) => Promise<void>;
     onRenameProperty: (propertyId: string, name: string) => Promise<void>;
     onChangePropertyType: (propertyId: string, type: PropertyType) => Promise<void>;
     onHideProperty: (propertyId: string) => Promise<void>;
@@ -114,6 +123,8 @@ export function TableView({
     onSetValue,
     onCreateOption,
     onAddProperty,
+    relationTargets,
+    onAddRelation,
     onRenameProperty,
     onChangePropertyType,
     onHideProperty,
@@ -167,7 +178,14 @@ export function TableView({
                             </th>
                         ))}
                         <th scope="col" className="p-0 text-left">
-                            {editable && <AddPropertyButton onAdd={onAddProperty} onError={onError} />}
+                            {editable && (
+                                <AddPropertyButton
+                                    onAdd={onAddProperty}
+                                    relationTargets={relationTargets}
+                                    onAddRelation={onAddRelation}
+                                    onError={onError}
+                                />
+                            )}
                         </th>
                     </tr>
                 </thead>

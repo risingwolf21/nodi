@@ -1,7 +1,7 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
-import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption } from "../types";
+import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption, RelatedEntry } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
     "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
@@ -53,6 +53,49 @@ export type PropertyChanges = Partial<
 >;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
+
+/**
+ * Relations show the entries of their database: its readable, not archived
+ * entries are loaded with the properties (RLS decides what is readable).
+ */
+async function withRelatedEntries(properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const targets = [...new Set(properties.flatMap((property) => property.relation?.databaseId ?? []))];
+    if (targets.length === 0) return properties;
+
+    const response = await supabase
+        .from("pages")
+        .select("id,title,icon,parentId:parent_id")
+        .in("parent_id", targets)
+        .eq("is_archived", false)
+        .order("position", { ascending: true, nullsFirst: false })
+        .order("created_at");
+    const failure = toRequestError(response);
+    if (failure) throw failure;
+
+    const rows: unknown[] = response.data ?? [];
+    const byDatabase = new Map<string, RelatedEntry[]>();
+    for (const row of rows) {
+        if (
+            typeof row !== "object" ||
+            row === null ||
+            !("id" in row && typeof row.id === "string") ||
+            !("parentId" in row && typeof row.parentId === "string") ||
+            !("title" in row && typeof row.title === "string")
+        ) {
+            throw new Error("Unerwartete Daten der verknüpften Datenbank.");
+        }
+        const icon = "icon" in row && typeof row.icon === "string" ? row.icon : null;
+        byDatabase.set(row.parentId, [...(byDatabase.get(row.parentId) ?? []), { id: row.id, title: row.title, icon }]);
+    }
+    return properties.map((property) =>
+        property.relation
+            ? {
+                  ...property,
+                  relation: { ...property.relation, entries: byDatabase.get(property.relation.databaseId) ?? [] },
+              }
+            : property,
+    );
+}
 
 /** Whether a value write was taken or lost against a newer one (LWW). */
 export type ValueWriteResult = "saved" | "superseded";
@@ -125,7 +168,7 @@ export const databaseRepository = {
         }
 
         return {
-            properties: parseProperties(properties.data),
+            properties: await withRelatedEntries(parseProperties(properties.data)),
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,
@@ -149,6 +192,18 @@ export const databaseRepository = {
         const failure = databaseError(response, "Die Eigenschaft konnte nicht angelegt werden.");
         if (failure) throw failure;
         return requireRow(parseProperties(response.data));
+    },
+
+    /** Both sides of a relation at once (RPC add_relation_property, package 17d). */
+    async addRelation(databaseId: string, name: string, targetDatabaseId: string, pairedName: string): Promise<void> {
+        const response = await supabase.rpc("add_relation_property", {
+            p_database_id: databaseId,
+            p_name: name,
+            p_target_database_id: targetDatabaseId,
+            p_paired_name: pairedName,
+        });
+        const failure = databaseError(response, "Die Verknüpfung konnte nicht angelegt werden.");
+        if (failure) throw failure;
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {

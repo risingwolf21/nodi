@@ -287,7 +287,7 @@ src/
     databases/              # Paket 14b
       types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
       database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
-      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property
+      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property, Verknüpfungen
       hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch, Einträge anlegen
       components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
       components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
@@ -303,6 +303,7 @@ src/
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
+      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -1703,6 +1704,32 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
       - pgTAP: `database_relations.test.sql`.
       - App-Versionen ab 14e lassen den unbekannten Typ aus; die
         Oberfläche folgt in 17e.
+    - **Umsetzung 17e-a** (nur Frontend, keine Migration):
+      - `DatabaseProperty.relation` = `{databaseId, pairedPropertyId,
+entries}`. Die lesbaren, nicht archivierten Einträge der
+        Ziel-Datenbanken (`id`, Titel, Icon) lädt `databaseRepository.load`
+        mit (eine Abfrage `parent_id in (…)`, RLS entscheidet) und hängt
+        sie an die Eigenschaft, wie Optionen an eine Auswahl; so stehen
+        sie auch im Cache und offline zur Verfügung.
+      - Anlegen: „+“ → „Verknüpfung“ → Datenbank des Workspace (auch
+        dieselbe); Name = Titel der Ziel-Datenbank, Gegenseite = eigener
+        Titel (`addRelation`, RPC, danach neu laden). Nur im eigenen
+        Workspace (geteilte Datenbanken anderer Workspaces: kein
+        „Verknüpfung“).
+      - Wert: Einträge als Chips; Klick öffnet die Auswahl (Suche,
+        Haken, „Leeren“). Unbekannte IDs (gelöscht, nicht lesbar)
+        werden übergangen. Anzeige in Karten, Liste usw., Filter
+        „enthält/leer“ und Sortieren nach den Titeln; Formeln sehen die
+        Titel als Text.
+      - Spaltenmenü: kein Typwechsel von oder zu „Verknüpfung“; Löschen
+        warnt, dass die Gegenseite mit verschwindet.
+      - Neu geladen wird nach Anlegen, nach Löschen und Setzen einer
+        Verknüpfung innerhalb derselben Datenbank (die Gegenseite liegt
+        dann hier). Umbenennen behält die geladenen Einträge.
+      - Fake-Backend: Eigenschaften je Datenbank, verknüpfte Einträge,
+        `add_relation_property`, Spiegeln der Gegenseite.
+      - Noch nicht: Einträge der Ziel-Datenbank aus der Auswahl heraus
+        anlegen, verknüpften Eintrag direkt öffnen, Rollups.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

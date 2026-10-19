@@ -235,6 +235,28 @@ export async function installFakeSupabase(context: BrowserContext, backend: Fake
     });
 }
 
+/** Like the server (package 17d): the other side of a relation gains or loses the entry. */
+function mirrorRelation(backend: FakeBackend, call: SetPropertyCall): void {
+    const property = backend.properties.find((item) => item.id === call.p_property_id);
+    const paired = property?.type === "relation" ? property.options.pairedPropertyId : undefined;
+    if (typeof paired !== "string") return;
+    const ids = (value: unknown) => (Array.isArray(value) ? value.filter((id) => typeof id === "string") : []);
+    const before = ids(backend.values.find((v) => v.pageId === call.p_page_id && v.propertyId === property?.id)?.value);
+    const after = ids(call.p_value);
+    for (const related of new Set([...before, ...after])) {
+        const stored = backend.values.find((v) => v.pageId === related && v.propertyId === paired);
+        const others = ids(stored?.value).filter((id) => id !== call.p_page_id);
+        const next = after.includes(related) ? [...others, call.p_page_id] : others;
+        backend.values = backend.values.filter((v) => v !== stored);
+        backend.values.push({
+            pageId: related,
+            propertyId: paired,
+            value: next.length > 0 ? next : null,
+            updatedAt: call.p_edited_at,
+        });
+    }
+}
+
 function answer(route: Route, backend: FakeBackend): Promise<void> {
     const request = route.request();
     const url = new URL(request.url());
@@ -306,13 +328,29 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             const ids = backend.pages.map(({ id }) => ({ id }));
             return json(ids, 200, { "content-range": `0-${ids.length - 1}/${ids.length}` });
         }
+        // Entries of related databases (relations, package 17e).
+        const parents = /^in\.\((.*)\)$/.exec(query.get("parent_id") ?? "")?.[1].split(",");
+        if (parents) {
+            return json(
+                backend.pages
+                    .filter((item) => item.parent_id && parents.includes(item.parent_id) && !item.is_archived)
+                    .map(({ id, title, icon, parent_id }) => ({ id, title, icon, parentId: parent_id })),
+            );
+        }
         // Own workspace; nothing is shared from other workspaces.
         return json(query.get("workspace_id") === `eq.${WORKSPACE}` ? backend.pages : []);
     }
 
     // Databases
     if (path === "/rest/v1/database_properties") {
-        if (method === "GET") return json(backend.properties);
+        if (method === "GET") {
+            const database = query.get("database_id");
+            return json(
+                database
+                    ? backend.properties.filter((item) => `eq.${item.databaseId}` === database)
+                    : backend.properties,
+            );
+        }
         if (method === "POST") {
             const body = requestBody(route);
             const property: FakeProperty = {
@@ -378,6 +416,7 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             p_edited_at: text(body, "p_edited_at"),
         };
         backend.propertyCalls.push(call);
+        mirrorRelation(backend, call);
         backend.values = backend.values.filter(
             (value) => value.pageId !== call.p_page_id || value.propertyId !== call.p_property_id,
         );
@@ -388,6 +427,29 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             updatedAt: call.p_edited_at,
         });
         return json([{ applied: true, stored_edited_at: call.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
+    }
+
+    if (path === "/rest/v1/rpc/add_relation_property") {
+        const body = requestBody(route);
+        const [source, paired] = [crypto.randomUUID(), crypto.randomUUID()];
+        const add = (id: string, databaseId: string, name: string, target: string, other: string) =>
+            backend.properties.push({
+                id,
+                databaseId,
+                name,
+                type: "relation",
+                options: { databaseId: target, pairedPropertyId: other },
+                position: backend.properties.filter((item) => item.databaseId === databaseId).length,
+            });
+        add(source, text(body, "p_database_id"), text(body, "p_name"), text(body, "p_target_database_id"), paired);
+        add(
+            paired,
+            text(body, "p_target_database_id"),
+            text(body, "p_paired_name"),
+            text(body, "p_database_id"),
+            source,
+        );
+        return json([{ property_id: source, paired_property_id: paired }]);
     }
 
     if (path === "/rest/v1/rpc/save_page_document") {

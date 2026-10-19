@@ -40,6 +40,8 @@ type PageViewProps = {
     entries: Page[];
     /** For a database: adds an entry; undefined where that is not possible. */
     onCreateEntry?: (databaseId: string) => Promise<string>;
+    /** Databases of the workspace, for new relations; undefined where that is not possible. */
+    databases?: Page[];
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -74,6 +76,7 @@ export function PageView({
     userId,
     entries,
     onCreateEntry,
+    databases,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
@@ -199,6 +202,7 @@ export function PageView({
                             databaseId={database.id}
                             userId={userId}
                             readOnly={readOnly || !canEdit}
+                            databases={databases}
                         />
                     </Suspense>
                 </LoadErrorBoundary>
@@ -232,6 +236,7 @@ export function PageView({
                             onOpenEntry={onSelect}
                             onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
                             onRenameEntry={onRename}
+                            databases={databases}
                         />
                     </Suspense>
                 </LoadErrorBoundary>

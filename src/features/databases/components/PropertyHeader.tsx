@@ -114,22 +114,27 @@ export function PropertyHeader({
                         ))}
                     </>
                 )}
-                <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Typ</p>
-                <div className="max-h-56 overflow-y-auto">
-                    {PROPERTY_TYPES.map((type) => (
-                        <MenuItem
-                            key={type}
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                if (type !== property.type) setConfirm({ kind: "type", type });
-                            }}
-                        >
-                            <PropertyTypeIcon type={type} />
-                            <span className="flex-1">{PROPERTY_TYPE_LABELS[type]}</span>
-                            {type === property.type && <span className="text-xs text-brand">aktuell</span>}
-                        </MenuItem>
-                    ))}
-                </div>
+                {/* A relation keeps its type, and none becomes one (the server creates both sides). */}
+                {property.type !== "relation" && (
+                    <>
+                        <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Typ</p>
+                        <div className="max-h-56 overflow-y-auto">
+                            {PROPERTY_TYPES.filter((type) => type !== "relation").map((type) => (
+                                <MenuItem
+                                    key={type}
+                                    onSelect={() => {
+                                        setMenuOpen(false);
+                                        if (type !== property.type) setConfirm({ kind: "type", type });
+                                    }}
+                                >
+                                    <PropertyTypeIcon type={type} />
+                                    <span className="flex-1">{PROPERTY_TYPE_LABELS[type]}</span>
+                                    {type === property.type && <span className="text-xs text-brand">aktuell</span>}
+                                </MenuItem>
+                            ))}
+                        </div>
+                    </>
+                )}
                 <div className="my-1 border-t" />
                 <MenuItem
                     onSelect={() => {
@@ -155,7 +160,11 @@ export function PropertyHeader({
             {confirm?.kind === "delete" && (
                 <ConfirmDialog
                     title="Eigenschaft löschen?"
-                    message={`„${property.name}“ und ihre Werte in allen Einträgen werden gelöscht.`}
+                    message={
+                        property.type === "relation"
+                            ? `„${property.name}“ und ihre Gegenseite in der verknüpften Datenbank werden gelöscht, mit allen Verknüpfungen.`
+                            : `„${property.name}“ und ihre Werte in allen Einträgen werden gelöscht.`
+                    }
                     confirmLabel="Löschen"
                     onCancel={() => setConfirm(null)}
                     onConfirm={async () => {

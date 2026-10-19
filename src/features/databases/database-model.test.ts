@@ -428,6 +428,57 @@ describe("formatValue", () => {
     });
 });
 
+describe("relations", () => {
+    const tasks: DatabaseProperty = {
+        id: "tasks",
+        databaseId: "db",
+        name: "Aufgaben",
+        type: "relation",
+        options: [],
+        position: 5,
+        relation: {
+            databaseId: "other",
+            pairedPropertyId: "back",
+            entries: [
+                { id: "t1", title: "Entwurf", icon: null },
+                { id: "t2", title: "", icon: "📝" },
+            ],
+        },
+    };
+
+    it("reads the target from the server's options and, with the entries, from the cache", () => {
+        const [fromServer] = parseProperties([
+            {
+                id: "tasks",
+                databaseId: "db",
+                name: "Aufgaben",
+                type: "relation",
+                options: { databaseId: "other", pairedPropertyId: "back" },
+            },
+        ]);
+        expect(fromServer.relation).toEqual({ databaseId: "other", pairedPropertyId: "back", entries: [] });
+        expect(parseProperties([{ ...tasks }])[0].relation).toEqual(tasks.relation);
+        // Without a target it cannot be shown.
+        expect(parseProperties([{ id: "x", databaseId: "db", name: "X", type: "relation", options: {} }])).toEqual([]);
+    });
+
+    it("shows the titles of known entries and is found by them", () => {
+        // "gone" was deleted or is not readable.
+        expect(formatValue(tasks, ["t2", "gone", "t1"])).toBe("Ohne Titel, Entwurf");
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [tasks],
+            values: [{ pageId: "a", propertyId: "tasks", value: ["t1"], updatedAt: "" }],
+        });
+        const found = (operator: "contains" | "isEmpty", value = "") =>
+            rows
+                .filter((row) => matchesFilter(row, { propertyId: "tasks", operator, value }, tasks))
+                .map((row) => row.page.id);
+        expect(found("contains", "entw")).toEqual(["a"]);
+        expect(found("isEmpty")).toEqual(["b", "c"]);
+    });
+});
+
 describe("dates with a time", () => {
     const at = (hours: number, minutes = 0) => new Date(2026, 9, 19, hours, minutes).toISOString();
 

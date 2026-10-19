@@ -16,6 +16,8 @@ import {
     type PropertyOption,
     type PropertyType,
     type PropertyValue,
+    type RelatedEntry,
+    type RelationSettings,
     type SortRule,
     type StoredPropertyValue,
     type ViewConfig,
@@ -34,6 +36,7 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "email",
     "place",
     "formula",
+    "relation",
     "created_time",
     "last_edited_time",
 ];
@@ -50,6 +53,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     email: "E-Mail",
     place: "Ort",
     formula: "Formel",
+    relation: "Verknüpfung",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
@@ -159,6 +163,26 @@ function numberOrZero(value: unknown): number {
 // A type of a newer app version is left out instead of failing the whole
 // database (package 14e added "place" and "map").
 
+function parseRelatedEntries(value: unknown): RelatedEntry[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((entry: unknown) =>
+        isObject(entry) && typeof entry.id === "string" && typeof entry.title === "string"
+            ? [{ id: entry.id, title: entry.title, icon: typeof entry.icon === "string" ? entry.icon : null }]
+            : [],
+    );
+}
+
+/** The server keeps the target in options; the cache keeps it, with the loaded entries, as `relation`. */
+function parseRelation(row: Record<string, unknown>): RelationSettings | null {
+    const source = isObject(row.relation) ? row.relation : isObject(row.options) ? row.options : null;
+    if (!source || typeof source.databaseId !== "string" || typeof source.pairedPropertyId !== "string") return null;
+    return {
+        databaseId: source.databaseId,
+        pairedPropertyId: source.pairedPropertyId,
+        entries: parseRelatedEntries(source.entries),
+    };
+}
+
 export function parseProperties(rows: unknown): DatabaseProperty[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
     return rows.flatMap((row: unknown): DatabaseProperty[] => {
@@ -172,13 +196,16 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
             throw new Error(INVALID_DATA);
         }
         if (!isPropertyType(row.type)) return [];
-        // The server keeps the expression in options, the cache next to them.
-        // The server keeps the number format in options as well.
+        // A relation without a valid target cannot be shown or edited.
+        const relation = row.type === "relation" ? parseRelation(row) : null;
+        if (row.type === "relation" && !relation) return [];
+        // The server keeps the number format in options.
         const numberFormat = isNumberFormat(row.numberFormat)
             ? row.numberFormat
             : isObject(row.options) && isNumberFormat(row.options.format)
               ? row.options.format
               : null;
+        // The server keeps the expression in options, the cache next to them.
         const expression =
             typeof row.formula === "string"
                 ? row.formula
@@ -195,6 +222,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 position: numberOrZero(row.position),
                 ...(row.type === "formula" ? { formula: expression } : {}),
                 ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
+                ...(relation ? { relation } : {}),
             },
         ];
     });
@@ -380,6 +408,12 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
             return isDateValue(raw) ? { start: raw.start, end: typeof raw.end === "string" ? raw.end : null } : null;
         case "place":
             return isPlaceValue(raw) ? { lat: raw.lat, lng: raw.lng, label: raw.label || null } : null;
+        case "relation": {
+            // Entry ids; ones that are gone or not readable are skipped when shown.
+            if (!Array.isArray(raw)) return null;
+            const ids = raw.filter((id: unknown): id is string => typeof id === "string");
+            return ids.length > 0 ? ids : null;
+        }
         case "formula":
         case "created_time":
         case "last_edited_time":
@@ -661,6 +695,13 @@ function formatDateText(value: string): string {
     return isDay(value) ? dateFormat.format(date) : dateTimeFormat.format(date);
 }
 
+/** The linked entries of a relation value that are known (readable, not deleted), in its order. */
+export function relatedEntries(property: DatabaseProperty, value: PropertyValue): RelatedEntry[] {
+    if (!Array.isArray(value) || !property.relation) return [];
+    const byId = new Map(property.relation.entries.map((entry) => [entry.id, entry]));
+    return value.flatMap((id) => byId.get(id) ?? []);
+}
+
 /** Text for showing a value in a cell, a card or a filter. */
 export function formatValue(property: DatabaseProperty, value: PropertyValue): string {
     if (value === null) return "";
@@ -687,6 +728,10 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
         case "formula":
             return formatFormulaResult(value);
+        case "relation":
+            return relatedEntries(property, value)
+                .map((entry) => displayTitle(entry))
+                .join(", ");
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" && !Number.isNaN(Date.parse(value))
@@ -726,6 +771,7 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
             return ["equals", "notEquals", "isEmpty", "isNotEmpty"];
         case "multi_select":
         case "place":
+        case "relation":
             return ["contains", "isEmpty", "isNotEmpty"];
         case "formula":
             return ["contains", "equals", "notEquals", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"];
@@ -821,9 +867,10 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
         return rule.operator === "contains" ? Array.isArray(value) && value.includes(rule.value) : true;
     }
 
-    // A place is found by its address (or coordinates), a formula by its shown result, like text.
+    // A place is found by its address (or coordinates), a formula by its shown result, a relation by
+    // the titles, like text.
     const shown =
-        (type === "place" || type === "formula") && property
+        (type === "place" || type === "formula" || type === "relation") && property
             ? formatValue(property, value)
             : typeof value === "string"
               ? value
