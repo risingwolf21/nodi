@@ -4,10 +4,21 @@ import { displayTitle } from "@/features/pages/page-display";
 import { cn } from "@/lib/utils";
 import { formatValue, hasOptions, type DatabaseRow } from "../database-model";
 import type { DatabaseProperty, PropertyValue } from "../types";
+import { FormulaErrorText } from "./FormulaErrorText";
 import { OptionBadge } from "./OptionBadge";
 
 /** A value on a card or a list row, read-only; nothing for an empty value. */
-export function PropertyValueText({ property, value }: { property: DatabaseProperty; value: PropertyValue }) {
+export function PropertyValueText({
+    property,
+    value,
+    error,
+}: {
+    property: DatabaseProperty;
+    value: PropertyValue;
+    /** A formula that could not be computed. */
+    error?: string;
+}) {
+    if (error) return <FormulaErrorText error={error} className="truncate text-xs" />;
     if (value === null) return null;
 
     if (hasOptions(property.type)) {
@@ -75,7 +86,12 @@ export function EntryCard({ row, properties, onOpen, onDragStart, className }: E
                 </span>
             </span>
             {properties.map((property) => (
-                <PropertyValueText key={property.id} property={property} value={row.values[property.id] ?? null} />
+                <PropertyValueText
+                    key={property.id}
+                    property={property}
+                    value={row.values[property.id] ?? null}
+                    error={row.errors[property.id]}
+                />
             ))}
         </button>
     );

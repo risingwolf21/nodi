@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { EyeOff, Trash2 } from "lucide-react";
+import { EyeOff, Sigma, Trash2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPES } from "../database-model";
 import type { DatabaseProperty, PropertyType } from "../types";
@@ -13,6 +13,8 @@ type PropertyHeaderProps = {
     onChangeType: (type: PropertyType) => Promise<void>;
     onHide: () => Promise<void>;
     onDelete: () => Promise<void>;
+    /** Formula properties: opens the formula editor. */
+    onEditFormula?: () => void;
     onError: (message: string) => void;
 };
 
@@ -24,6 +26,7 @@ export function PropertyHeader({
     onChangeType,
     onHide,
     onDelete,
+    onEditFormula,
     onError,
 }: PropertyHeaderProps) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -78,6 +81,17 @@ export function PropertyHeader({
                         className="h-7 w-full rounded border bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     />
                 </form>
+                {property.type === "formula" && onEditFormula && (
+                    <MenuItem
+                        onSelect={() => {
+                            setMenuOpen(false);
+                            onEditFormula();
+                        }}
+                    >
+                        <Sigma className="size-4" />
+                        Formel bearbeiten
+                    </MenuItem>
+                )}
                 <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Typ</p>
                 <div className="max-h-56 overflow-y-auto">
                     {PROPERTY_TYPES.map((type) => (

@@ -1,4 +1,4 @@
-/** Property types of the server (packages 14a, 14e); the last two are computed. */
+/** Property types of the server (packages 14a, 14e, 14f); formula and the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -10,6 +10,7 @@ export type PropertyType =
     | "url"
     | "email"
     | "place"
+    | "formula"
     | "created_time"
     | "last_edited_time";
 
@@ -29,6 +30,8 @@ export type DatabaseProperty = {
     type: PropertyType;
     /** Choices; empty for types without any. */
     options: PropertyOption[];
+    /** Formula properties: the expression in Notion's syntax (server: options.expression). */
+    formula?: string;
     position: number;
 };
 

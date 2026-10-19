@@ -288,6 +288,9 @@ src/
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
+      formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
+      formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
+      components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -350,12 +353,13 @@ supabase/
                             # unsichtbarer Seiten (Bestandsdaten),
                             # Mitglieder und Bereiche (P12a),
                             # Seitenbaum/Teilen gehärtet (P13a),
-                            # Datenbanken (P14a), Orte und Landkarte (P14e)
+                            # Datenbanken (P14a), Orte und Landkarte (P14e),
+                            # Formeln (P14f)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
-                            # Datenbanken (P14a), Orte (P14e)
+                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1353,6 +1357,59 @@ Arbeitspakete, je ein Pull Request:
             aus, statt die ganze Datenbank abzulehnen.
         -   Noch nicht: Marker gruppieren bei vielen Einträgen, Einträge
             auf der Karte verschieben, Kacheln offline.
+    -   **Formeln (Nutzerentscheidung 2026-10-19):** Schreibweise wie Notion
+        (`prop("Preis") * prop("Menge")`, englische Funktionsnamen).
+        Grundumfang: Rechnen, Vergleiche, `and`/`or`/`not`, `if`, Text
+        (`concat`, `length`, `upper`, `lower`, `contains`, `replace`), Zahlen
+        (`round`, `abs`, `min`, `max`, `floor`, `ceil`), `empty`, `format`,
+        `toNumber`, Datum (`now`, `dateAdd`, `dateBetween`, `formatDate`);
+        Formeln dürfen andere Formeln verwenden. Berechnet wird in der App
+        (auch offline, kein `eval`). Aufteilung: 14f-a Datenbank, 14f-b
+        Oberfläche mit Formel-Engine.
+    -   **Umsetzung 14f-a** (`20261019090000_formula_property.sql`):
+        -   Eigenschaftstyp `formula`; der Ausdruck steht in
+            `options.expression` (Text bis 2000 Zeichen oder noch leer,
+            Check-Constraint, `23514`). Werte gibt es nicht:
+            `set_page_property` lehnt jeden Wert ab (`22023`), wie bei den
+            berechneten Zeit-Eigenschaften.
+        -   Die Migration erweitert nur die erlaubten Werte
+            (rückwärtskompatibel; die App ab 14e lässt den unbekannten Typ
+            aus).
+        -   pgTAP: `database_formulas.test.sql`.
+    -   **Umsetzung 14f-b** (nur Frontend, keine Migration):
+        -   Engine in `features/databases/formula/`: Tokenizer und
+            rekursiver Parser (Rangfolge `?:` < `or`/`||` < `and`/`&&` <
+            `==`/`!=` < Vergleich < `+`/`-` < `*`/`/`/`%` < unär `-`/`not`/`!`
+            < `^`, rechtsassoziativ), Ausdruck bis 2000 Zeichen,
+            Verschachtelung bis 50. `prop()` nur mit festem Namen in
+            Anführungszeichen. Ausgewertet wird der Baum, nie JavaScript;
+            `replace`/`replaceAll` ersetzen reinen Text (keine regulären
+            Ausdrücke).
+        -   Werte: Zahl, Text, Wahrheitswert, Datum, leer. Leer zählt beim
+            Rechnen als 0; `+` mit Text hängt an; falsch, leer, 0 und ""
+            gelten als falsch. Eigenschaften gehen als Zahl, Checkbox als
+            Wahrheitswert, Datum/Zeiten als Datum ein, alles andere als der
+            angezeigte Text (Auswahl: Name der Option). `prop("Name")` ist
+            der Titel, wenn keine Eigenschaft so heißt. Datum: `dateAdd`
+            (Monatsende bleibt Monatsende), `dateBetween` (ganze Einheiten,
+            ohne Sommerzeit-Stunde, wie Notion), `formatDate` (YYYY, MM,
+            DD, HH, mm …).
+        -   Berechnet in `buildRows` für jeden Eintrag (auch offline aus dem
+            Cache); Formeln dürfen Formeln verwenden. Fehler stehen je
+            Eintrag in `row.errors`: Zirkelbezug bei allen beteiligten
+            Formeln, sonst „Die Formel „X“ hat einen Fehler.“ an der
+            verwendenden Formel. Anzeige „Fehler“ (Grund im Tooltip und für
+            Screenreader), leere Formel „Formel fehlt“.
+        -   Ergebnis wird angezeigt, gefiltert (Zahlen und Daten als
+            solche, sonst als Text) und sortiert wie andere Werte.
+        -   Formel-Editor (Dialog): Eingabe, Vorschau für den ersten Eintrag
+            (bzw. den offenen Eintrag) oder Prüfung der Schreibweise,
+            Eigenschaften und Funktionen zum Einfügen, Strg/⌘+Enter
+            speichert. Öffnet sich nach „Formel“ anlegen, über „Formel
+            bearbeiten“ im Spaltenkopf und über den Namen in der
+            Eigenschaftsleiste.
+        -   Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
+            reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -37,10 +37,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      # Ohne Supabase-Secrets: Der Build prüft nur Typen und Bundling,
-      # das Ergebnis wird nicht ausgeliefert.
+      # Platzhalter statt Secrets: Ohne Werte wirft src/lib/supabase.ts beim
+      # Laden, und der Bundler ließe den Supabase-Client weg. Mit Platzhaltern
+      # entspricht das Bundle dem Produktions-Build; ausgeliefert wird es nicht.
       - name: Build application
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
 
       - name: Check GitHub Pages base path
         run: |
@@ -57,8 +61,10 @@ jobs:
           done
 
       - name: Check bundle for secret keys
+        # supabase-js enthält das Präfix selbst (Formatprüfung), daher nur
+        # nach einem Präfix mit Schlüssel dahinter suchen.
         run: |
-          ! grep -rl "sb_secret_" dist \
+          ! grep -rlE "sb_secret_[A-Za-z0-9_-]{16,}" dist \
             || (echo "Ein geheimer Supabase-Schlüssel steht im Bundle" && exit 1)
 
   database:
