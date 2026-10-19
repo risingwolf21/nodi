@@ -19,6 +19,9 @@ import {
 } from "@/features/editor/services/page-document-session";
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
 import type { DocumentContent } from "@/features/editor/types";
+import { fileCacheFor } from "@/features/files/services/file-cache";
+import { createFileUrlResolver } from "@/features/files/services/file-url-resolver";
+import { signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
 
 type FrameProps = {
     topBarStart: ReactNode;
@@ -38,6 +41,18 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 const SUPERSEDED_NOTICE_MS = 8000;
 
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
+
+// BlockNote shows only this text when an upload fails, so it names the limits.
+const dictionary = {
+    ...de,
+    file_panel: {
+        ...de.file_panel,
+        upload: {
+            ...de.file_panel.upload,
+            upload_error: "Hochladen fehlgeschlagen. Dateien brauchen Internet und höchstens 10 MB.",
+        },
+    },
+};
 
 function statusText(status: SessionStatus): string {
     switch (status.kind) {
@@ -98,8 +113,11 @@ function EditorContent({
     const applyingRemoteContent = useRef(false);
 
     const editor = useCreateBlockNote({
-        dictionary: de,
+        dictionary,
         initialContent: initial.document.content.length > 0 ? initial.document.content : undefined,
+        uploadFile: (file) => uploadPageFile(pageId, file),
+        // Images seen once stay readable offline (CLAUDE.md §12 P15).
+        resolveFileUrl: createFileUrlResolver({ signedUrl: signedFileUrl, cache: fileCacheFor(userId) }),
     });
 
     useEffect(() => {

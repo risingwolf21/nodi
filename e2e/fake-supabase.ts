@@ -72,6 +72,12 @@ export type FakeBackend = {
     signups: number;
     geocodingRequests: URLSearchParams[];
     tiles: number;
+    /** Storage bucket page-files, by path. */
+    files: Map<string, Buffer>;
+    /** Documents saved with save_page_document, by page id. */
+    savedDocuments: Map<string, unknown>;
+    /** Pages behind a public link, by token. */
+    publicPages: Map<string, { title: string; icon: string | null; full_width: boolean; document: unknown[] }>;
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -112,6 +118,9 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         signups: 0,
         geocodingRequests: [],
         tiles: 0,
+        files: new Map(),
+        savedDocuments: new Map(),
+        publicPages: new Map(),
         ...initial,
     };
 }
@@ -175,6 +184,25 @@ function requestBody(route: Route): RequestBody {
 }
 
 const text = (body: RequestBody, key: string) => String(body[key]);
+
+/** supabase-js uploads a Blob as multipart form data; this is the file part. */
+function fileFromMultipart(body: Buffer, contentType: string): Buffer {
+    const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType);
+    if (!boundary) return body;
+    const marker = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+    let index = body.indexOf(marker);
+    while (index !== -1) {
+        const next = body.indexOf(marker, index + marker.length);
+        if (next === -1) break;
+        const part = body.subarray(index + marker.length, next);
+        if (part.includes("filename=")) {
+            // Headers end with an empty line; the part ends with a line break.
+            return part.subarray(part.indexOf("\r\n\r\n") + 4, part.length - 2);
+        }
+        index = next;
+    }
+    return body;
+}
 
 // A transparent 1×1 PNG for map tiles.
 const TILE = Buffer.from(
@@ -355,6 +383,34 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             updatedAt: call.p_edited_at,
         });
         return json([{ applied: true, stored_edited_at: call.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
+    }
+
+    if (path === "/rest/v1/rpc/save_page_document") {
+        const body = requestBody(route);
+        backend.savedDocuments.set(text(body, "p_page_id"), body.p_document);
+        return json([{ applied: true, stored_edited_at: body.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
+    }
+    if (path === "/rest/v1/rpc/get_public_page") {
+        const publicPage = backend.publicPages.get(text(requestBody(route), "p_token"));
+        return json(publicPage ? [publicPage] : []);
+    }
+
+    // Storage: upload, signed URL, download of the signed URL.
+    const upload = /^\/storage\/v1\/object\/page-files\/(.+)$/.exec(path);
+    if (upload && method === "POST") {
+        const filePath = decodeURIComponent(upload[1]);
+        if (backend.files.has(filePath)) return json({ statusCode: "409", error: "Duplicate" }, 409);
+        const raw = request.postDataBuffer() ?? Buffer.alloc(0);
+        backend.files.set(filePath, fileFromMultipart(raw, request.headers()["content-type"] ?? ""));
+        return json({ Key: `page-files/${filePath}`, Id: crypto.randomUUID() });
+    }
+    const signed = /^\/storage\/v1\/object\/sign\/page-files\/(.+)$/.exec(path);
+    if (signed) {
+        const filePath = decodeURIComponent(signed[1]);
+        const file = backend.files.get(filePath);
+        if (!file) return json({ statusCode: "404", error: "not_found", message: "Object not found" }, 400);
+        if (method === "POST") return json({ signedURL: `/object/sign/page-files/${filePath}?token=fake` });
+        return route.fulfill({ status: 200, contentType: "image/png", body: file, headers: CORS });
     }
 
     // Documents: the feed asks for the first blocks; a page's own text is empty.
