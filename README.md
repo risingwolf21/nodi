@@ -50,14 +50,15 @@ einem pgTAP-Test absichern.
 
 ## Skripte
 
-| Befehl            | Zweck                                                   |
-| ----------------- | ------------------------------------------------------- |
-| `npm run dev`     | Entwicklungsserver                                      |
-| `npm run lint`    | ESLint                                                  |
-| `npm run format`  | Prettier (`format:check` nur prüfen, wie in der CI)     |
-| `npm test`        | Unit-Tests (Vitest)                                     |
-| `npm run build`   | Typprüfung (`tsc -b`) und Produktionsbuild nach `dist/` |
-| `npm run preview` | Produktionsbuild lokal ausliefern                       |
+| Befehl             | Zweck                                                              |
+| ------------------ | ------------------------------------------------------------------ |
+| `npm run dev`      | Entwicklungsserver                                                 |
+| `npm run lint`     | ESLint                                                             |
+| `npm run format`   | Prettier (`format:check` nur prüfen, wie in der CI)                |
+| `npm test`         | Unit-Tests (Vitest)                                                |
+| `npm run test:e2e` | Browser-Tests (Playwright) gegen einen Build mit gefaktem Supabase |
+| `npm run build`    | Typprüfung (`tsc -b`) und Produktionsbuild nach `dist/`            |
+| `npm run preview`  | Produktionsbuild lokal ausliefern                                  |
 
 ## CI und Deployment
 

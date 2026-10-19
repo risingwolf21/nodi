@@ -2,3 +2,6 @@ dist
 package-lock.json
 supabase/.temp
 supabase/.branches
+dist-e2e
+test-results
+playwright-report
