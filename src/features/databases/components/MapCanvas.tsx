@@ -53,9 +53,18 @@ export default function MapCanvas({ markers, label, onMarkerClick, onMapClick, c
         map.on("click", (event: L.LeafletMouseEvent) => {
             callbacks.current.onMapClick?.(event.latlng.lat, L.Util.wrapNum(event.latlng.lng, [-180, 180], true));
         });
+        // Leaflet ends a zoom animation with a timer that needs the map; removed
+        // before (e.g. a marker click opens the entry right away), it throws.
+        let zooming = false;
+        map.on("zoomanim", () => (zooming = true));
+        map.on("zoomend", () => (zooming = false));
         mapRef.current = map;
         return () => {
-            map.remove();
+            if (zooming) {
+                map.once("zoomend", () => map.remove());
+            } else {
+                map.remove();
+            }
             mapRef.current = null;
             layerRef.current = null;
         };
