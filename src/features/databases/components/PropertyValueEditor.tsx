@@ -1,10 +1,24 @@
 import { useState, type KeyboardEvent } from "react";
-import { formatValue, hasOptions, isComputed, isDateValue, isPlaceValue } from "../database-model";
+import { Clock } from "lucide-react";
+import { displayTitle } from "@/features/pages/page-display";
+import {
+    dateFromInput,
+    dateHasTime,
+    dateInputValue,
+    formatValue,
+    hasOptions,
+    isComputed,
+    isDateValue,
+    isPlaceValue,
+    relatedEntries,
+    setDateTime,
+} from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
 import { FormulaErrorText } from "./FormulaErrorText";
 import { PlacePicker } from "./PlacePicker";
+import { RelationPicker } from "./RelationPicker";
 
 const OSM_ZOOM = 16;
 
@@ -70,6 +84,46 @@ export function PropertyValueEditor({
         );
     }
 
+    if (property.type === "relation") {
+        const selectedIds = Array.isArray(value) ? value : [];
+        const linked = relatedEntries(property, value);
+        return (
+            <div className="relative min-w-0">
+                <button
+                    type="button"
+                    disabled={!canChange}
+                    aria-label={`${property.name} wählen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} flex-wrap gap-1 hover:bg-accent/60 disabled:hover:bg-transparent`}
+                >
+                    {linked.map((entry) => (
+                        <span key={entry.id} className="max-w-full truncate rounded border px-1.5 py-0.5 text-xs">
+                            {entry.icon ? `${entry.icon} ` : ""}
+                            {displayTitle(entry)}
+                        </span>
+                    ))}
+                </button>
+                {pickerOpen && (
+                    <RelationPicker
+                        open
+                        entries={property.relation?.entries ?? []}
+                        selectedIds={selectedIds}
+                        label={property.name}
+                        onClose={() => setPickerOpen(false)}
+                        onClear={() => save(null)}
+                        onToggle={(entryId) => {
+                            const next = selectedIds.includes(entryId)
+                                ? selectedIds.filter((id) => id !== entryId)
+                                : [...selectedIds, entryId];
+                            save(next.length > 0 ? next : null);
+                        }}
+                    />
+                )}
+            </div>
+        );
+    }
+
     if (hasOptions(property.type)) {
         const selectedIds = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
         const selected = selectedIds.flatMap((id) => property.options.filter((option) => option.id === id));
@@ -117,17 +171,33 @@ export function PropertyValueEditor({
 
     if (property.type === "date") {
         const date = isDateValue(value) ? value : null;
+        const withTime = date !== null && dateHasTime(date);
         return (
-            <input
-                type="date"
-                disabled={!canChange}
-                value={date?.start.slice(0, 10) ?? ""}
-                aria-label={property.name}
-                onChange={(event) =>
-                    save(event.target.value ? { start: event.target.value, end: date?.end ?? null } : null)
-                }
-                className={`${fieldClass} bg-transparent disabled:opacity-100`}
-            />
+            <div className="flex min-w-0 items-center">
+                <input
+                    type={withTime ? "datetime-local" : "date"}
+                    disabled={!canChange}
+                    value={date ? dateInputValue(date.start) : ""}
+                    aria-label={property.name}
+                    onChange={(event) => {
+                        const start = dateFromInput(event.target.value);
+                        save(start ? { start, end: date?.end ?? null } : null);
+                    }}
+                    className={`${fieldClass} min-w-0 flex-1 bg-transparent disabled:opacity-100`}
+                />
+                {date && canChange && (
+                    <button
+                        type="button"
+                        aria-pressed={withTime}
+                        aria-label={`Uhrzeit für ${property.name}`}
+                        title={withTime ? "Uhrzeit entfernen" : "Uhrzeit hinzufügen"}
+                        onClick={() => save(setDateTime(date, !withTime))}
+                        className={`flex size-7 shrink-0 items-center justify-center rounded hover:bg-accent pointer-coarse:size-9 ${withTime ? "text-brand" : "text-muted-foreground"}`}
+                    >
+                        <Clock className="size-3.5" />
+                    </button>
+                )}
+            </div>
         );
     }
 

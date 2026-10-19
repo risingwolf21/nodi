@@ -3,6 +3,9 @@ import type { Page } from "@/features/pages/types";
 import {
     applyView,
     buildRows,
+    dateFromInput,
+    dateHasTime,
+    dateInputValue,
     EMPTY_VIEW_CONFIG,
     dateProperty,
     formatValue,
@@ -18,6 +21,8 @@ import {
     previewText,
     readValue,
     rowsByDay,
+    setDateTime,
+    timeOfDay,
     uniqueName,
     visibleProperties,
 } from "./database-model";
@@ -253,6 +258,16 @@ describe("calendar", () => {
         expect(days.get("2026-10-31")?.map((row) => row.page.id)).toEqual(["a", "b"]);
     });
 
+    it("places a time on its local day", () => {
+        // 00:30 local time: in UTC it may still be the day before.
+        const lateNight = new Date(2026, 9, 31, 0, 30).toISOString();
+        const rows = buildRows(entries, {
+            ...data,
+            values: [{ pageId: "a", propertyId: "due", value: { start: lateNight, end: null }, updatedAt: "" }],
+        });
+        expect([...rowsByDay(rows, due).keys()]).toEqual(["2026-10-31"]);
+    });
+
     it("uses the chosen date property, otherwise the first", () => {
         const start: DatabaseProperty = { ...due, id: "start", position: 0 };
         expect(dateProperty([due, start], config())?.id).toBe("start");
@@ -385,6 +400,122 @@ describe("formatValue", () => {
         expect(formatValue(estimate, 1234.5)).toBe("1.234,5");
         expect(formatValue(status, "doing")).toBe("In Arbeit");
         expect(formatValue(due, { start: "2026-10-20", end: null })).toBe("20. Okt. 2026");
+    });
+
+    it("shows numbers in their format; percent like Notion (0.15 is 15 %)", () => {
+        // Intl separates the symbol with a no-break space.
+        const shown = (numberFormat: DatabaseProperty["numberFormat"], value: number) =>
+            formatValue({ ...estimate, numberFormat }, value).replace(/\s/g, " ");
+        expect(shown("euro", 1234.5)).toBe("1.234,50 €");
+        expect(shown("dollar", 12)).toBe("12,00 $");
+        expect(shown("percent", 0.15)).toBe("15 %");
+        expect(shown("franc", 3)).toBe("3,00 CHF");
+        expect(shown(undefined, 1234.5)).toBe("1.234,5");
+    });
+
+    it("reads the number format from the server's options and from the cache", () => {
+        const [fromServer] = parseProperties([
+            { id: "p", databaseId: "db", name: "Preis", type: "number", options: { format: "euro" }, position: 0 },
+        ]);
+        expect(fromServer.numberFormat).toBe("euro");
+        expect(parseProperties([{ ...fromServer, options: [] }])[0].numberFormat).toBe("euro");
+        // Unknown formats (a newer app version) are shown as plain numbers.
+        expect(
+            parseProperties([
+                { id: "p", databaseId: "db", name: "X", type: "number", options: { format: "bitcoin" } },
+            ])[0].numberFormat,
+        ).toBeUndefined();
+    });
+});
+
+describe("relations", () => {
+    const tasks: DatabaseProperty = {
+        id: "tasks",
+        databaseId: "db",
+        name: "Aufgaben",
+        type: "relation",
+        options: [],
+        position: 5,
+        relation: {
+            databaseId: "other",
+            pairedPropertyId: "back",
+            entries: [
+                { id: "t1", title: "Entwurf", icon: null },
+                { id: "t2", title: "", icon: "📝" },
+            ],
+        },
+    };
+
+    it("reads the target from the server's options and, with the entries, from the cache", () => {
+        const [fromServer] = parseProperties([
+            {
+                id: "tasks",
+                databaseId: "db",
+                name: "Aufgaben",
+                type: "relation",
+                options: { databaseId: "other", pairedPropertyId: "back" },
+            },
+        ]);
+        expect(fromServer.relation).toEqual({ databaseId: "other", pairedPropertyId: "back", entries: [] });
+        expect(parseProperties([{ ...tasks }])[0].relation).toEqual(tasks.relation);
+        // Without a target it cannot be shown.
+        expect(parseProperties([{ id: "x", databaseId: "db", name: "X", type: "relation", options: {} }])).toEqual([]);
+    });
+
+    it("shows the titles of known entries and is found by them", () => {
+        // "gone" was deleted or is not readable.
+        expect(formatValue(tasks, ["t2", "gone", "t1"])).toBe("Ohne Titel, Entwurf");
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [tasks],
+            values: [{ pageId: "a", propertyId: "tasks", value: ["t1"], updatedAt: "" }],
+        });
+        const found = (operator: "contains" | "isEmpty", value = "") =>
+            rows
+                .filter((row) => matchesFilter(row, { propertyId: "tasks", operator, value }, tasks))
+                .map((row) => row.page.id);
+        expect(found("contains", "entw")).toEqual(["a"]);
+        expect(found("isEmpty")).toEqual(["b", "c"]);
+    });
+});
+
+describe("dates with a time", () => {
+    const at = (hours: number, minutes = 0) => new Date(2026, 9, 19, hours, minutes).toISOString();
+
+    it("converts between stored values and the inputs (local time)", () => {
+        expect(dateInputValue("2026-10-19")).toBe("2026-10-19");
+        expect(dateInputValue(at(14, 30))).toBe("2026-10-19T14:30");
+        expect(dateFromInput("2026-10-19")).toBe("2026-10-19");
+        expect(dateFromInput("2026-10-19T14:30")).toBe(at(14, 30));
+        expect(dateFromInput("")).toBeNull();
+        expect(timeOfDay(at(8, 5))).toBe("08:05");
+        expect(timeOfDay("2026-10-19")).toBeNull();
+    });
+
+    it("adds a time (09:00) or drops it, on both ends", () => {
+        const withTime = setDateTime({ start: "2026-10-19", end: "2026-10-20" }, true);
+        expect(withTime).toEqual({ start: at(9), end: new Date(2026, 9, 20, 9).toISOString() });
+        expect(dateHasTime(withTime)).toBe(true);
+        expect(setDateTime({ start: at(23, 45), end: null }, false)).toEqual({ start: "2026-10-19", end: null });
+    });
+
+    it("shows, filters and sorts by the time", () => {
+        expect(formatValue(due, { start: at(14, 30), end: null })).toBe("19. Okt. 2026, 14:30");
+        const rows = buildRows(entries, {
+            ...data,
+            values: [
+                { pageId: "a", propertyId: "due", value: { start: at(18), end: null }, updatedAt: "" },
+                { pageId: "b", propertyId: "due", value: { start: at(8), end: null }, updatedAt: "" },
+                { pageId: "c", propertyId: "due", value: { start: "2026-10-19", end: null }, updatedAt: "" },
+            ],
+        });
+        // A day without a time counts from midnight.
+        const sorted = applyView(rows, config({ sort: [{ propertyId: "due", direction: "asc" }] }), [due]);
+        expect(sorted.map((row) => row.page.id)).toEqual(["c", "b", "a"]);
+        const onDay = rows.filter((row) =>
+            matchesFilter(row, { propertyId: "due", operator: "equals", value: "2026-10-19" }, due),
+        );
+        expect(onDay.map((row) => row.page.id)).toEqual(["a", "b", "c"]);
     });
 });
 

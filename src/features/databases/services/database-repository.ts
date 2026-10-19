@@ -1,7 +1,7 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
-import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption } from "../types";
+import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption, RelatedEntry } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
     "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
@@ -47,10 +47,55 @@ function requireRow<T>(rows: T[] | null): T {
 /** The server stores choices as `{"options": [...]}`. */
 const optionsColumn = (options: PropertyOption[]) => ({ options });
 
-export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position">;
-export type PropertyChanges = Partial<Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula">>;
+export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "numberFormat">;
+export type PropertyChanges = Partial<
+    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat">
+>;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
+
+/**
+ * Relations show the entries of their database: its readable, not archived
+ * entries are loaded with the properties (RLS decides what is readable).
+ */
+async function withRelatedEntries(properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const targets = [...new Set(properties.flatMap((property) => property.relation?.databaseId ?? []))];
+    if (targets.length === 0) return properties;
+
+    const response = await supabase
+        .from("pages")
+        .select("id,title,icon,parentId:parent_id")
+        .in("parent_id", targets)
+        .eq("is_archived", false)
+        .order("position", { ascending: true, nullsFirst: false })
+        .order("created_at");
+    const failure = toRequestError(response);
+    if (failure) throw failure;
+
+    const rows: unknown[] = response.data ?? [];
+    const byDatabase = new Map<string, RelatedEntry[]>();
+    for (const row of rows) {
+        if (
+            typeof row !== "object" ||
+            row === null ||
+            !("id" in row && typeof row.id === "string") ||
+            !("parentId" in row && typeof row.parentId === "string") ||
+            !("title" in row && typeof row.title === "string")
+        ) {
+            throw new Error("Unerwartete Daten der verknüpften Datenbank.");
+        }
+        const icon = "icon" in row && typeof row.icon === "string" ? row.icon : null;
+        byDatabase.set(row.parentId, [...(byDatabase.get(row.parentId) ?? []), { id: row.id, title: row.title, icon }]);
+    }
+    return properties.map((property) =>
+        property.relation
+            ? {
+                  ...property,
+                  relation: { ...property.relation, entries: byDatabase.get(property.relation.databaseId) ?? [] },
+              }
+            : property,
+    );
+}
 
 /** Whether a value write was taken or lost against a newer one (LWW). */
 export type ValueWriteResult = "saved" | "superseded";
@@ -123,7 +168,7 @@ export const databaseRepository = {
         }
 
         return {
-            properties: parseProperties(properties.data),
+            properties: await withRelatedEntries(parseProperties(properties.data)),
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,
@@ -139,7 +184,8 @@ export const databaseRepository = {
                 database_id: databaseId,
                 name: property.name,
                 type: property.type,
-                options: optionsColumn(property.options),
+                // A number's format sits in options as well.
+                options: property.numberFormat ? { format: property.numberFormat } : optionsColumn(property.options),
                 position: property.position,
             })
             .select(PROPERTY_COLUMNS);
@@ -148,10 +194,39 @@ export const databaseRepository = {
         return requireRow(parseProperties(response.data));
     },
 
+    /** Both sides of a relation at once (RPC add_relation_property, package 17d). */
+    async addRelation(
+        databaseId: string,
+        name: string,
+        targetDatabaseId: string,
+        pairedName: string,
+    ): Promise<{ propertyId: string }> {
+        const response = await supabase.rpc("add_relation_property", {
+            p_database_id: databaseId,
+            p_name: name,
+            p_target_database_id: targetDatabaseId,
+            p_paired_name: pairedName,
+        });
+        const failure = databaseError(response, "Die Verknüpfung konnte nicht angelegt werden.");
+        if (failure) throw failure;
+        const row: unknown = Array.isArray(response.data) ? response.data[0] : response.data;
+        if (typeof row !== "object" || row === null || !("property_id" in row) || typeof row.property_id !== "string") {
+            throw new Error("Unerwartete Antwort beim Anlegen der Verknüpfung.");
+        }
+        return { propertyId: row.property_id };
+    },
+
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, formula, ...rest } = changes;
-        // The server keeps a formula's expression in options as well.
-        const column = formula !== undefined ? { expression: formula } : options ? optionsColumn(options) : undefined;
+        const { options, formula, numberFormat, ...rest } = changes;
+        // The server keeps a formula's expression and a number's format in options as well.
+        const column =
+            formula !== undefined
+                ? { expression: formula }
+                : numberFormat !== undefined
+                  ? { format: numberFormat }
+                  : options
+                    ? optionsColumn(options)
+                    : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)
@@ -167,6 +242,17 @@ export const databaseRepository = {
         const failure = databaseError(response, "Die Eigenschaft konnte nicht gelöscht werden.");
         if (failure) throw failure;
         requireRow(response.data);
+    },
+
+    async listViews(databaseId: string): Promise<DatabaseView[]> {
+        const response = await supabase
+            .from("database_views")
+            .select(VIEW_COLUMNS)
+            .eq("database_id", databaseId)
+            .order("position");
+        const failure = databaseError(response, "Die Ansichten konnten nicht geladen werden.");
+        if (failure) throw failure;
+        return parseViews(response.data);
     },
 
     async addView(databaseId: string, view: NewView): Promise<DatabaseView> {

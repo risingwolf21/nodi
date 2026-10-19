@@ -1,4 +1,4 @@
-/** Property types of the server (packages 14a, 14e, 14f); formula and the last two are computed. */
+/** Property types of the server (packages 14a, 14e, 14f, 17d); formula and the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -11,6 +11,7 @@ export type PropertyType =
     | "email"
     | "place"
     | "formula"
+    | "relation"
     | "created_time"
     | "last_edited_time";
 
@@ -23,6 +24,24 @@ export type PropertyOption = {
     color: OptionColor;
 };
 
+/** How a number property shows its values (package 17b); the value stays a plain number. */
+export type NumberFormat = "number" | "percent" | "euro" | "dollar" | "pound" | "franc" | "yen";
+
+/** An entry of a related database, as relations show and pick it. */
+export type RelatedEntry = {
+    id: string;
+    title: string;
+    icon: string | null;
+};
+
+/** A relation points to the entries of one database; the server keeps its other side equal (package 17d). */
+export type RelationSettings = {
+    databaseId: string;
+    pairedPropertyId: string;
+    /** The readable entries of that database, loaded with this one (like the options of a select). */
+    entries: RelatedEntry[];
+};
+
 export type DatabaseProperty = {
     id: string;
     databaseId: string;
@@ -32,6 +51,10 @@ export type DatabaseProperty = {
     options: PropertyOption[];
     /** Formula properties: the expression in Notion's syntax (server: options.expression). */
     formula?: string;
+    /** Number properties: how values are shown (server: options.format); missing means "number". */
+    numberFormat?: NumberFormat;
+    /** Relation properties: the related database (server: options.databaseId, options.pairedPropertyId). */
+    relation?: RelationSettings;
     position: number;
 };
 

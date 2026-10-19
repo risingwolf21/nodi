@@ -13,11 +13,13 @@ type PropertyBarProps = {
     userId: string | undefined;
     /** Offline or without edit rights on the page. */
     readOnly: boolean;
+    /** Databases of the workspace a relation can point to; undefined: no new relations here. */
+    databases?: Page[];
 };
 
 /** The properties of an entry, between its title and its text (like Notion). */
-export function PropertyBar({ entry, databaseId, userId, readOnly }: PropertyBarProps) {
-    const { data, error, fromCache, addProperty, updateProperty, addOption, setValue } = useDatabase(
+export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: PropertyBarProps) {
+    const { data, error, fromCache, addProperty, addRelation, updateProperty, addOption, setValue } = useDatabase(
         databaseId,
         userId,
     );
@@ -73,6 +75,10 @@ export function PropertyBar({ entry, databaseId, userId, readOnly }: PropertyBar
             {editable && (
                 <AddPropertyButton
                     label="Eigenschaft hinzufügen"
+                    relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
+                    onAddRelation={(target) =>
+                        addRelation(target, databases?.find((database) => database.id === databaseId)?.title ?? "")
+                    }
                     onAdd={async (type) => {
                         const property = await addProperty(type);
                         if (type === "formula") setFormulaPropertyId(property.id);

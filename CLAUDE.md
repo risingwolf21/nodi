@@ -162,6 +162,8 @@ haben kann.
   so).
 - Seit Paket 14e: `leaflet` `1.9.4` (dependency, nur in der
   nachgeladenen Karte) und `@types/leaflet` (devDependency).
+- Seit Paket 16a: `fflate` (dependency, ZIP lesen beim Notion-Import,
+  nur im nachgeladenen Import-Dialog).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -285,7 +287,7 @@ src/
     databases/              # Paket 14b
       types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
       database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
-      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property
+      services/database-repository.ts # Supabase: laden, Eigenschaften, Ansichten, RPC set_page_property, Verknüpfungen
       hooks/useDatabase.ts  # Cache zuerst, Änderungen nur online, Werte optimistisch, Einträge anlegen
       components/DatabaseView.tsx    # Ansichts-Tabs, Filter/Sortierung/Eigenschaften, Tabelle
       components/TableView.tsx       # Tabelle: Name, Werte, Spalten, „Neu“
@@ -301,6 +303,7 @@ src/
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
+      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -314,6 +317,19 @@ src/
         account-sync.ts              # eine Sync-Engine je Konto und Tab
         document-changes.ts          # BroadcastChannel zwischen Tabs
         revoked-documents.ts         # lokale Kopien nicht mehr lesbarer Seiten löschen
+    files/                  # Paket 15b
+      file-reference.ts     # Verweis `nodi-file:<pfad>`, Pfad, Dateiname (Vitest)
+      services/page-files.ts        # Storage: hochladen, signierte URL
+      services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
+      services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
+    import/                 # Paket 16a
+      read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
+      notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
+      notion-csv.ts         # CSV lesen, Eigenschaftstypen ableiten, Notion-Daten (16b, Vitest)
+      import-blocks.ts      # Links/Dateien in BlockNote-Blöcken umschreiben (Vitest)
+      notion-import.ts      # Ablauf: Seiten/Datenbanken anlegen, Dateien, Werte, speichern (Vitest)
+      markdown-to-blocks.ts # BlockNote-Markdown-Parser ohne Ansicht
+      components/NotionImportDialog.tsx # nachgeladen; Auswahl, Fortschritt, Ergebnis
     pages/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
@@ -324,6 +340,7 @@ src/
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
+      components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -336,7 +353,7 @@ src/
     public/
       public-page.ts        # Token aus `?p=`, Link-URL, RPC get_public_page
       PublicPage.tsx        # öffentliche Ansicht ohne Login (in main.tsx gewählt)
-      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend
+      PublicDocument.tsx    # nachgeladen; BlockNote nur lesend, Bilder per signierter URL
       page-hierarchy.ts     # reine Baumlogik, mit Vitest getestet
   lib/
     auth-context.tsx
@@ -366,12 +383,15 @@ supabase/
                             # Mitglieder und Bereiche (P12a),
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
-                            # Formeln (P14f)
+                            # Formeln (P14f), Datei-Speicher (P15a),
+                            # Verknüpfungen (P17d), Verschieben (P18a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
-                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f)
+                            # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
+                            # Dateien (P15a), Verknüpfungen (P17d),
+                            # Verschieben (P18a)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -471,8 +491,9 @@ Darstellung; Ablauf in `src/features/editor/services/`).
 - **Logout (Policy §2):** offene Editoren speichern lokal, dann
   `syncAll()`. Bleibt etwas ungesynct: Dialog „Abbrechen“ /
   „Trotzdem abmelden und lokale Änderungen verwerfen“. Danach
-  `signOut()`; erst wenn das klappt, werden Engine gestoppt, beide
-  Datenbanken geschlossen und gelöscht und `nodi-account` entfernt.
+  `signOut()`; erst wenn das klappt, werden Engine gestoppt, die
+  Datenbanken (Dokumente, Seitenbaum, seit 15b Bilder) geschlossen und
+  gelöscht und `nodi-account` entfernt.
   Offline kann der Server die Sitzung nicht widerrufen; sie wird dann
   nur auf dem Gerät entfernt (`authStorageKey`). Eine gelöschte
   Datenbank wird von keinem Tab neu angelegt (`DatabaseConnection`
@@ -1439,6 +1460,346 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
       - Noch nicht: Listen-Funktionen (`map`, `filter`, `sum`), `let`,
         reguläre Ausdrücke, Formelergebnis als Board-Gruppe.
 
+15. **Datei-Speicher** (Nutzerwunsch 2026-10-19, Voraussetzung für den
+    Notion-Import, Paket 16).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Bilder und beliebige
+      Anhänge; Bilder im Text, andere Dateien zum Herunterladen.
+      (2) Höchstens 10 MB je Datei. (3) Einmal angesehene Bilder sind
+      offline sichtbar (je Konto lokal gespeichert, beim Abmelden
+      gelöscht); Hochladen nur online. (4) Über einen öffentlichen Link
+      sind die Dateien genau dieser Seite sichtbar, solange der Link
+      aktiv ist.
+    - **Aufteilung:** 15a Datenbank (Bucket, Regeln, pgTAP), 15b
+      Oberfläche (Hochladen im Editor, Anzeige, Offline-Cache,
+      öffentliche Ansicht).
+    - **Umsetzung 15a** (`20261019120000_page_files_storage.sql`):
+      - Privater Bucket `page-files`, `file_size_limit` 10 MB, alle
+        Dateitypen (Bilder zeigt die App nur per `<img>`; Dateien liegen
+        auf der Supabase-Domain, nicht auf der App-Domain).
+      - Pfad `<pageId>/<zufällige ID>-<Dateiname>`; die Seite steckt im
+        Pfad (`page_id_from_file_path`, andere Formen gehören zu keiner
+        Seite). Rechte folgen der Seite: Lesen mit `can_read_page`,
+        Hochladen und Löschen mit `can_edit_page`, kein Ändern
+        (eine neue Version ist eine neue Datei). Über einen aktiven,
+        nicht archivierten öffentlichen Link (`has_active_public_link`)
+        lesen auch `anon` und angemeldete Fremde.
+      - Signierte URLs (`createSignedUrl`) prüfen dieselben Regeln.
+      - pgTAP: `page_files.test.sql`; zusätzlich gegen die lokale
+        Storage-API geprüft (Hochladen, signierte URL, Fremde, 11 MB,
+        Überschreiben, öffentlicher Link).
+      - Noch nicht: Dateien endgültig gelöschter Seiten bleiben liegen
+        (`storage.objects` erlaubt kein direktes Löschen, nur die
+        Storage-API); Aufräumen später.
+    - **Umsetzung 15b** (nur Frontend, keine Migration;
+      `src/features/files/`):
+      - Im Dokument steht ein Verweis `nodi-file:<pfad>` statt einer URL
+        (signierte URLs laufen ab). `file-reference.ts`: Pfad, Verweis,
+        Dateiname für Storage (Umlaute → Grundbuchstaben, sonst `-`,
+        höchstens 100 Zeichen, Endung bleibt), Bild an der Endung.
+      - Editor: BlockNote `uploadFile` lädt in den Ordner der Seite
+        (`uploadPageFile`, vorher Prüfung auf 10 MB), `resolveFileUrl`
+        (`createFileUrlResolver`) löst Verweise auf; fremde URLs bleiben.
+        Bilder: zuerst aus dem Cache, sonst signierte URL laden und im
+        Cache ablegen; je Editor eine Object-URL je Bild. Andere Anhänge:
+        bei jedem Öffnen eine neue signierte URL (1 h), kein Cache.
+        Scheitert ein Upload, zeigt BlockNote nur seinen Text; der nennt
+        daher Internet und 10 MB.
+      - Cache: IndexedDB `nodi-<userId>-files` (eigene DB, kein Upgrade
+        der Dokument-DB), Schlüssel = Pfad. Abmelden schließt und löscht
+        ihn mit den anderen Datenbanken. Die Bereinigung entzogener
+        Seiten (`deleteRevokedLocalCopies`) löscht auch Bilder von Seiten,
+        die nicht mehr lesbar sind.
+      - Öffentliche Ansicht: derselbe Resolver ohne Cache; die
+        signierte URL erlaubt der aktive Link (15a). Nichts wird auf dem
+        Gerät gespeichert.
+      - Tests: Vitest (`file-reference.test.ts`, `file-storage.test.ts`),
+        Playwright `page-files.e2e.ts` (Fake-Storage in
+        `e2e/fake-supabase.ts`); zusätzlich gegen die lokale Supabase mit
+        echtem Storage geprüft (Hochladen, Verweis, Bild ohne Storage aus
+        dem Cache, 11 MB abgelehnt, öffentlicher Link, Abmelden löscht
+        den Cache).
+      - Noch nicht: Anzeige des Upload-Fortschritts, Dateien beim
+        Entfernen aus dem Text löschen, Bilder vor dem Hochladen
+        verkleinern.
+
+16. **Notion-Import** (Nutzerwunsch 2026-10-19), nach Paket 15.
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Quelle ist der
+      Notion-Export als ZIP („Markdown & CSV“), verarbeitet im Browser,
+      ohne Server und ohne Notion-Zugangsdaten. (2) Erst Seiten (16a),
+      dann Datenbanken aus den CSV-Dateien (16b). (3) Bilder und
+      Anhänge kommen in den Datei-Speicher (Paket 15). (4) Alles landet
+      unter einer neuen privaten Seite „Notion-Import“ im aktuellen
+      Workspace.
+    - **Umsetzung 16a** (nur Frontend, keine Migration;
+      `src/features/import/`):
+      - Workspace-Menü → „Aus Notion importieren“ (nur online und mit
+        Workspace). Der Dialog ist nachgeladen (fflate und der
+        Markdown-Parser nur bei Bedarf).
+      - ZIP im Browser lesen: höchstens 1 GB, Teil-ZIPs großer Exporte
+        (`…-Part-N.zip`) werden zusammengeführt, `__MACOSX`/`.DS_Store`
+        übersprungen, Pfade NFC (macOS schreibt zerlegte Umlaute).
+      - Seitenbaum: jede `Titel <32hex>.md` ist eine Seite; Unterseiten
+        liegen im gleichnamigen Ordner, Elternseite ist der nächste
+        Ordner mit passender `.md`. Reihenfolge der Geschwister wie die
+        Links in der Elternseite, sonst nach Titel. Titel aus der ersten
+        Überschrift `# …`, sonst aus dem Dateinamen ohne ID.
+      - Inhalt per BlockNote `tryParseMarkdownToBlocks`, dann
+        umgeschrieben: Bilder und Anhänge des Exports werden in den
+        Ordner der Seite hochgeladen (`uploadPageFile`, 10 MB) und als
+        `nodi-file:`-Verweis gespeichert; ein Absatz, der nur aus einem
+        Link auf eine Datei besteht, wird Bild- bzw. Datei-Block (ohne
+        Inline-Inhalt, sonst lehnt BlockNote das Dokument ab). Links auf
+        andere Seiten und Datenbanken werden Text, Web-Links bleiben.
+        Fehlende oder zu große Dateien stehen als kursiver Hinweis im
+        Text und in der Liste der Hinweise.
+      - Gespeichert wird per `save_page_document` (wie die Sync-Engine),
+        Seiten per `createPage` (privat). Der Import läuft Seite für
+        Seite, „Nach dieser Seite anhalten“ bricht ab; bei einem Fehler
+        stoppt er, Importiertes bleibt. Die Seite „Notion-Import“
+        enthält Datum und Anzahl der Seiten und Datenbanken.
+      - Datenbanken (`.csv` und ihre Eintrags-Ordner) wurden in 16a nur
+        genannt; seit 16b werden sie importiert.
+      - Tests: Vitest (`notion-export`, `import-blocks`, `notion-import`
+        mit fflate-ZIPs), Playwright `notion-import.e2e.ts` (das
+        Fake-Backend liefert gespeicherte Dokumente jetzt zurück);
+        zusätzlich gegen die lokale Supabase geprüft (Baum, Dateien im
+        Bucket, Seite öffnet mit Bild und Anhang).
+      - Noch nicht: Notion-Callouts werden normale Absätze (Emoji
+        bleibt), Spalten und eingebettete Inhalte nur als Text, Links
+        auf importierte Seiten springen nicht zur Seite; kein Import
+        in den Bereich „Workspace“.
+    - **Umsetzung 16b** (nur Frontend, keine Migration):
+      - Eine Datenbank `Titel <id>.csv` steht im Baum wie eine Seite
+        (gleiche Elternregel, Reihenfolge nach Links). Gelesen wird
+        `…_all.csv` (alle Eigenschaften), sonst die `.csv` (nur die der
+        Ansicht). RFC-4180-CSV mit Anführungszeichen, Zeilenumbrüchen,
+        BOM und CRLF.
+      - Erste Spalte = Titel der Einträge; jede weitere wird eine
+        Eigenschaft. Notions CSV hat keine Typen, daher abgeleitet aus
+        allen Werten der Spalte (leere zählen nicht): Yes/No (auch
+        Ja/Nein) → Checkbox; Zahlen (`-12.5`) → Zahl; Daten in Notions
+        Formaten („October 19, 2026“, „Oct 19, 2026“, „19. Oktober 2026“,
+        `2026-10-19`, `2026/10/19`, `10/19/2026` bzw. Tag zuerst, wenn
+        ein Tag über 12 vorkommt, `19.10.2026`, Zeiträume mit „→“) →
+        Datum; http(s)-Links → URL; E-Mail-Adressen → E-Mail; mit
+        Komma und wiederholten Teilen → Mehrfachauswahl; wiederholte
+        Werte (höchstens 50 verschiedene, je ≤ 100 Zeichen) → Auswahl;
+        sonst Text. Optionen in der Reihenfolge des Auftretens, Farben
+        reihum. (Uhrzeiten seit 17c, Zahlenformate seit 17b, Status seit
+        17a.)
+      - Relationen („Titel (Pfad.md)“) werden zu Text mit den Titeln.
+        Status, Personen, Dateien, Formeln, Rollups usw. kommen als
+        Auswahl oder Text an (Notion exportiert ihr Ergebnis).
+      - Einträge: je CSV-Zeile eine Unterseite der Datenbank (Position
+        in Zeilenreihenfolge), Werte per `set_page_property` (je
+        Eintrag parallel). Der Text kommt aus der passenden
+        `.md` im Ordner der Datenbank (nach Titel zugeordnet), ohne die
+        Zeilen „Eigenschaft: Wert“, die Notion unter den Titel
+        schreibt; Bilder und Anhänge wie bei Seiten. Einträge ohne
+        Zeile (`.md` ohne CSV-Zeile) werden ohne Werte angelegt.
+        Unterseiten und Datenbanken in Einträgen werden nicht
+        übernommen (Hinweis mit Anzahl).
+      - „Nach dieser Seite anhalten“ hält auch zwischen Einträgen.
+      - `usePages.createPage` liest die Elternseite und die Positionen
+        aus dem neuesten Stand (Ref, sofort ergänzt), nicht aus dem
+        Stand des letzten Renders: Der Import legt eine Datenbank und
+        gleich danach ihre Einträge an.
+      - Tests: Vitest (`notion-csv`, `notion-export`, `notion-import`),
+        Playwright „Eine Notion-Datenbank wird … übernommen“; zusätzlich
+        gegen die lokale Supabase mit einem Export mit allen Typen,
+        Relation, Zeitraum und Eintrag mit Bild geprüft.
+      - Noch nicht: Ansichten (Board, Kalender …) aus Notion (nur die
+        Tabelle), Status-Typ, Relationen als Verknüpfung, Uhrzeiten,
+        Zahlen mit Tausendertrennern oder Währung (werden Text). Siehe
+        Paket 17.
+
+17. **Notion-Import und Datenbanken ergänzen** (Nutzerwunsch 2026-10-19,
+    je Teil ein PR).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Ansichten: Der Export
+      enthält keine; abgeleitet werden ausgeblendete Spalten (aus der
+      CSV der Ansicht) sowie ein Board (Status/Auswahl) und ein Kalender
+      (Datum). (2) Relationen als eigener Eigenschaftstyp
+      „Verknüpfung“, **beidseitig wie Notion** (der Server hält beide
+      Seiten gleich). (3) Uhrzeiten **je Wert ein-/ausschaltbar** wie
+      Notion; Anzeige, Kalender, Filter, Sortierung berücksichtigen sie.
+      (4) Zahl-Eigenschaften bekommen ein **Zahlenformat** (Zahl,
+      Prozent, Euro, Dollar …); der Import erkennt Trennzeichen und
+      Symbole. Status-Spalten erkennt der Import am Namen oder an
+      Notions Statuswerten.
+    - **Aufteilung:** 17a Import: Status und Ansichten; 17b Zahlenformat;
+      17c Uhrzeiten; 17d Verknüpfung (Datenbank); 17e Verknüpfung
+      (Oberfläche und Import).
+    - **Umsetzung 17a** (nur Frontend, keine Migration):
+      - Status: Eine Spalte wird Status, wenn sie „Status“ heißt oder nur
+        Notions Statuswerte hat (Not started/In progress/Done, deutsch
+        Nicht begonnen/In Bearbeitung/Erledigt), auch wenn jeder Wert
+        nur einmal vorkommt. Bekannte Werte bekommen Notions Farben
+        (grau, blau, grün).
+      - Ansichten: Die Tabelle blendet Eigenschaften aus, die in der CSV
+        der exportierten Ansicht fehlen (nur wenn es eine `_all.csv`
+        gibt). Dazu ein Board (gruppiert nach der ersten Status-, sonst
+        Auswahl-Eigenschaft) und ein Kalender (erste Datums-Eigenschaft),
+        mit denselben ausgeblendeten Eigenschaften.
+        `databaseRepository.listViews` findet die vom Server angelegte
+        Tabelle.
+    - **Umsetzung 17b** (nur Frontend, keine Migration):
+      - `DatabaseProperty.numberFormat` (`number`, `percent`, `euro`,
+        `dollar`, `pound`, `franc`, `yen`); auf dem Server in
+        `options.format` (das JSON-Objekt erlaubt beliebige Schlüssel; die
+        App liest nur bekannte Formate, unbekannte gelten als „Zahl“). Ein
+        Typwechsel setzt `options` neu und damit das Format zurück.
+      - Gespeichert bleibt die reine Zahl; das Format betrifft nur die
+        Anzeige (`formatValue`, Intl `de-DE`, Währungen mit zwei
+        Nachkommastellen). Prozent wie Notion: 0,15 wird „15 %“; Eingabe,
+        Filter, Sortierung und Formeln sehen die Zahl.
+      - Spaltenmenü der Tabelle: Abschnitt „Zahlenformat“ bei
+        Zahl-Eigenschaften.
+      - Import: Zahlen mit Tausendertrennern, Dezimalkomma (je Spalte:
+        „12,5“ oder „1.234,56“ → Komma; „1,234“ bleibt Tausender),
+        Währungssymbolen (€, $, £, CHF, ¥, auch EUR/USD/…) und Prozent
+        (Wert / 100). Haben alle Werte dasselbe Symbol, bekommt die
+        Eigenschaft dieses Format. Leerzeichen zwischen Ziffern
+        (Telefonnummern) sind keine Zahl.
+    - **Umsetzung 17c** (nur Frontend, keine Migration; der Server
+      erlaubt schon Zeitstempel in Datumswerten):
+      - Ein Datumswert ist ein Tag (`YYYY-MM-DD`) oder ein Zeitpunkt
+        (ISO-Zeitstempel in UTC); je Wert, wie Notion. Angezeigt und
+        bearbeitet wird in der Ortszeit des Geräts.
+      - Editor: Uhr-Schalter neben dem Datum (`aria-pressed`). An: beide
+        Enden bekommen 09:00 Ortszeit, Eingabe `datetime-local`. Aus: der
+        lokale Tag bleibt.
+      - Anzeige „19. Okt. 2026, 14:30“; Kalender ordnet nach dem lokalen
+        Tag und zeigt die Uhrzeit vor dem Titel (nur am ersten Tag eines
+        Zeitraums). Filter „ist/vor/nach“ vergleichen den lokalen Tag
+        (gilt jetzt auch für „Erstellt“/„Zuletzt bearbeitet“, vorher
+        UTC-Tag). Sortieren nach dem Zeitpunkt; ein Tag zählt ab
+        Mitternacht.
+      - Import: Notions Uhrzeiten (ohne Zeitzone) gelten als Ortszeit des
+        Geräts und werden als Zeitstempel gespeichert.
+    - **Umsetzung 17d** (`20261019150000_relation_property.sql`):
+      - Eigenschaftstyp `relation`; `options` =
+        `{databaseId, pairedPropertyId}`. Jede Verknüpfung hat eine
+        Gegenseite in der Ziel-Datenbank; beide legt nur die RPC
+        `add_relation_property(database, name, target, paired_name)` →
+        `(property_id, paired_property_id)` an (Schreibrecht auf beide
+        Datenbanken, gleicher Workspace; `42501`, `22023`, `22004`).
+        Ziel kann dieselbe Datenbank sein (zwei Eigenschaften).
+      - Trigger `protect_relation_properties`: API-Clients legen keine
+        Verknüpfung direkt an (`42501`), ändern weder Typ von/zu
+        `relation` (`22023`) noch `options` (`42501`); umbenennen und
+        verschieben geht. Löschen entfernt die Gegenseite mit und
+        braucht Schreibrecht auf beide Datenbanken (`42501`); wird eine
+        Datenbank gelöscht, verschwinden die Gegenseiten ihrer
+        Verknüpfungen.
+      - Wert: JSON-Array von Eintrags-IDs der Ziel-Datenbank (höchstens
+        100, Duplikate entfernt, Reihenfolge bleibt; leer = JSON `null`).
+        `set_page_property` (Signatur unverändert) ruft für Verknüpfungen
+        `set_relation_value`: LWW für das eigene Feld; die Gegenseite
+        ändert sich als Menge (Eintrag hinzu/weg) und ihre
+        Bearbeitungszeit rückt vor, damit ein älteres Überschreiben dort
+        die Verknüpfung nicht einseitig aufhebt. Sperren auf die
+        betroffenen Seiten in fester Reihenfolge. Hinzufügen oder
+        Entfernen braucht Schreibrecht auf jeden betroffenen Eintrag
+        (`42501`).
+      - IDs später endgültig gelöschter Einträge bleiben in den Arrays;
+        die App übergeht sie.
+      - pgTAP: `database_relations.test.sql`.
+      - App-Versionen ab 14e lassen den unbekannten Typ aus; die
+        Oberfläche folgt in 17e.
+    - **Umsetzung 17e-a** (nur Frontend, keine Migration):
+      - `DatabaseProperty.relation` = `{databaseId, pairedPropertyId,
+entries}`. Die lesbaren, nicht archivierten Einträge der
+        Ziel-Datenbanken (`id`, Titel, Icon) lädt `databaseRepository.load`
+        mit (eine Abfrage `parent_id in (…)`, RLS entscheidet) und hängt
+        sie an die Eigenschaft, wie Optionen an eine Auswahl; so stehen
+        sie auch im Cache und offline zur Verfügung.
+      - Anlegen: „+“ → „Verknüpfung“ → Datenbank des Workspace (auch
+        dieselbe); Name = Titel der Ziel-Datenbank, Gegenseite = eigener
+        Titel (`addRelation`, RPC, danach neu laden). Nur im eigenen
+        Workspace (geteilte Datenbanken anderer Workspaces: kein
+        „Verknüpfung“).
+      - Wert: Einträge als Chips; Klick öffnet die Auswahl (Suche,
+        Haken, „Leeren“). Unbekannte IDs (gelöscht, nicht lesbar)
+        werden übergangen. Anzeige in Karten, Liste usw., Filter
+        „enthält/leer“ und Sortieren nach den Titeln; Formeln sehen die
+        Titel als Text.
+      - Spaltenmenü: kein Typwechsel von oder zu „Verknüpfung“; Löschen
+        warnt, dass die Gegenseite mit verschwindet.
+      - Neu geladen wird nach Anlegen, nach Löschen und Setzen einer
+        Verknüpfung innerhalb derselben Datenbank (die Gegenseite liegt
+        dann hier). Umbenennen behält die geladenen Einträge.
+      - Fake-Backend: Eigenschaften je Datenbank, verknüpfte Einträge,
+        `add_relation_property`, Spiegeln der Gegenseite.
+      - Noch nicht: Einträge der Ziel-Datenbank aus der Auswahl heraus
+        anlegen, verknüpften Eintrag direkt öffnen, Rollups.
+    - **Umsetzung 17e-b** (nur Frontend, keine Migration):
+      - Eine CSV-Spalte ist eine Relation, wenn jede gefüllte Zelle nur
+        Links „Titel (Pfad.md)“ enthält (aufgelöst vom Ordner der CSV) und
+        alle auf Einträge **einer** Datenbank dieses Exports zeigen. Sonst
+        bleibt sie Text (Titel ohne Pfade, wie bisher).
+      - Relationen werden erst nach allen Datenbanken angelegt (dann gibt
+        es die verknüpften Einträge). Hat die Ziel-Datenbank eine Spalte
+        zurück, wird sie zur Gegenseite (Name übernommen), sonst heißt
+        die Gegenseite wie die Quell-Datenbank. Werte beider Spalten
+        werden vereinigt und nur auf einer Seite gesetzt; der Server
+        verknüpft die andere. Höchstens 100 Einträge je Wert.
+      - Ist die Ziel-Datenbank nicht importiert (angehalten), entfällt
+        die Spalte mit Hinweis.
+
+18. **Seiten verschieben** (Nutzerwunsch 2026-10-19).
+    - **Entschieden (Nutzer, 2026-10-19):** (1) Seitenmenü „Verschieben
+      nach…“ mit Suche und zusätzlich Ziehen in der Seitenleiste (Maus).
+      (2) Verschieben darf, wer Schreibrecht auf Seite und Ziel hat (wie
+      Notion); ein Wechsel zwischen Privat und Workspace nur der Owner
+      der Seite (§2). (3) Datenbanken wie Notion: Eine Seite wird beim
+      Verschieben in eine Datenbank zum Eintrag, ein Eintrag beim
+      Herausnehmen zur normalen Seite (seine Werte entfallen).
+    - **Annahme:** Eine Seite mit Unterseiten wird vorerst kein Eintrag
+      (Einträge zeigen in Nodi keine Unterseiten; sie wären versteckt).
+    - **Aufteilung:** 18a Datenbank, 18b Oberfläche.
+    - **Umsetzung 18a** (`20261019180000_move_page.sql`):
+      - RPC `move_page(page, parent, section)`: Ziel ist eine Seite
+        (`parent`) oder die oberste Ebene eines Bereichs (`section`,
+        `workspace`/`private`). `parent_id` bleibt für API-Clients
+        gesperrt (13a); die Funktion ist der einzige Weg.
+      - Prüft Schreibrecht auf Seite und Ziel (`42501`), gleichen
+        Workspace, nichts im Papierkorb, keine Zyklen (Ziel ist weder die
+        Seite noch darunter; Tiefe ≤ 50), keine Datenbank als Eintrag,
+        keine Seite mit Unterseiten als Eintrag (`22023`), fehlende
+        Argumente (`22004`).
+      - Die Seite übernimmt den Bereich ihres neuen Platzes. Ein
+        Bereichswechsel nur durch den Owner (`42501`) und für den ganzen
+        Unterbaum wie `set_page_section` (nach privat von den Blättern
+        her, Owner wird der Aufrufer; in den Workspace von der Wurzel
+        her; private Seiten anderer bleiben, wie sie sind).
+      - In eine Datenbank: Eintrag am Ende (`position` = Maximum + 1).
+        Aus einer Datenbank heraus (oder in eine andere): Werte gelöscht,
+        Verknüpfungen auf der Gegenseite gelöst; `position` wird `null`.
+      - pgTAP: `move_page.test.sql`.
+      - Die Oberfläche folgt in 18b.
+    - **Umsetzung 18b** (nur Frontend, keine Migration):
+      - `moveProblem` (`page-hierarchy.ts`) prüft dieselben Regeln wie
+        `move_page` (nicht in sich selbst/Unterseiten, Datenbank/Seite
+        mit Unterseiten nicht als Eintrag, schon dort, Bereichswechsel nur
+        Owner); die Rechte aufs Ziel prüft der Server.
+      - `usePages.movePage(page, {parentId} | {section})`: RPC, die Seite
+        hängt sofort am neuen Platz, danach lädt der Baum vom Server neu
+        (Bereich und Owner im Unterbaum, Position als Eintrag).
+      - „Verschieben nach …“ im Seitenmenü und im Menü der Baumzeile
+        (`MovePageDialog`): Suche, Bereiche „Workspace/Privat (oberste
+        Ebene)“, Seiten und Datenbanken mit Pfad; ungültige Ziele sind
+        deaktiviert (Grund im Tooltip). Wechselt der Bereich, kommt eine
+        Rückfrage wie bei „In Privat verschieben“. Bei einem Eintrag steht
+        der Hinweis, dass Eigenschaften und Verknüpfungen außerhalb der
+        Datenbank entfallen. Nicht für geteilte Seiten anderer Workspaces.
+      - Ziehen in der Seitenleiste (Maus, HTML-Drag-and-Drop): auf eine
+        Seite oder Datenbank = darunter bzw. als Eintrag, auf den Titel
+        „Workspace“/„Privat“ = oberste Ebene. Nur gültige Ziele werden
+        hervorgehoben; in einen anderen Bereich öffnet sich die
+        Rückfrage. Auf Touch-Geräten verschiebt man über das Menü.
+      - Noch nicht: Reihenfolge unter Geschwistern per Ziehen (Seiten
+        stehen nach Erstellung), Verschieben in andere Workspaces.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1482,9 +1843,9 @@ Noch nicht abschließend geprüft:
   gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
   löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
   filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
-- Verschieben gibt es nicht: `parent_id` ist seit 13a für API-Clients
-  gesperrt. Eine spätere Funktion dafür muss Lesbarkeit der neuen
-  Elternseite, gleichen Workspace, Bereichsregel und Zyklen prüfen.
+- (Umgesetzt in Paket 18a) Verschieben nur über `move_page`, die
+  Rechte, Workspace, Bereichsregel und Zyklen prüft; `parent_id` bleibt
+  für API-Clients gesperrt.
 - RLS-Leistung: `can_read_page` läuft je Zeile. „Mit mir geteilt“ und
   die Bereinigung entzogener Kopien fragen ohne Workspace-Filter und
   prüfen damit alle Seiten der Datenbank (später mengenbasierte RPC).
@@ -1499,8 +1860,8 @@ Noch nicht abschließend geprüft:
   bleiben dann bis zur nächsten Abmeldung auf dem Gerät.
 - Installation und Layout auf echtem iOS- und Android-Gerät (Pakete 4
   und 5 nur in Chromium mit Geräte-Emulation geprüft).
-- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Verschieben per
-  Drag & Drop, Suche, Favoriten. Die Emoji-Auswahl ist eine feste
+- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
+  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
   Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts

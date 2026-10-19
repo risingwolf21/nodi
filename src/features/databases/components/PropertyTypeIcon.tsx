@@ -1,4 +1,5 @@
 import {
+    ArrowUpRight,
     AtSign,
     Calendar,
     CheckSquare,
@@ -27,6 +28,7 @@ const ICONS = {
     email: AtSign,
     place: MapPin,
     formula: Sigma,
+    relation: ArrowUpRight,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

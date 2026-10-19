@@ -4,6 +4,7 @@ import {
     collectRestoreIds,
     findAncestors,
     findArchivedAncestors,
+    moveProblem,
     pagesInSection,
 } from "./page-hierarchy";
 import type { Page } from "./types";
@@ -210,5 +211,39 @@ describe("pagesInSection", () => {
         const b: Page = { ...shared, id: "b", parent_id: "a" };
         expect(pagesInSection([orphan, a, b], "private").map((page) => page.id)).toEqual(["orphan"]);
         expect(pagesInSection([orphan, a, b], "workspace").map((page) => page.id)).toEqual(["a", "b"]);
+    });
+});
+
+describe("moveProblem", () => {
+    const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
+    const notes = page("notes");
+    const ideas = page("ideas", { parent_id: "notes" });
+    const shared = page("shared", { visibility: "workspace" });
+    const othersShared = page("others", { visibility: "workspace", owner_id: "u2" });
+    const tasks = page("tasks", { kind: "database" });
+    const contacts = page("contacts", { kind: "database" });
+    const pages = [notes, ideas, shared, othersShared, tasks, contacts];
+
+    it("allows moving below another page, into a database and to the top", () => {
+        expect(moveProblem(ideas, { parentId: "shared" }, pages, "u1")).toBeNull();
+        expect(moveProblem(ideas, { parentId: "tasks" }, pages, "u1")).toBeNull();
+        expect(moveProblem(ideas, { section: "private" }, pages, "u1")).toBeNull();
+        expect(moveProblem(tasks, { parentId: "notes" }, pages, "u1")).toBeNull();
+    });
+
+    it("rejects what the server rejects", () => {
+        expect(moveProblem(notes, { parentId: "ideas" }, pages, "u1")).toContain("in sich selbst");
+        expect(moveProblem(notes, { parentId: "notes" }, pages, "u1")).toContain("in sich selbst");
+        expect(moveProblem(contacts, { parentId: "tasks" }, pages, "u1")).toContain("Datenbank");
+        expect(moveProblem(notes, { parentId: "tasks" }, pages, "u1")).toContain("Unterseiten");
+        expect(moveProblem(ideas, { parentId: "notes" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
+        expect(moveProblem(notes, { section: "private" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
+        expect(moveProblem(ideas, { parentId: "gone" }, pages, "u1")).toContain("gibt es nicht mehr");
+    });
+
+    it("lets only the owner change the section", () => {
+        expect(moveProblem(othersShared, { section: "private" }, pages, "u1")).toContain("Nur wem die Seite gehört");
+        expect(moveProblem(othersShared, { parentId: "notes" }, pages, "u1")).toContain("Nur wem die Seite gehört");
+        expect(moveProblem(othersShared, { parentId: "shared" }, pages, "u1")).toBeNull();
     });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { PageActionsDialog, type PageActionMode } from "@/features/pages/compone
 import { ShareDialog } from "@/features/pages/components/ShareDialog";
 import { MembersDialog } from "@/features/pages/components/MembersDialog";
 import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog";
+import { MovePageDialog } from "@/features/pages/components/MovePageDialog";
+import type { MoveTarget } from "@/features/pages/page-hierarchy";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection } from "@/features/pages/types";
@@ -19,17 +21,23 @@ import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
+import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
+import { Dialog } from "@/components/ui/dialog";
+import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
+
+// Loaded on demand: it brings the ZIP reader and BlockNote's Markdown parser.
+const NotionImportDialog = lazy(() => import("@/features/import/components/NotionImportDialog"));
 
 const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
 
 /** Local copies of pages that are no longer readable go at the next contact with the server. */
 function cleanUpRevokedCopies(userId: string): void {
-    deleteRevokedLocalCopies(userId, localDocumentStoreFor(userId)).catch((err: unknown) => {
+    deleteRevokedLocalCopies(userId, localDocumentStoreFor(userId), fileCacheFor(userId)).catch((err: unknown) => {
         console.error("Lokale Kopien konnten nicht bereinigt werden:", err);
     });
 }
@@ -64,6 +72,7 @@ export default function WorkspaceHome() {
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
         setPageSection,
+        movePage,
         renamePage,
         updatePage,
         archivePage,
@@ -85,7 +94,10 @@ export default function WorkspaceHome() {
     } | null>(null);
     const [sharingPage, setSharingPage] = useState<Page | null>(null);
     const [movingPage, setMovingPage] = useState<{ page: Page; target: PageSection } | null>(null);
+    // "Verschieben nach …"; with a target when a page was dragged to another section (ask first).
+    const [movePageDialog, setMovePageDialog] = useState<{ page: Page; target?: MoveTarget } | null>(null);
     const [membersOpen, setMembersOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
     const readOnly = workspacesFromCache || pagesFromCache;
@@ -137,6 +149,22 @@ export default function WorkspaceHome() {
             setError(err instanceof Error ? err.message : "Die Seite konnte nicht erstellt werden.");
         } finally {
             creatingPage.current = false;
+        }
+    }
+
+    // Dragged in the sidebar: within its section at once, to the other one after a question.
+    async function dropPage(item: Page, target: MoveTarget) {
+        const section =
+            "section" in target ? target.section : pages.find((other) => other.id === target.parentId)?.visibility;
+        if (section !== item.visibility) {
+            setMovePageDialog({ page: item, target });
+            return;
+        }
+        setError("");
+        try {
+            await movePage(item.id, target);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht verschoben werden.");
         }
     }
 
@@ -252,10 +280,13 @@ export default function WorkspaceHome() {
                             onSelect={(id) => openPage(id)}
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
+                            onImportNotion={() => setImportOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
                             onDelete={permanentlyDeletePage}
+                            onMove={(item) => setMovePageDialog({ page: item })}
+                            onDropPage={(item, target) => void dropPage(item, target)}
                         />
                     </aside>
 
@@ -275,6 +306,8 @@ export default function WorkspaceHome() {
                                 onUpdate={sharedPage ? updateSharedPage : updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
+                                // Moving stays within the page's own workspace.
+                                onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}
                                 onMoveSection={
                                     !sharedPage && page.parent_id === null && page.owner_id === user?.id
                                         ? (item, target) => setMovingPage({ page: item, target })
@@ -286,6 +319,8 @@ export default function WorkspaceHome() {
                                 )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
+                                // Relations stay within the workspace (package 17d).
+                                databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
@@ -327,6 +362,18 @@ export default function WorkspaceHome() {
                 />
             )}
 
+            {movePageDialog && (
+                <MovePageDialog
+                    key={movePageDialog.page.id}
+                    page={movePageDialog.page}
+                    pages={pages}
+                    userId={user?.id}
+                    target={movePageDialog.target}
+                    onMove={movePage}
+                    onClose={() => setMovePageDialog(null)}
+                />
+            )}
+
             {movingPage && (
                 <MoveSectionDialog
                     key={movingPage.page.id}
@@ -351,6 +398,30 @@ export default function WorkspaceHome() {
                         cleanUpRevokedCopies(user.id);
                     }}
                 />
+            )}
+
+            {importOpen && (
+                <LoadErrorBoundary
+                    fallback={
+                        <Dialog labelledBy="import-load-error" onClose={() => setImportOpen(false)}>
+                            <h2 id="import-load-error" className="sr-only">
+                                Import
+                            </h2>
+                            <LoadErrorNotice message="Der Import konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                        </Dialog>
+                    }
+                >
+                    <Suspense fallback={null}>
+                        <NotionImportDialog
+                            // Imported pages are private (decision of the user, CLAUDE.md §12 P16).
+                            createPage={(title, parentId, kind) =>
+                                createWorkspacePage(title, parentId, "private", kind)
+                            }
+                            onOpen={(pageId) => openPage(pageId)}
+                            onClose={() => setImportOpen(false)}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             )}
 
             {sharingPage && user && (

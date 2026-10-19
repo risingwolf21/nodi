@@ -49,6 +49,8 @@ type DatabaseViewProps = {
     /** Adds an entry and returns its id; undefined when entries cannot be added here. */
     onCreateEntry?: () => Promise<string>;
     onRenameEntry: (pageId: string, title: string) => Promise<void>;
+    /** Databases of the workspace a relation can point to; undefined: no new relations here. */
+    databases?: Page[];
 };
 
 function ViewTab({
@@ -142,6 +144,7 @@ export function DatabaseView({
     onOpenEntry,
     onCreateEntry,
     onRenameEntry,
+    databases,
 }: DatabaseViewProps) {
     const {
         data,
@@ -149,6 +152,7 @@ export function DatabaseView({
         error,
         fromCache,
         addProperty,
+        addRelation,
         updateProperty,
         deleteProperty,
         addOption,
@@ -430,6 +434,8 @@ export function DatabaseView({
                     onCreateEntry={onCreateEntry}
                     onSetValue={setValue}
                     onCreateOption={addOption}
+                    relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
+                    onAddRelation={(target) => addRelation(target, database.title)}
                     onAddProperty={async (type) => {
                         const property = await addProperty(type);
                         // A new formula needs its expression first.
@@ -437,6 +443,7 @@ export function DatabaseView({
                     }}
                     onEditFormula={setFormulaPropertyId}
                     onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
+                    onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
                     onChangePropertyType={(propertyId, type) =>
                         updateProperty(propertyId, { type, options: defaultOptions(type) })
                     }

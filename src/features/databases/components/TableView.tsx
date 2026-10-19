@@ -2,7 +2,14 @@ import { useState, type KeyboardEvent } from "react";
 import { FileText, Maximize2, Plus } from "lucide-react";
 import { displayTitle } from "@/features/pages/page-display";
 import type { DatabaseRow } from "../database-model";
-import type { DatabaseProperty, PropertyOption, PropertyType, PropertyValue } from "../types";
+import type {
+    DatabaseProperty,
+    NumberFormat,
+    PropertyOption,
+    PropertyType,
+    PropertyValue,
+    RelatedEntry,
+} from "../types";
 import { AddPropertyButton } from "./AddPropertyButton";
 import { PropertyHeader } from "./PropertyHeader";
 import { PropertyValueEditor } from "./PropertyValueEditor";
@@ -20,11 +27,14 @@ export type TableViewProps = {
     onSetValue: (pageId: string, propertyId: string, value: PropertyValue) => Promise<void>;
     onCreateOption: (propertyId: string, name: string) => Promise<PropertyOption>;
     onAddProperty: (type: PropertyType) => Promise<void>;
+    relationTargets?: RelatedEntry[];
+    onAddRelation?: (target: RelatedEntry) => Promise<void>;
     onRenameProperty: (propertyId: string, name: string) => Promise<void>;
     onChangePropertyType: (propertyId: string, type: PropertyType) => Promise<void>;
     onHideProperty: (propertyId: string) => Promise<void>;
     onDeleteProperty: (propertyId: string) => Promise<void>;
     onEditFormula: (propertyId: string) => void;
+    onChangeNumberFormat: (propertyId: string, format: NumberFormat) => Promise<void>;
     onError: (message: string) => void;
 };
 
@@ -113,11 +123,14 @@ export function TableView({
     onSetValue,
     onCreateOption,
     onAddProperty,
+    relationTargets,
+    onAddRelation,
     onRenameProperty,
     onChangePropertyType,
     onHideProperty,
     onDeleteProperty,
     onEditFormula,
+    onChangeNumberFormat,
     onError,
 }: TableViewProps) {
     const [newEntryId, setNewEntryId] = useState("");
@@ -159,12 +172,20 @@ export function TableView({
                                     onHide={() => onHideProperty(property.id)}
                                     onDelete={() => onDeleteProperty(property.id)}
                                     onEditFormula={() => onEditFormula(property.id)}
+                                    onChangeNumberFormat={(format) => onChangeNumberFormat(property.id, format)}
                                     onError={onError}
                                 />
                             </th>
                         ))}
                         <th scope="col" className="p-0 text-left">
-                            {editable && <AddPropertyButton onAdd={onAddProperty} onError={onError} />}
+                            {editable && (
+                                <AddPropertyButton
+                                    onAdd={onAddProperty}
+                                    relationTargets={relationTargets}
+                                    onAddRelation={onAddRelation}
+                                    onError={onError}
+                                />
+                            )}
                         </th>
                     </tr>
                 </thead>

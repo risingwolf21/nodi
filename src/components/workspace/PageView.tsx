@@ -35,11 +35,15 @@ type PageViewProps = {
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
     onMoveSection?: (page: Page, target: PageSection) => void;
+    /** "Verschieben nach …"; not for pages shared from other workspaces. */
+    onMove?: (page: Page) => void;
     userId: string | undefined;
     /** For a database: its entries (subpages). */
     entries: Page[];
     /** For a database: adds an entry; undefined where that is not possible. */
     onCreateEntry?: (databaseId: string) => Promise<string>;
+    /** Databases of the workspace, for new relations; undefined where that is not possible. */
+    databases?: Page[];
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -71,9 +75,11 @@ export function PageView({
     onArchive,
     onShare,
     onMoveSection,
+    onMove,
     userId,
     entries,
     onCreateEntry,
+    databases,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
@@ -143,6 +149,16 @@ export function PageView({
                             Teilen
                         </MenuItem>
                     )}
+                    {onMove && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onMove(page);
+                            }}
+                        >
+                            Verschieben nach …
+                        </MenuItem>
+                    )}
                     {onMoveSection && (
                         <MenuItem
                             onSelect={() => {
@@ -199,6 +215,7 @@ export function PageView({
                             databaseId={database.id}
                             userId={userId}
                             readOnly={readOnly || !canEdit}
+                            databases={databases}
                         />
                     </Suspense>
                 </LoadErrorBoundary>
@@ -232,6 +249,7 @@ export function PageView({
                             onOpenEntry={onSelect}
                             onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
                             onRenameEntry={onRename}
+                            databases={databases}
                         />
                     </Suspense>
                 </LoadErrorBoundary>

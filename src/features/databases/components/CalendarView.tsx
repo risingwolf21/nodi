@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { displayTitle } from "@/features/pages/page-display";
 import { cn } from "@/lib/utils";
-import { localDay, monthGrid, rowsByDay, type DatabaseRow } from "../database-model";
+import { dayOf, isDateValue, localDay, monthGrid, rowsByDay, timeOfDay, type DatabaseRow } from "../database-model";
 import type { DatabaseProperty } from "../types";
 
 type CalendarViewProps = {
@@ -147,20 +147,31 @@ export function CalendarView({
                                     </button>
                                 )}
                             </div>
-                            {dayRows.map((row) => (
-                                <button
-                                    key={row.page.id}
-                                    type="button"
-                                    onClick={() => onOpenEntry(row.page.id)}
-                                    className={cn(
-                                        "truncate rounded border bg-background px-1 py-0.5 text-left font-medium text-foreground shadow-xs hover:bg-accent/60",
-                                        !row.page.title && "text-muted-foreground",
-                                    )}
-                                >
-                                    {row.page.icon ? `${row.page.icon} ` : ""}
-                                    {displayTitle(row.page)}
-                                </button>
-                            ))}
+                            {dayRows.map((row) => {
+                                const value = row.values[dateProperty.id];
+                                // The time belongs to the first day of a range.
+                                const time =
+                                    isDateValue(value) && dayOf(value.start) === day ? timeOfDay(value.start) : null;
+                                return (
+                                    <button
+                                        key={row.page.id}
+                                        type="button"
+                                        onClick={() => onOpenEntry(row.page.id)}
+                                        className={cn(
+                                            "truncate rounded border bg-background px-1 py-0.5 text-left font-medium text-foreground shadow-xs hover:bg-accent/60",
+                                            !row.page.title && "text-muted-foreground",
+                                        )}
+                                    >
+                                        {time && (
+                                            <span className="font-normal text-muted-foreground tabular-nums">
+                                                {time}{" "}
+                                            </span>
+                                        )}
+                                        {row.page.icon ? `${row.page.icon} ` : ""}
+                                        {displayTitle(row.page)}
+                                    </button>
+                                );
+                            })}
                         </div>
                     );
                 })}

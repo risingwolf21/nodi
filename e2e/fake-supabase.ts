@@ -72,6 +72,12 @@ export type FakeBackend = {
     signups: number;
     geocodingRequests: URLSearchParams[];
     tiles: number;
+    /** Storage bucket page-files, by path. */
+    files: Map<string, Buffer>;
+    /** Documents saved with save_page_document, by page id. */
+    savedDocuments: Map<string, unknown>;
+    /** Pages behind a public link, by token. */
+    publicPages: Map<string, { title: string; icon: string | null; full_width: boolean; document: unknown[] }>;
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -112,6 +118,9 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         signups: 0,
         geocodingRequests: [],
         tiles: 0,
+        files: new Map(),
+        savedDocuments: new Map(),
+        publicPages: new Map(),
         ...initial,
     };
 }
@@ -176,6 +185,25 @@ function requestBody(route: Route): RequestBody {
 
 const text = (body: RequestBody, key: string) => String(body[key]);
 
+/** supabase-js uploads a Blob as multipart form data; this is the file part. */
+function fileFromMultipart(body: Buffer, contentType: string): Buffer {
+    const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType);
+    if (!boundary) return body;
+    const marker = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+    let index = body.indexOf(marker);
+    while (index !== -1) {
+        const next = body.indexOf(marker, index + marker.length);
+        if (next === -1) break;
+        const part = body.subarray(index + marker.length, next);
+        if (part.includes("filename=")) {
+            // Headers end with an empty line; the part ends with a line break.
+            return part.subarray(part.indexOf("\r\n\r\n") + 4, part.length - 2);
+        }
+        index = next;
+    }
+    return body;
+}
+
 // A transparent 1×1 PNG for map tiles.
 const TILE = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
@@ -205,6 +233,28 @@ export async function installFakeSupabase(context: BrowserContext, backend: Fake
             ]),
         });
     });
+}
+
+/** Like the server (package 17d): the other side of a relation gains or loses the entry. */
+function mirrorRelation(backend: FakeBackend, call: SetPropertyCall): void {
+    const property = backend.properties.find((item) => item.id === call.p_property_id);
+    const paired = property?.type === "relation" ? property.options.pairedPropertyId : undefined;
+    if (typeof paired !== "string") return;
+    const ids = (value: unknown) => (Array.isArray(value) ? value.filter((id) => typeof id === "string") : []);
+    const before = ids(backend.values.find((v) => v.pageId === call.p_page_id && v.propertyId === property?.id)?.value);
+    const after = ids(call.p_value);
+    for (const related of new Set([...before, ...after])) {
+        const stored = backend.values.find((v) => v.pageId === related && v.propertyId === paired);
+        const others = ids(stored?.value).filter((id) => id !== call.p_page_id);
+        const next = after.includes(related) ? [...others, call.p_page_id] : others;
+        backend.values = backend.values.filter((v) => v !== stored);
+        backend.values.push({
+            pageId: related,
+            propertyId: paired,
+            value: next.length > 0 ? next : null,
+            updatedAt: call.p_edited_at,
+        });
+    }
 }
 
 function answer(route: Route, backend: FakeBackend): Promise<void> {
@@ -278,13 +328,29 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             const ids = backend.pages.map(({ id }) => ({ id }));
             return json(ids, 200, { "content-range": `0-${ids.length - 1}/${ids.length}` });
         }
+        // Entries of related databases (relations, package 17e).
+        const parents = /^in\.\((.*)\)$/.exec(query.get("parent_id") ?? "")?.[1].split(",");
+        if (parents) {
+            return json(
+                backend.pages
+                    .filter((item) => item.parent_id && parents.includes(item.parent_id) && !item.is_archived)
+                    .map(({ id, title, icon, parent_id }) => ({ id, title, icon, parentId: parent_id })),
+            );
+        }
         // Own workspace; nothing is shared from other workspaces.
         return json(query.get("workspace_id") === `eq.${WORKSPACE}` ? backend.pages : []);
     }
 
     // Databases
     if (path === "/rest/v1/database_properties") {
-        if (method === "GET") return json(backend.properties);
+        if (method === "GET") {
+            const database = query.get("database_id");
+            return json(
+                database
+                    ? backend.properties.filter((item) => `eq.${item.databaseId}` === database)
+                    : backend.properties,
+            );
+        }
         if (method === "POST") {
             const body = requestBody(route);
             const property: FakeProperty = {
@@ -311,7 +377,12 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         }
     }
     if (path === "/rest/v1/database_views") {
-        if (method === "GET") return json(backend.views);
+        if (method === "GET") {
+            const database = query.get("database_id");
+            return json(
+                database ? backend.views.filter((view) => `eq.${view.databaseId}` === database) : backend.views,
+            );
+        }
         if (method === "POST") {
             const body = requestBody(route);
             const view: FakeView = {
@@ -345,6 +416,7 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             p_edited_at: text(body, "p_edited_at"),
         };
         backend.propertyCalls.push(call);
+        mirrorRelation(backend, call);
         backend.values = backend.values.filter(
             (value) => value.pageId !== call.p_page_id || value.propertyId !== call.p_property_id,
         );
@@ -357,9 +429,98 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         return json([{ applied: true, stored_edited_at: call.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
     }
 
-    // Documents: the feed asks for the first blocks; a page's own text is empty.
+    if (path === "/rest/v1/rpc/move_page") {
+        const body = requestBody(route);
+        const moving = backend.pages.find((item) => item.id === body.p_page_id);
+        const parent = backend.pages.find((item) => item.id === body.p_parent_id);
+        if (!moving) return json({ code: "42501", message: "no edit rights" }, 403);
+        // Like the server (package 18a): the subtree takes the section of its new place.
+        const section = parent ? parent.visibility : body.p_section === "workspace" ? "workspace" : "private";
+        const subtree = new Set([moving.id]);
+        for (let grown = true; grown;) {
+            grown = false;
+            for (const item of backend.pages) {
+                if (item.parent_id && subtree.has(item.parent_id) && !subtree.has(item.id)) {
+                    subtree.add(item.id);
+                    grown = true;
+                }
+            }
+        }
+        for (const item of backend.pages) if (subtree.has(item.id)) item.visibility = section;
+        const intoDatabase = parent?.kind === "database";
+        const wasEntry = backend.pages.some((item) => item.id === moving.parent_id && item.kind === "database");
+        if (wasEntry && moving.parent_id !== parent?.id) {
+            backend.values = backend.values.filter((value) => value.pageId !== moving.id);
+        }
+        moving.position = intoDatabase
+            ? Math.max(
+                  0,
+                  ...backend.pages.filter((item) => item.parent_id === parent?.id).map((item) => item.position ?? 0),
+              ) + 1
+            : null;
+        moving.parent_id = parent?.id ?? null;
+        return route.fulfill({ status: 204, headers: CORS });
+    }
+
+    if (path === "/rest/v1/rpc/add_relation_property") {
+        const body = requestBody(route);
+        const [source, paired] = [crypto.randomUUID(), crypto.randomUUID()];
+        const add = (id: string, databaseId: string, name: string, target: string, other: string) =>
+            backend.properties.push({
+                id,
+                databaseId,
+                name,
+                type: "relation",
+                options: { databaseId: target, pairedPropertyId: other },
+                position: backend.properties.filter((item) => item.databaseId === databaseId).length,
+            });
+        add(source, text(body, "p_database_id"), text(body, "p_name"), text(body, "p_target_database_id"), paired);
+        add(
+            paired,
+            text(body, "p_target_database_id"),
+            text(body, "p_paired_name"),
+            text(body, "p_database_id"),
+            source,
+        );
+        return json([{ property_id: source, paired_property_id: paired }]);
+    }
+
+    if (path === "/rest/v1/rpc/save_page_document") {
+        const body = requestBody(route);
+        backend.savedDocuments.set(text(body, "p_page_id"), body.p_document);
+        return json([{ applied: true, stored_edited_at: body.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
+    }
+    if (path === "/rest/v1/rpc/get_public_page") {
+        const publicPage = backend.publicPages.get(text(requestBody(route), "p_token"));
+        return json(publicPage ? [publicPage] : []);
+    }
+
+    // Storage: upload, signed URL, download of the signed URL.
+    const upload = /^\/storage\/v1\/object\/page-files\/(.+)$/.exec(path);
+    if (upload && method === "POST") {
+        const filePath = decodeURIComponent(upload[1]);
+        if (backend.files.has(filePath)) return json({ statusCode: "409", error: "Duplicate" }, 409);
+        const raw = request.postDataBuffer() ?? Buffer.alloc(0);
+        backend.files.set(filePath, fileFromMultipart(raw, request.headers()["content-type"] ?? ""));
+        return json({ Key: `page-files/${filePath}`, Id: crypto.randomUUID() });
+    }
+    const signed = /^\/storage\/v1\/object\/sign\/page-files\/(.+)$/.exec(path);
+    if (signed) {
+        const filePath = decodeURIComponent(signed[1]);
+        const file = backend.files.get(filePath);
+        if (!file) return json({ statusCode: "404", error: "not_found", message: "Object not found" }, 400);
+        if (method === "POST") return json({ signedURL: `/object/sign/page-files/${filePath}?token=fake` });
+        return route.fulfill({ status: 200, contentType: "image/png", body: file, headers: CORS });
+    }
+
+    // Documents: the feed asks for the first blocks; a page's own text is what
+    // the test saved, else empty. The version is old: a local copy always wins.
     if (path === "/rest/v1/page_documents") {
-        return json(query.get("select")?.includes("block0") ? backend.previews : []);
+        if (query.get("select")?.includes("block0")) return json(backend.previews);
+        const saved = backend.savedDocuments.get(query.get("page_id")?.replace("eq.", "") ?? "");
+        return json(
+            saved ? [{ document: saved, client_updated_at: "2026-01-01T00:00:00Z", last_mutation_id: null }] : [],
+        );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
 

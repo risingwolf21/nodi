@@ -1,4 +1,4 @@
-import { createBackend, page as fakePage } from "./fake-supabase";
+import { createBackend, page as fakePage, taskDatabase } from "./fake-supabase";
 import { expect, openApp, test } from "./test";
 
 test("Datenbank anlegen, Einträge, Eigenschaften, Sortierung, Filter und Eintrag; offline nur lesbar", async ({
@@ -87,4 +87,66 @@ test("Datenbank anlegen, Einträge, Eigenschaften, Sortierung, Filter und Eintra
     await expect(page.getByRole("button", { name: "Neu", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Eigenschaft hinzufügen" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Zahl bearbeiten" }).first()).toBeDisabled();
+});
+
+test("Das Zahlenformat einer Eigenschaft wird im Spaltenmenü gewählt und gespeichert", async ({ page, context }) => {
+    const backend = taskDatabase({
+        properties: [{ id: "price", databaseId: "db", name: "Preis", type: "number", options: {}, position: 0 }],
+        values: [{ pageId: "e1", propertyId: "price", value: 1234.5, updatedAt: "2026-10-01T10:00:00Z" }],
+    });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    const table = page.getByRole("table");
+    await expect(table).toContainText("1.234,5");
+
+    await table.getByRole("button", { name: "Preis", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Euro (€)" }).click();
+    // Intl separates the symbol with a no-break space.
+    await expect(table).toContainText(/1\.234,50\s€/);
+    expect(backend.propertyPatches).toContainEqual({ options: { format: "euro" } });
+
+    // From the server after reloading.
+    await page.reload();
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    await expect(page.getByRole("table")).toContainText(/1\.234,50\s€/);
+});
+
+// Not UTC, so the conversion to local time shows.
+test.describe("in Berlin", () => {
+    test.use({ timezoneId: "Europe/Berlin" });
+
+    test("Ein Datum bekommt eine Uhrzeit und verliert sie wieder", async ({ page, context }) => {
+        const backend = taskDatabase({
+            properties: [{ id: "due", databaseId: "db", name: "Fällig", type: "date", options: {}, position: 0 }],
+            values: [
+                {
+                    pageId: "e1",
+                    propertyId: "due",
+                    value: { start: "2026-10-19", end: null },
+                    updatedAt: "2026-10-01T10:00:00Z",
+                },
+            ],
+        });
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+        const lastValue = () => backend.propertyCalls.at(-1)?.p_value;
+        // The browser's local time, as the app stores it.
+        const localIso = (hours: number, minutes: number) =>
+            page.evaluate(([h, m]) => new Date(2026, 9, 19, h, m).toISOString(), [hours, minutes]);
+
+        const toggle = page.getByRole("button", { name: "Uhrzeit für Fällig" }).first();
+        await expect(toggle).toHaveAttribute("aria-pressed", "false");
+        await toggle.click();
+        await expect.poll(lastValue).toEqual({ start: await localIso(9, 0), end: null });
+        const input = page.getByLabel("Fällig", { exact: true }).first();
+        await expect(input).toHaveAttribute("type", "datetime-local");
+        await expect(input).toHaveValue("2026-10-19T09:00");
+
+        await input.fill("2026-10-19T14:30");
+        await expect.poll(lastValue).toEqual({ start: await localIso(14, 30), end: null });
+
+        await toggle.click();
+        await expect.poll(lastValue).toEqual({ start: "2026-10-19", end: null });
+        await expect(input).toHaveAttribute("type", "date");
+    });
 });

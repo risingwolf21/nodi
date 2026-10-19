@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
-import { collectDescendantIds, collectRestoreIds, isDatabaseEntry, nextPosition } from "../page-hierarchy";
+import {
+    collectDescendantIds,
+    collectRestoreIds,
+    isDatabaseEntry,
+    nextPosition,
+    type MoveTarget,
+} from "../page-hierarchy";
 import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
 import type { Page, PageKind, PageSection, PageSettings, StoredPage } from "../types";
 import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
@@ -79,6 +85,8 @@ type UsePagesResult = {
     createPage: (title: string, parentId: string | null, section: PageSection, kind?: PageKind) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
+    /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
+    movePage: (pageId: string, target: MoveTarget) => Promise<void>;
     renamePage: (pageId: string, title: string) => Promise<void>;
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
@@ -99,6 +107,14 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
     // Server data shown for this workspace: a reload does not show the cache first.
     const shownFromServerFor = useRef("");
     const reloadCount = useServerReload(fromCache || error !== "");
+    // After a move the server decides what changed below the page (section, owner, position).
+    const [movesToLoad, setMovesToLoad] = useState(0);
+    // The newest pages for createPage, which may run several times before
+    // React renders again (Notion import: a database, then its entries).
+    const latestPages = useRef<Page[]>([]);
+    useEffect(() => {
+        latestPages.current = pages;
+    }, [pages]);
 
     useEffect(() => {
         let active = true;
@@ -164,7 +180,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         return () => {
             active = false;
         };
-    }, [workspaceId, userId, reloadCount]);
+    }, [workspaceId, userId, reloadCount, movesToLoad]);
 
     // While another workspace loads, its predecessor's tree is not shown.
     const showsCurrentWorkspace = shownWorkspaceId === workspaceId;
@@ -210,7 +226,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             const normalizedTitle = title.trim();
             // The server enforces it for private parents; a shared parent's
             // subpage is shared as well.
-            const parent = parentId ? pages.find((page) => page.id === parentId) : undefined;
+            const parent = parentId ? latestPages.current.find((page) => page.id === parentId) : undefined;
             const isEntry = parent?.kind === "database";
 
             if (!normalizedTitle && !isEntry) {
@@ -219,7 +235,9 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
 
             const visibility = parent ? parent.visibility : section;
             // A new entry goes to the end of its database.
-            const position = isEntry ? nextPosition(pages.filter((page) => page.parent_id === parentId)) : null;
+            const position = isEntry
+                ? nextPosition(latestPages.current.filter((page) => page.parent_id === parentId))
+                : null;
 
             const createdPage: Page = {
                 id: crypto.randomUUID(),
@@ -251,11 +269,14 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
             if (failure) throw failure;
 
-            if (!switchedSince(workspaceId)) setPages((current) => [...current, createdPage]);
+            if (!switchedSince(workspaceId)) {
+                latestPages.current = [...latestPages.current, createdPage];
+                setPages((current) => [...current, createdPage]);
+            }
 
             return createdPage;
         },
-        [userId, workspaceId, pages, requireOnline, switchedSince],
+        [userId, workspaceId, requireOnline, switchedSince],
     );
 
     const setPageSection = useCallback(
@@ -295,6 +316,49 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             setArchivedPages((current) => current.map(move));
         },
         [pages, archivedPages, userId, workspaceId, requireOnline, switchedSince],
+    );
+
+    const movePage = useCallback(
+        async (pageId: string, target: MoveTarget) => {
+            requireOnline();
+            setError("");
+
+            const response = await supabase.rpc("move_page", {
+                p_page_id: pageId,
+                p_parent_id: "parentId" in target ? target.parentId : null,
+                p_section: "section" in target ? target.section : null,
+            });
+            const failure = toRequestError(response);
+            if (failure) {
+                console.error("Seite konnte nicht verschoben werden:", failure.reason, failure.message);
+                throw new RemoteRequestError(
+                    failure.reason,
+                    failure.reason === "offline"
+                        ? OFFLINE_READ_ONLY_MESSAGE
+                        : response.error?.code === "42501"
+                          ? "Dafür fehlen dir die Rechte: Du brauchst Schreibrecht auf Seite und Ziel, und einen anderen Bereich wählt nur, wem die Seite gehört."
+                          : response.error?.code === "22023"
+                            ? "Dorthin kann die Seite nicht verschoben werden."
+                            : "Die Seite konnte nicht verschoben werden.",
+                );
+            }
+
+            if (switchedSince(workspaceId)) return;
+            // At once in the tree; the rest comes with the reload.
+            const parentId = "parentId" in target ? target.parentId : null;
+            setPages((current) => {
+                // The page takes the section of its new place.
+                const section =
+                    "section" in target ? target.section : current.find((page) => page.id === parentId)?.visibility;
+                return current.map((page) =>
+                    page.id === pageId
+                        ? { ...page, parent_id: parentId, visibility: section ?? page.visibility }
+                        : page,
+                );
+            });
+            setMovesToLoad((count) => count + 1);
+        },
+        [workspaceId, requireOnline, switchedSince],
     );
 
     const renamePage = useCallback(
@@ -467,6 +531,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         fromCache,
         createPage,
         setPageSection,
+        movePage,
         renamePage,
         updatePage,
         archivePage,
