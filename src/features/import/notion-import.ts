@@ -1,8 +1,9 @@
 import { isDocumentContent } from "@/features/editor/document-sync";
 import type { DocumentContent } from "@/features/editor/types";
-import type { NewProperty } from "@/features/databases/services/database-repository";
+import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
+import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
 import { rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
-import { cleanCell, columnValue, inferColumn, parseCsv, stripPropertyLines } from "./notion-csv";
+import { cleanCell, columnValue, inferColumn, parseCsv, stripPropertyLines, type ImportedColumn } from "./notion-csv";
 import {
     planNotionImport,
     resolveExportPath,
@@ -21,6 +22,10 @@ export type ImportDependencies = {
     markdownToBlocks(markdown: string): unknown[];
     addProperty(databaseId: string, property: NewProperty): Promise<{ id: string }>;
     setValue(pageId: string, propertyId: string, value: unknown): Promise<void>;
+    /** The views of a database; a new one has the server's "Tabelle". */
+    listViews(databaseId: string): Promise<{ id: string; position: number }[]>;
+    updateView(viewId: string, changes: ViewChanges): Promise<unknown>;
+    addView(databaseId: string, view: NewView): Promise<unknown>;
     onProgress?(progress: { done: number; total: number; title: string }): void;
     signal?: AbortSignal;
 };
@@ -124,6 +129,48 @@ export async function importNotionExport(
         }
     };
 
+    const csvHeader = (path: string) => parseCsv(decoder.decode(archive.get(path)))[0] ?? [];
+
+    /**
+     * The export has no views. The exported view's CSV shows which properties
+     * it showed; the others are hidden. A board (status or select) and a
+     * calendar (date) are added when the database has such a property.
+     */
+    const addViews = async (
+        planned: PlannedDatabase,
+        databaseId: string,
+        header: string[],
+        columns: ImportedColumn[],
+        propertyIds: string[],
+    ) => {
+        const viewHeader = planned.dataPath === planned.path ? null : csvHeader(planned.path);
+        const shown = viewHeader && new Set(viewHeader.map((name) => name.trim()));
+        const hiddenPropertyIds = shown
+            ? propertyIds.filter((_, index) => !shown.has((header[index + 1] ?? "").trim()))
+            : [];
+        const config = { ...EMPTY_VIEW_CONFIG, hiddenPropertyIds };
+
+        const [table] = await dependencies.listViews(databaseId);
+        if (table && hiddenPropertyIds.length > 0) await dependencies.updateView(table.id, { config });
+        let position = (table?.position ?? 0) + 1;
+
+        const firstOf = (type: ImportedColumn["type"]) => {
+            const index = columns.findIndex((column) => column.type === type);
+            return index === -1 ? null : propertyIds[index];
+        };
+        const groupBy = firstOf("status") ?? firstOf("select");
+        if (groupBy) {
+            const view = { ...config, groupByPropertyId: groupBy };
+            await dependencies.addView(databaseId, { name: "Board", type: "board", config: view, position });
+            position += 1;
+        }
+        const date = firstOf("date");
+        if (date) {
+            const view = { ...config, datePropertyId: date };
+            await dependencies.addView(databaseId, { name: "Kalender", type: "calendar", config: view, position });
+        }
+    };
+
     const importDatabase = async (planned: PlannedDatabase, parentId: string, report: (title: string) => void) => {
         const database = await dependencies.createPage(planned.title, parentId, "database");
         const [header = [], ...rows] = parseCsv(decoder.decode(archive.get(planned.dataPath)));
@@ -145,6 +192,7 @@ export async function importNotionExport(
             });
             propertyIds.push(property.id);
         }
+        await addViews(planned, database.id, header, columns, propertyIds);
 
         // Entry pages by title; a row takes the first one with its title.
         const entryFiles = new Map<string, string[]>();

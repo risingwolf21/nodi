@@ -339,7 +339,12 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         }
     }
     if (path === "/rest/v1/database_views") {
-        if (method === "GET") return json(backend.views);
+        if (method === "GET") {
+            const database = query.get("database_id");
+            return json(
+                database ? backend.views.filter((view) => `eq.${view.databaseId}` === database) : backend.views,
+            );
+        }
         if (method === "POST") {
             const body = requestBody(route);
             const view: FakeView = {

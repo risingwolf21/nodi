@@ -50,15 +50,32 @@ describe("inferColumn", () => {
     });
 
     it("makes choices from repeated values, in order of appearance", () => {
-        const status = inferColumn("Status", ["Erledigt", "Offen", "Erledigt", ""]);
-        expect(status.type).toBe("select");
-        expect(status.options.map((option) => [option.name, option.color])).toEqual([
+        const phase = inferColumn("Phase", ["Erledigt", "Offen", "Erledigt", ""]);
+        expect(phase.type).toBe("select");
+        expect(phase.options.map((option) => [option.name, option.color])).toEqual([
             ["Erledigt", "gray"],
             ["Offen", "brown"],
         ]);
         const tags = inferColumn("Tags", ["Arbeit, Privat", "Arbeit", ""]);
         expect(tags.type).toBe("multi_select");
         expect(tags.options.map((option) => option.name)).toEqual(["Arbeit", "Privat"]);
+    });
+
+    it("recognises status columns by name or by Notion's status values", () => {
+        const status = inferColumn("Status", ["Offen", "Erledigt"]);
+        expect(status.type).toBe("status");
+        expect(status.options.map((option) => [option.name, option.color])).toEqual([
+            ["Offen", "gray"],
+            ["Erledigt", "green"],
+        ]);
+        const progress = inferColumn("Fortschritt", ["Not started", "In progress", "Done"]);
+        expect(progress.options.map((option) => [option.name, option.color])).toEqual([
+            ["Not started", "gray"],
+            ["In progress", "blue"],
+            ["Done", "green"],
+        ]);
+        expect(progress.type).toBe("status");
+        expect(columnValue(progress, "Done")).toBe(progress.options[2].id);
     });
 
     it("reads day-first dates when a day is above 12", () => {

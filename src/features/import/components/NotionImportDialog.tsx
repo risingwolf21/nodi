@@ -66,6 +66,9 @@ export default function NotionImportDialog({ createPage, onOpen, onClose }: Noti
             markdownToBlocks,
             addProperty: (databaseId, property) => databaseRepository.addProperty(databaseId, property),
             setValue,
+            listViews: (databaseId) => databaseRepository.listViews(databaseId),
+            updateView: (viewId, changes) => databaseRepository.updateView(viewId, changes),
+            addView: (databaseId, view) => databaseRepository.addView(databaseId, view),
             signal: cancel.current.signal,
             onProgress: (progress) => setPhase({ kind: "importing", ...progress }),
         });

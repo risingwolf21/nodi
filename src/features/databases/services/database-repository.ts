@@ -169,6 +169,17 @@ export const databaseRepository = {
         requireRow(response.data);
     },
 
+    async listViews(databaseId: string): Promise<DatabaseView[]> {
+        const response = await supabase
+            .from("database_views")
+            .select(VIEW_COLUMNS)
+            .eq("database_id", databaseId)
+            .order("position");
+        const failure = databaseError(response, "Die Ansichten konnten nicht geladen werden.");
+        if (failure) throw failure;
+        return parseViews(response.data);
+    },
+
     async addView(databaseId: string, view: NewView): Promise<DatabaseView> {
         const response = await supabase
             .from("database_views")

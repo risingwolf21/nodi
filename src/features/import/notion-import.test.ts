@@ -1,7 +1,8 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 import type { DocumentContent } from "@/features/editor/types";
-import type { NewProperty } from "@/features/databases/services/database-repository";
+import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
+import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
 import { importNotionExport, IMPORT_ROOT_TITLE, type ImportDependencies } from "./notion-import";
 import { readExportArchive } from "./read-archive";
 
@@ -27,6 +28,8 @@ const exportFiles = () =>
         ],
         [`Aufgaben ${ID_C}/Bericht ${ID_D}.md`, strToU8("# Bericht\n\nStatus: Offen\nErledigt: No\n\nErster Entwurf.")],
     ]);
+
+const defaultTable: NewView = { name: "Tabelle", type: "table", config: EMPTY_VIEW_CONFIG, position: 0 };
 
 /** A tiny stand-in for BlockNote's parser: images and links per line, otherwise text. */
 function markdownToBlocks(markdown: string): unknown[] {
@@ -54,10 +57,15 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
     const uploads: string[] = [];
     const properties: (NewProperty & { databaseId: string; id: string })[] = [];
     const values: { pageId: string; property: string; value: unknown }[] = [];
+    const views: (NewView & { databaseId: string; id: string })[] = [];
     const deps: ImportDependencies = {
         createPage: vi.fn(async (title: string, parentId: string | null, kind?: "page" | "database") => {
             const page = { title, parentId, id: `p${created.length}`, ...(kind ? { kind } : {}) };
             created.push(page);
+            // The server adds the first view of a new database.
+            if (kind === "database") {
+                views.push({ databaseId: page.id, id: `view${views.length}`, ...defaultTable });
+            }
             return { id: page.id };
         }),
         addProperty: vi.fn(async (databaseId: string, property: NewProperty) => {
@@ -76,15 +84,22 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
             uploads.push(`${pageId}:${file.name}:${file.size}`);
             return `nodi-file:${pageId}/x-${file.name}`;
         }),
+        listViews: vi.fn(async (databaseId: string) => views.filter((view) => view.databaseId === databaseId)),
+        updateView: vi.fn(async (viewId: string, changes: ViewChanges) => {
+            Object.assign(views.find((view) => view.id === viewId) ?? {}, changes);
+        }),
+        addView: vi.fn(async (databaseId: string, view: NewView) => {
+            views.push({ ...view, databaseId, id: `view${views.length}` });
+        }),
         markdownToBlocks,
         ...overrides,
     };
-    return { deps, created, saved, uploads, properties, values };
+    return { deps, created, saved, uploads, properties, values, views };
 }
 
 describe("importNotionExport", () => {
     it("creates the pages and databases under a new page, with their files and values", async () => {
-        const { deps, created, saved, uploads, properties, values } = dependencies();
+        const { deps, created, saved, uploads, properties, values, views } = dependencies();
         const summary = await importNotionExport(exportFiles(), deps);
 
         expect(created).toEqual([
@@ -97,7 +112,7 @@ describe("importNotionExport", () => {
         ]);
         // All properties (_all.csv), typed from their values.
         expect(properties.map(({ name, type, position }) => [name, type, position])).toEqual([
-            ["Status", "select", 0],
+            ["Status", "status", 0],
             ["Erledigt", "checkbox", 1],
             ["Fällig", "date", 2],
         ]);
@@ -107,6 +122,13 @@ describe("importNotionExport", () => {
             { pageId: "p2", property: "Fällig", value: { start: "2026-10-19", end: null } },
             { pageId: "p3", property: "Status", value: offen },
             { pageId: "p3", property: "Erledigt", value: true },
+        ]);
+        // Notion's view (Aufgaben.csv) showed only the status; a board and a calendar are added.
+        const hidden = { ...EMPTY_VIEW_CONFIG, hiddenPropertyIds: ["prop1", "prop2"] };
+        expect(views.map(({ name, type, config, position }) => [name, type, config, position])).toEqual([
+            ["Tabelle", "table", hidden, 0],
+            ["Board", "board", { ...hidden, groupByPropertyId: "prop0" }, 1],
+            ["Kalender", "calendar", { ...hidden, datePropertyId: "prop2" }, 2],
         ]);
         // The entry's text without the repeated property lines.
         expect(saved.get("p2")).toEqual([

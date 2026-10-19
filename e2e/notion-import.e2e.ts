@@ -135,9 +135,24 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
     const database = backend.pages.find((item) => item.title === "Aufgaben");
     expect(database?.kind).toBe("database");
     expect(backend.properties.map(({ name, type }) => [name, type])).toEqual([
-        ["Status", "select"],
+        ["Status", "status"],
         ["Erledigt", "checkbox"],
         ["Fällig", "date"],
+    ]);
+    // The exported view showed only the status; board and calendar are derived.
+    const [status, done, due] = backend.properties.map((property) => property.id);
+    expect(
+        backend.views.map(({ name, type, config }) => [
+            name,
+            type,
+            config.hiddenPropertyIds,
+            config.groupByPropertyId ?? null,
+            config.datePropertyId ?? null,
+        ]),
+    ).toEqual([
+        ["Tabelle", "table", [done, due], null, null],
+        ["Board", "board", [done, due], status, null],
+        ["Kalender", "calendar", [done, due], null, due],
     ]);
     const entries = backend.pages.filter((item) => item.parent_id === database?.id);
     expect(entries.map(({ title, position }) => [title, position])).toEqual([
@@ -154,6 +169,8 @@ test("Eine Notion-Datenbank wird mit Eigenschaften, Werten und Einträgen übern
     const table = page.getByRole("table");
     await expect(table.getByRole("row")).toHaveCount(3);
     await expect(table).toContainText("Offen");
-    await expect(table.getByRole("checkbox", { name: "Erledigt" }).first()).toBeChecked();
-    await expect(table.getByLabel("Fällig").first()).toHaveValue("2026-10-19");
+    // Hidden like in Notion's view.
+    await expect(table.getByRole("columnheader", { name: "Erledigt" })).toHaveCount(0);
+    await page.getByRole("tab", { name: "Board" }).click();
+    await expect(page.getByText("Tickets", { exact: true })).toBeVisible();
 });
