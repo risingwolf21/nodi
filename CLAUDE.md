@@ -274,7 +274,7 @@ src/
                             # dialog.tsx (natives <dialog>: Escape, Fokus
                             # bleibt im Dialog und kehrt zurück; alle Modals)
     workspace/WorkspaceHome.tsx   # Layout, Navigation (History), Logout
-    workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor
+    workspace/PageView.tsx        # Pfad, Seitenmenü, Kopf, lazy BlockEditor, DatabaseView, PropertyBar
   features/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
