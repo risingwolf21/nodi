@@ -36,12 +36,7 @@ export function EditorFrame({
             </div>
             {notices}
             <div className="min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
-                <div
-                    className={cn(
-                        "mx-auto w-full pt-8 pb-32 md:pt-16",
-                        fullWidth ? "max-w-none" : "max-w-[860px]",
-                    )}
-                >
+                <div className={cn("mx-auto w-full pt-8 pb-32 md:pt-16", fullWidth ? "max-w-none" : "max-w-[860px]")}>
                     {children}
                 </div>
             </div>

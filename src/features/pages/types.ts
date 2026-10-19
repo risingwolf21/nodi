@@ -1,4 +1,3 @@
-
 /** "workspace": every member reads and edits; "private": only the owner (plus shares). */
 export type PageSection = "workspace" | "private";
 

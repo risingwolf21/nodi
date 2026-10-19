@@ -95,7 +95,9 @@ function ViewTab({
                 }}
                 className={cn(
                     "flex h-8 items-center gap-1.5 border-b-2 px-2 text-sm pointer-coarse:h-10",
-                    active ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
+                    active
+                        ? "border-foreground font-medium"
+                        : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
             >
                 <Icon className="size-3.5" aria-hidden="true" />
@@ -194,7 +196,9 @@ export function DatabaseView({
     }
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
-    const formulaProperty = data.properties.find((property) => property.id === formulaPropertyId && property.type === "formula");
+    const formulaProperty = data.properties.find(
+        (property) => property.id === formulaPropertyId && property.type === "formula",
+    );
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
@@ -398,7 +402,8 @@ export function DatabaseView({
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={
                         onCreateEntry && calendarDate
-                            ? (day) => createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
+                            ? (day) =>
+                                  createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
                             : undefined
                     }
                     onAddDateProperty={async () => {

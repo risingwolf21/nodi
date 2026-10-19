@@ -52,8 +52,7 @@ describe("LocalDocumentStore", () => {
 
     it("ignores invalid stored records", async () => {
         const request = factory.open(localDatabaseName("user-1"), 1);
-        request.onupgradeneeded = () =>
-            request.result.createObjectStore("documents", { keyPath: "pageId" });
+        request.onupgradeneeded = () => request.result.createObjectStore("documents", { keyPath: "pageId" });
         await new Promise<void>((resolve) => {
             request.onsuccess = () => {
                 const transaction = request.result.transaction("documents", "readwrite");
@@ -112,9 +111,7 @@ describe("LocalDocumentStore", () => {
         });
 
         it("keeps a newer synced copy", async () => {
-            await store.putLocalEdit(
-                localEdit({ synced: true, editedAt: "2026-10-17T12:00:00.000Z" }),
-            );
+            await store.putLocalEdit(localEdit({ synced: true, editedAt: "2026-10-17T12:00:00.000Z" }));
             const result = await store.applyRemote(pageId, remote(), true);
 
             expect(result.replaced).toBe(false);

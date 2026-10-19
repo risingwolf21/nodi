@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { ArrowUpDown, Check, Eye, EyeOff, Filter, Plus, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 import { Menu } from "@/components/ui/menu";
-import {
-    FILTER_OPERATOR_LABELS,
-    hasOptions,
-    operatorNeedsValue,
-    operatorsFor,
-} from "../database-model";
+import { FILTER_OPERATOR_LABELS, hasOptions, operatorNeedsValue, operatorsFor } from "../database-model";
 import { TITLE_FIELD, type DatabaseProperty, type FilterRule, type SortRule, type ViewConfig } from "../types";
 
 type PanelProps = {
@@ -138,9 +133,18 @@ export function FilterPanel({ config, properties, editable, onChange, onError }:
                 <Filter className="size-3.5" />
                 Filter{config.filter.length > 0 ? ` (${config.filter.length})` : ""}
             </button>
-            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Filter" className="w-[min(26rem,calc(100vw-2rem))] p-2">
+            <Menu
+                detached
+                open={open}
+                onClose={() => setOpen(false)}
+                role="dialog"
+                label="Filter"
+                className="w-[min(26rem,calc(100vw-2rem))] p-2"
+            >
                 {config.filter.length === 0 && (
-                    <p className="px-1 pb-2 text-xs text-muted-foreground">Noch keine Filter: alle Einträge werden gezeigt.</p>
+                    <p className="px-1 pb-2 text-xs text-muted-foreground">
+                        Noch keine Filter: alle Einträge werden gezeigt.
+                    </p>
                 )}
                 <ul className="space-y-1.5">
                     {config.filter.map((rule, index) => {
@@ -237,7 +241,14 @@ export function PropertiesPanel({ config, properties, editable, onChange, onErro
                 <SlidersHorizontal className="size-3.5" />
                 <span className="hidden sm:inline">Eigenschaften</span>
             </button>
-            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Eigenschaften" className="w-60 p-1">
+            <Menu
+                detached
+                open={open}
+                onClose={() => setOpen(false)}
+                role="dialog"
+                label="Eigenschaften"
+                className="w-60 p-1"
+            >
                 {properties.length === 0 && (
                     <p className="px-2 py-1 text-xs text-muted-foreground">Noch keine Eigenschaften.</p>
                 )}
@@ -286,9 +297,18 @@ export function SortPanel({ config, properties, editable, onChange, onError }: P
                 <ArrowUpDown className="size-3.5" />
                 Sortieren{config.sort.length > 0 ? ` (${config.sort.length})` : ""}
             </button>
-            <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label="Sortieren" className="w-[min(22rem,calc(100vw-2rem))] p-2">
+            <Menu
+                detached
+                open={open}
+                onClose={() => setOpen(false)}
+                role="dialog"
+                label="Sortieren"
+                className="w-[min(22rem,calc(100vw-2rem))] p-2"
+            >
                 {config.sort.length === 0 && (
-                    <p className="px-1 pb-2 text-xs text-muted-foreground">Ohne Sortierung gilt die eigene Reihenfolge.</p>
+                    <p className="px-1 pb-2 text-xs text-muted-foreground">
+                        Ohne Sortierung gilt die eigene Reihenfolge.
+                    </p>
                 )}
                 <ul className="space-y-1.5">
                     {config.sort.map((rule, index) => (
@@ -298,7 +318,11 @@ export function SortPanel({ config, properties, editable, onChange, onError }: P
                                 properties={properties}
                                 disabled={!editable}
                                 onChange={(propertyId) =>
-                                    save(config.sort.map((item, position) => (position === index ? { ...item, propertyId } : item)))
+                                    save(
+                                        config.sort.map((item, position) =>
+                                            position === index ? { ...item, propertyId } : item,
+                                        ),
+                                    )
                                 }
                             />
                             <select

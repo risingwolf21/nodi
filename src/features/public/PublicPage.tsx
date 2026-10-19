@@ -9,10 +9,7 @@ const PublicDocument = lazy(() => import("./PublicDocument"));
 
 const INVALID_LINK = "Dieser Link ist ungültig oder wurde deaktiviert.";
 
-type LoadState =
-    | { kind: "loading" }
-    | { kind: "loaded"; page: PublicPageData }
-    | { kind: "error"; message: string };
+type LoadState = { kind: "loading" } | { kind: "loaded"; page: PublicPageData } | { kind: "error"; message: string };
 
 function errorMessage(error: unknown): string {
     if (error instanceof RemoteRequestError && error.reason === "offline") {
@@ -82,9 +79,7 @@ export function PublicPage({ token }: { token: string }) {
                                     {state.page.icon}
                                 </p>
                             )}
-                            <h1 className="text-3xl font-bold leading-tight md:text-4xl">
-                                {state.page.title}
-                            </h1>
+                            <h1 className="text-3xl font-bold leading-tight md:text-4xl">{state.page.title}</h1>
                         </header>
                         <LoadErrorBoundary
                             fallback={

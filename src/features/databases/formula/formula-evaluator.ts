@@ -89,7 +89,9 @@ const UNIT_MS: Partial<Record<DateUnit, number>> = {
 function toUnit(value: FormulaValue): DateUnit {
     const unit = typeof value === "string" ? Object.entries(UNITS).find(([name]) => name === value)?.[1] : undefined;
     if (!unit) {
-        throw new FormulaError('Einheit unbekannt. Möglich: "years", "quarters", "months", "weeks", "days", "hours", "minutes".');
+        throw new FormulaError(
+            'Einheit unbekannt. Möglich: "years", "quarters", "months", "weeks", "days", "hours", "minutes".',
+        );
     }
     return unit;
 }
@@ -221,7 +223,8 @@ const FUNCTIONS: Record<string, FormulaFunction> = {
     // Plain text, not regular expressions: user input stays harmless.
     replace: {
         arity: [3, 3],
-        run: ([text, search, replacement]) => formulaText(text).replace(formulaText(search), () => formulaText(replacement)),
+        run: ([text, search, replacement]) =>
+            formulaText(text).replace(formulaText(search), () => formulaText(replacement)),
     },
     replaceAll: {
         arity: [3, 3],
@@ -239,7 +242,8 @@ const FUNCTIONS: Record<string, FormulaFunction> = {
             if (value instanceof Date) return value.getTime();
             // German or English decimals: "1,5" and "1.5".
             const text = value.trim().replace(/\s/g, "");
-            const normalized = text.includes(",") && !text.includes(".") ? text.replace(",", ".") : text.replace(/,/g, "");
+            const normalized =
+                text.includes(",") && !text.includes(".") ? text.replace(",", ".") : text.replace(/,/g, "");
             const number = Number(normalized);
             return text && Number.isFinite(number) ? number : null;
         },
@@ -289,7 +293,10 @@ const FUNCTIONS: Record<string, FormulaFunction> = {
         arity: [1, 2],
         run: ([date, pattern]) => {
             if (date === null) return null;
-            return formatDate(requireDate(date, "formatDate"), pattern === undefined ? DEFAULT_DATE_PATTERN : formulaText(pattern));
+            return formatDate(
+                requireDate(date, "formatDate"),
+                pattern === undefined ? DEFAULT_DATE_PATTERN : formulaText(pattern),
+            );
         },
     },
 };
@@ -353,8 +360,10 @@ export function evaluateFormula(node: FormulaNode, context: FormulaContext): For
             case "conditional":
                 return isTruthy(evaluate(current.condition)) ? evaluate(current.then) : evaluate(current.otherwise);
             case "binary":
-                if (current.operator === "and") return isTruthy(evaluate(current.left)) && isTruthy(evaluate(current.right));
-                if (current.operator === "or") return isTruthy(evaluate(current.left)) || isTruthy(evaluate(current.right));
+                if (current.operator === "and")
+                    return isTruthy(evaluate(current.left)) && isTruthy(evaluate(current.right));
+                if (current.operator === "or")
+                    return isTruthy(evaluate(current.left)) || isTruthy(evaluate(current.right));
                 return binary(current.operator, evaluate(current.left), evaluate(current.right));
             case "call": {
                 const fn = Object.hasOwn(FUNCTIONS, current.name) ? FUNCTIONS[current.name] : undefined;
@@ -362,7 +371,12 @@ export function evaluateFormula(node: FormulaNode, context: FormulaContext): For
                 const [least, most] = fn.arity;
                 const count = current.args.length;
                 if (count < least || count > most) {
-                    const expected = least === most ? `${least}` : most === Infinity ? `mindestens ${least}` : `${least} bis ${most}`;
+                    const expected =
+                        least === most
+                            ? `${least}`
+                            : most === Infinity
+                              ? `mindestens ${least}`
+                              : `${least} bis ${most}`;
                     throw new FormulaError(`${current.name} braucht ${expected} Angaben, nicht ${count}.`);
                 }
                 const args = fn.lazy ? [] : current.args.map(evaluate);

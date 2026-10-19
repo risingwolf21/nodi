@@ -123,7 +123,9 @@ export function PropertyValueEditor({
                 disabled={!canChange}
                 value={date?.start.slice(0, 10) ?? ""}
                 aria-label={property.name}
-                onChange={(event) => save(event.target.value ? { start: event.target.value, end: date?.end ?? null } : null)}
+                onChange={(event) =>
+                    save(event.target.value ? { start: event.target.value, end: date?.end ?? null } : null)
+                }
                 className={`${fieldClass} bg-transparent disabled:opacity-100`}
             />
         );
@@ -215,7 +217,15 @@ export function PropertyValueEditor({
                 type="button"
                 disabled={!canChange}
                 aria-label={`${property.name} bearbeiten`}
-                onClick={() => setDraft(property.type === "number" && typeof value === "number" ? String(value) : (typeof value === "string" ? value : ""))}
+                onClick={() =>
+                    setDraft(
+                        property.type === "number" && typeof value === "number"
+                            ? String(value)
+                            : typeof value === "string"
+                              ? value
+                              : "",
+                    )
+                }
                 className={`${fieldClass} min-w-0 flex-1 truncate hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent ${property.type === "number" ? "tabular-nums" : ""} ${property.type === "number" && alignNumbersRight ? "justify-end" : ""}`}
             >
                 <span className="truncate">{shown}</span>

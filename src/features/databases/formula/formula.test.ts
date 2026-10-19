@@ -101,7 +101,7 @@ describe("errors", () => {
     it("explains syntax errors with the position", () => {
         expect(failure("1 +")).toBe("Unerwartet: das Ende an Stelle 4.");
         expect(failure("(1 + 2")).toContain("„)“ erwartet");
-        expect(failure('"offen')).toContain("nicht mit \" beendet");
+        expect(failure('"offen')).toContain('nicht mit " beendet');
         expect(failure("1 = 1")).toContain("bitte == schreiben");
         expect(failure("Preis * 2")).toContain('prop("Preis")');
         expect(failure("prop(Name)")).toContain('prop("Name")');
@@ -113,7 +113,7 @@ describe("errors", () => {
         expect(failure('prop("Fehlt")')).toBe("Die Eigenschaft „Fehlt“ gibt es nicht.");
         expect(failure("wurzel(4)")).toBe("Die Funktion „wurzel“ gibt es nicht.");
         expect(failure("toString(4)")).toBe("Die Funktion „toString“ gibt es nicht.");
-        expect(failure('if(true, 1)')).toBe("if braucht 3 Angaben, nicht 2.");
+        expect(failure("if(true, 1)")).toBe("if braucht 3 Angaben, nicht 2.");
         expect(failure("1 / 0")).toBe("Division durch null.");
         expect(failure('"a" * 2')).toBe("* rechnet nur mit Zahlen, nicht mit Text.");
         expect(failure('abs("x")')).toBe("abs braucht eine Zahl, nicht Text.");

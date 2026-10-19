@@ -134,9 +134,7 @@ export function useSharedPages(
             }
 
             // Functional, so two quick changes do not undo each other.
-            setStoredPages((current) =>
-                current.map((page) => (page.id === pageId ? { ...page, ...changes } : page)),
-            );
+            setStoredPages((current) => current.map((page) => (page.id === pageId ? { ...page, ...changes } : page)));
         },
         [fromCache],
     );
@@ -152,10 +150,7 @@ export function useSharedPages(
         [update, storedPages],
     );
 
-    const updatePage = useCallback(
-        (pageId: string, settings: PageSettings) => update(pageId, settings),
-        [update],
-    );
+    const updatePage = useCallback((pageId: string, settings: PageSettings) => update(pageId, settings), [update]);
 
     return { pages, error, fromCache, renamePage, updatePage };
 }

@@ -25,11 +25,7 @@ export function publicPageToken(search: string): string | null {
 }
 
 /** Relative to the app's base path, so it works under /nodi/. */
-export function publicPageUrl(
-    token: string,
-    origin = location.origin,
-    basePath = import.meta.env.BASE_URL,
-): string {
+export function publicPageUrl(token: string, origin = location.origin, basePath = import.meta.env.BASE_URL): string {
     const url = new URL(basePath, origin);
     url.searchParams.set(PUBLIC_PAGE_PARAMETER, token);
     return url.toString();

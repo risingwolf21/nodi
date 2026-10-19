@@ -1,4 +1,3 @@
-
 import { PageTreeItem } from "./PageTreeItem";
 import type { Page } from "./types";
 
@@ -27,11 +26,7 @@ export function PageTree({
     const rootPages = pages.filter((page) => page.parent_id === null);
 
     if (rootPages.length === 0) {
-        return (
-            <p className="px-2 py-1 text-sm text-muted-foreground">
-                {emptyText}
-            </p>
-        );
+        return <p className="px-2 py-1 text-sm text-muted-foreground">{emptyText}</p>;
     }
 
     return (

@@ -14,8 +14,7 @@ export const remoteDocumentRepository: RemoteDocumentApi = {
             supabase.rpc("can_edit_page", { target_page_id: pageId }),
         ]);
 
-        const failure =
-            toRequestError(documentResponse) ?? toRequestError(permissionResponse);
+        const failure = toRequestError(documentResponse) ?? toRequestError(permissionResponse);
         if (failure) throw failure;
 
         return {

@@ -83,9 +83,7 @@ export const pageSharing = {
             p_email: email,
             p_permission: permission,
         });
-        const error = failure(response, (offline) =>
-            shareErrorMessage(response.error ?? {}, offline),
-        );
+        const error = failure(response, (offline) => shareErrorMessage(response.error ?? {}, offline));
         if (error) throw error;
     },
 
@@ -105,11 +103,7 @@ export const pageSharing = {
 
     /** Token of the page's public link, null if the page is not published. */
     async getPublicLink(pageId: string): Promise<string | null> {
-        const response = await supabase
-            .from("page_public_links")
-            .select("token")
-            .eq("page_id", pageId)
-            .maybeSingle();
+        const response = await supabase.from("page_public_links").select("token").eq("page_id", pageId).maybeSingle();
         const error = failure(response, (offline) =>
             offline
                 ? "Der öffentliche Link kann nur mit Internetverbindung geladen werden."

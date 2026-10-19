@@ -85,11 +85,7 @@ export function Sidebar({
                     onClick={() => setWorkspaceMenuOpen((open) => !open)}
                     className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-sidebar-accent/70 pointer-coarse:h-11"
                 >
-                    <img
-                        src={`${import.meta.env.BASE_URL}favicon.svg`}
-                        alt=""
-                        className="size-5 shrink-0 rounded"
-                    />
+                    <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" className="size-5 shrink-0 rounded" />
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                         {workspace?.name ?? "nodi"}
                     </span>
@@ -126,11 +122,7 @@ export function Sidebar({
                             Mitglieder
                         </MenuItem>
                     )}
-                    {accountEmail && (
-                        <p className="truncate px-2 py-1 text-xs text-muted-foreground">
-                            {accountEmail}
-                        </p>
-                    )}
+                    {accountEmail && <p className="truncate px-2 py-1 text-xs text-muted-foreground">{accountEmail}</p>}
                     <MenuItem
                         disabled={signingOut}
                         onSelect={() => {
@@ -148,8 +140,8 @@ export function Sidebar({
                 {status}
                 {readOnly && (
                     <p className="text-xs text-muted-foreground" role="status">
-                        Offline: Seitenliste nur lesbar. Anlegen, Umbenennen und
-                        Papierkorb gehen erst wieder mit Internetverbindung.
+                        Offline: Seitenliste nur lesbar. Anlegen, Umbenennen und Papierkorb gehen erst wieder mit
+                        Internetverbindung.
                     </p>
                 )}
             </div>
@@ -162,10 +154,7 @@ export function Sidebar({
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
                             <section key={section} aria-labelledby={`section-${section}`} className="mb-3">
                                 <div className="group/section flex h-7 items-center justify-between px-2">
-                                    <h2
-                                        id={`section-${section}`}
-                                        className="text-xs font-medium text-muted-foreground"
-                                    >
+                                    <h2 id={`section-${section}`} className="text-xs font-medium text-muted-foreground">
                                         {title}
                                     </h2>
                                     {!readOnly && (
@@ -247,9 +236,7 @@ export function Sidebar({
                         <Trash2 className="size-4 text-muted-foreground" />
                         {trashOpen ? "Zurück zu den Seiten" : "Papierkorb"}
                         {!trashOpen && archivedPages.length > 0 && (
-                            <span className="ml-auto text-xs text-muted-foreground">
-                                {archivedPages.length}
-                            </span>
+                            <span className="ml-auto text-xs text-muted-foreground">{archivedPages.length}</span>
                         )}
                     </button>
                 </div>

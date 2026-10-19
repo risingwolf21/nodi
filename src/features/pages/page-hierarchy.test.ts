@@ -9,24 +9,99 @@ import {
 import type { Page } from "./types";
 
 // Projekt > Kapitel > Abschnitt > Notiz, daneben Kapitel 2 unter Projekt
-const project: Page = { id: "project", title: "Projekt", parent_id: null, owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-const chapter: Page = { id: "chapter", title: "Kapitel", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-const chapterTwo: Page = { id: "chapter-2", title: "Kapitel 2", parent_id: "project", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-const section: Page = { id: "section", title: "Abschnitt", parent_id: "chapter", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-const note: Page = { id: "note", title: "Notiz", parent_id: "section", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+const project: Page = {
+    id: "project",
+    title: "Projekt",
+    parent_id: null,
+    owner_id: "u1",
+    visibility: "private",
+    icon: null,
+    full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
+};
+const chapter: Page = {
+    id: "chapter",
+    title: "Kapitel",
+    parent_id: "project",
+    owner_id: "u1",
+    visibility: "private",
+    icon: null,
+    full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
+};
+const chapterTwo: Page = {
+    id: "chapter-2",
+    title: "Kapitel 2",
+    parent_id: "project",
+    owner_id: "u1",
+    visibility: "private",
+    icon: null,
+    full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
+};
+const section: Page = {
+    id: "section",
+    title: "Abschnitt",
+    parent_id: "chapter",
+    owner_id: "u1",
+    visibility: "private",
+    icon: null,
+    full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
+};
+const note: Page = {
+    id: "note",
+    title: "Notiz",
+    parent_id: "section",
+    owner_id: "u1",
+    visibility: "private",
+    icon: null,
+    full_width: false,
+    kind: "page",
+    position: null,
+    created_at: "",
+};
 
 const allArchived = [project, chapter, chapterTwo, section, note];
 
 describe("collectDescendantIds", () => {
     it("returns the page and all of its descendants", () => {
-        expect(collectDescendantIds("chapter", allArchived).sort()).toEqual(
-            ["chapter", "note", "section"],
-        );
+        expect(collectDescendantIds("chapter", allArchived).sort()).toEqual(["chapter", "note", "section"]);
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+        const first: Page = {
+            id: "a",
+            title: "A",
+            parent_id: "b",
+            owner_id: "u1",
+            visibility: "private",
+            icon: null,
+            full_width: false,
+            kind: "page",
+            position: null,
+            created_at: "",
+        };
+        const second: Page = {
+            id: "b",
+            title: "B",
+            parent_id: "a",
+            owner_id: "u1",
+            visibility: "private",
+            icon: null,
+            full_width: false,
+            kind: "page",
+            position: null,
+            created_at: "",
+        };
 
         expect(collectDescendantIds("a", [first, second]).sort()).toEqual(["a", "b"]);
     });
@@ -47,8 +122,30 @@ describe("findArchivedAncestors", () => {
     });
 
     it("terminates on a parent cycle", () => {
-        const first: Page = { id: "a", title: "A", parent_id: "b", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
-        const second: Page = { id: "b", title: "B", parent_id: "a", owner_id: "u1", visibility: "private", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+        const first: Page = {
+            id: "a",
+            title: "A",
+            parent_id: "b",
+            owner_id: "u1",
+            visibility: "private",
+            icon: null,
+            full_width: false,
+            kind: "page",
+            position: null,
+            created_at: "",
+        };
+        const second: Page = {
+            id: "b",
+            title: "B",
+            parent_id: "a",
+            owner_id: "u1",
+            visibility: "private",
+            icon: null,
+            full_width: false,
+            kind: "page",
+            position: null,
+            created_at: "",
+        };
 
         expect(findArchivedAncestors("a", [first, second])).toEqual([second]);
     });
@@ -56,9 +153,7 @@ describe("findArchivedAncestors", () => {
 
 describe("collectRestoreIds", () => {
     it("restores the page, its descendants and its archived ancestors", () => {
-        expect(collectRestoreIds("chapter", allArchived).sort()).toEqual(
-            ["chapter", "note", "project", "section"],
-        );
+        expect(collectRestoreIds("chapter", allArchived).sort()).toEqual(["chapter", "note", "project", "section"]);
     });
 
     it("does not restore siblings of restored ancestors", () => {
@@ -66,19 +161,13 @@ describe("collectRestoreIds", () => {
     });
 
     it("restores only the subtree when the parent is active", () => {
-        expect(collectRestoreIds("section", [section, note]).sort()).toEqual(
-            ["note", "section"],
-        );
+        expect(collectRestoreIds("section", [section, note]).sort()).toEqual(["note", "section"]);
     });
 });
 
 describe("findAncestors", () => {
     it("returns the path to the root, nearest first", () => {
-        expect(findAncestors("note", allArchived).map((page) => page.id)).toEqual([
-            "section",
-            "chapter",
-            "project",
-        ]);
+        expect(findAncestors("note", allArchived).map((page) => page.id)).toEqual(["section", "chapter", "project"]);
     });
 
     it("returns nothing for a root page", () => {
@@ -87,7 +176,18 @@ describe("findAncestors", () => {
 });
 
 describe("pagesInSection", () => {
-    const shared: Page = { id: "shared", title: "Team", parent_id: null, owner_id: "u1", visibility: "workspace", icon: null, full_width: false, kind: "page", position: null, created_at: "" };
+    const shared: Page = {
+        id: "shared",
+        title: "Team",
+        parent_id: null,
+        owner_id: "u1",
+        visibility: "workspace",
+        icon: null,
+        full_width: false,
+        kind: "page",
+        position: null,
+        created_at: "",
+    };
     const sharedChild: Page = { ...shared, id: "shared-child", parent_id: "shared" };
     // An older private subpage of a shared page stays below its root
     const privateBelowShared: Page = { ...shared, id: "private-below", parent_id: "shared", visibility: "private" };
@@ -96,7 +196,11 @@ describe("pagesInSection", () => {
     const all = [shared, sharedChild, privateBelowShared, own, ownChild];
 
     it("splits the tree by the section of each root page", () => {
-        expect(pagesInSection(all, "workspace").map((page) => page.id)).toEqual(["shared", "shared-child", "private-below"]);
+        expect(pagesInSection(all, "workspace").map((page) => page.id)).toEqual([
+            "shared",
+            "shared-child",
+            "private-below",
+        ]);
         expect(pagesInSection(all, "private").map((page) => page.id)).toEqual(["own", "own-child"]);
     });
 

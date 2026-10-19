@@ -3,7 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
 import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption } from "../types";
 
-export const DATABASE_OFFLINE_MESSAGE = "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
+export const DATABASE_OFFLINE_MESSAGE =
+    "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
 
 // The columns under the app's names (PostgREST aliases), so the parsers
 // read server rows and the cache alike.
@@ -76,7 +77,11 @@ function parseWriteResult(data: unknown, mutationId: string): ValueWriteResult {
 export const databaseRepository = {
     async load(databaseId: string): Promise<DatabaseData> {
         const [properties, views, values, documents, canEdit] = await Promise.all([
-            supabase.from("database_properties").select(PROPERTY_COLUMNS).eq("database_id", databaseId).order("position"),
+            supabase
+                .from("database_properties")
+                .select(PROPERTY_COLUMNS)
+                .eq("database_id", databaseId)
+                .order("position"),
             supabase.from("database_views").select(VIEW_COLUMNS).eq("database_id", databaseId).order("position"),
             supabase
                 .from("page_property_values")
@@ -146,8 +151,7 @@ export const databaseRepository = {
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
         const { options, formula, ...rest } = changes;
         // The server keeps a formula's expression in options as well.
-        const column =
-            formula !== undefined ? { expression: formula } : options ? optionsColumn(options) : undefined;
+        const column = formula !== undefined ? { expression: formula } : options ? optionsColumn(options) : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)
@@ -209,4 +213,3 @@ export const databaseRepository = {
         return parseWriteResult(response.data, mutationId);
     },
 };
-

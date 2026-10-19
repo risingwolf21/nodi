@@ -20,10 +20,7 @@ type UseWorkspacesResult = {
 };
 
 async function fetchWorkspaces(userId: string): Promise<Workspace[]> {
-    const membershipResponse = await supabase
-        .from("workspace_members")
-        .select("workspace_id")
-        .eq("user_id", userId);
+    const membershipResponse = await supabase.from("workspace_members").select("workspace_id").eq("user_id", userId);
 
     const membershipFailure = toRequestError(membershipResponse);
     if (membershipFailure) throw membershipFailure;
@@ -67,9 +64,7 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
 
     const show = useCallback((items: Workspace[], cached: boolean) => {
         setWorkspaces(items);
-        setWorkspaceId((current) =>
-            items.some((item) => item.id === current) ? current : (items[0]?.id ?? ""),
-        );
+        setWorkspaceId((current) => (items.some((item) => item.id === current) ? current : (items[0]?.id ?? "")));
         setFromCache(cached);
     }, []);
 
@@ -127,12 +122,10 @@ export function useWorkspaces(userId: string | undefined): UseWorkspacesResult {
                 throw new Error("Keine aktive Supabase-Sitzung.");
             }
 
-            const { error: insertError } = await supabase
-                .from("workspaces")
-                .insert({
-                    name: name.trim(),
-                    owner_id: sessionUser.id,
-                });
+            const { error: insertError } = await supabase.from("workspaces").insert({
+                name: name.trim(),
+                owner_id: sessionUser.id,
+            });
 
             if (insertError) {
                 console.error("Workspace insert failed:", insertError);

@@ -18,12 +18,14 @@ describe("pageChangeError", () => {
                 "Die Seite konnte nicht erstellt werden.",
             )?.message,
         ).toBe("Dafür fehlen dir die Rechte.");
+        expect(pageChangeError({ error: { message: "Failed to fetch", code: "" }, status: 0 }, "Fehler")?.message).toBe(
+            OFFLINE_READ_ONLY_MESSAGE,
+        );
         expect(
-            pageChangeError({ error: { message: "Failed to fetch", code: "" }, status: 0 }, "Fehler")?.message,
-        ).toBe(OFFLINE_READ_ONLY_MESSAGE);
-        expect(
-            pageChangeError({ error: { message: "boom", code: "XX000" }, status: 500 }, "Die Seite konnte nicht umbenannt werden.")
-                ?.message,
+            pageChangeError(
+                { error: { message: "boom", code: "XX000" }, status: 500 },
+                "Die Seite konnte nicht umbenannt werden.",
+            )?.message,
         ).toBe("Die Seite konnte nicht umbenannt werden.");
     });
 });

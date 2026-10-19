@@ -30,7 +30,9 @@ describe("publicPageUrl", () => {
 
 describe("parsePublicPage", () => {
     it("validates a row of get_public_page", () => {
-        expect(parsePublicPage({ title: "A", icon: null, full_width: true, document: [{ type: "paragraph" }] })).toEqual({
+        expect(
+            parsePublicPage({ title: "A", icon: null, full_width: true, document: [{ type: "paragraph" }] }),
+        ).toEqual({
             title: "A",
             icon: null,
             fullWidth: true,

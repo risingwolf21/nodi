@@ -29,7 +29,28 @@ type Token =
     | { type: "end"; at: number };
 
 // Longest first, so "<=" is not read as "<" and "=".
-const SYMBOLS = ["==", "!=", "<=", ">=", "&&", "||", "+", "-", "*", "/", "%", "^", "<", ">", "!", "(", ")", ",", "?", ":"];
+const SYMBOLS = [
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "&&",
+    "||",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "^",
+    "<",
+    ">",
+    "!",
+    "(",
+    ")",
+    ",",
+    "?",
+    ":",
+];
 
 function tokenize(source: string): Token[] {
     const tokens: Token[] = [];
@@ -172,7 +193,8 @@ class Parser {
         let node = operand();
         for (;;) {
             const token = this.peek();
-            const operator = token.type === "symbol" ? operators.find((candidate) => candidate === token.value) : undefined;
+            const operator =
+                token.type === "symbol" ? operators.find((candidate) => candidate === token.value) : undefined;
             if (!operator) return node;
             this.next();
             node = { kind: "binary", operator, left: node, right: operand() };
@@ -256,7 +278,9 @@ class Parser {
         // A fixed name, so dependencies between formulas are known in advance.
         const [property] = args;
         if (args.length !== 1 || property.kind !== "string") {
-            throw new FormulaError(`prop an Stelle ${at + 1} braucht genau einen Namen in Anführungszeichen, z. B. prop("Preis").`);
+            throw new FormulaError(
+                `prop an Stelle ${at + 1} braucht genau einen Namen in Anführungszeichen, z. B. prop("Preis").`,
+            );
         }
         return { kind: "prop", name: property.value };
     }
@@ -270,4 +294,3 @@ export function parseFormula(source: string): FormulaNode {
     if (!source.trim()) throw new FormulaError(NO_FORMULA_MESSAGE);
     return new Parser(tokenize(source)).parse();
 }
-

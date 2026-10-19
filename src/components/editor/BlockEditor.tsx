@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import {
-    useCreateBlockNote,
-    useEditorChange,
-} from "@blocknote/react";
+import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
 import "@blocknote/mantine/style.css";
@@ -13,10 +10,7 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { editorTheme } from "@/components/editor/editor-theme";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
-import {
-    localDocumentStoreFor,
-    type LocalDocumentStore,
-} from "@/features/editor/services/local-document-store";
+import { localDocumentStoreFor, type LocalDocumentStore } from "@/features/editor/services/local-document-store";
 import {
     loadInitialDocument,
     PageDocumentSession,
@@ -38,15 +32,12 @@ type BlockEditorProps = FrameProps & {
     pageId: string;
 };
 
-type LoadResult =
-    | { pageId: string; initial: InitialDocument }
-    | { pageId: string; error: string };
+type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: string; error: string };
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
 
-const SUPERSEDED_NOTICE =
-    "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
+const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
 function statusText(status: SessionStatus): string {
     switch (status.kind) {
@@ -73,9 +64,7 @@ function loadErrorMessage(error: unknown): string {
     if (error instanceof RemoteRequestError && error.reason === "offline") {
         return "Diese Seite ist offline noch nicht verfügbar. Öffne sie einmal mit Internetverbindung, dann ist sie auch offline lesbar.";
     }
-    return `Das Dokument konnte nicht geladen werden: ${
-        error instanceof Error ? error.message : "Unbekannter Fehler"
-    }`;
+    return `Das Dokument konnte nicht geladen werden: ${error instanceof Error ? error.message : "Unbekannter Fehler"}`;
 }
 
 // BlockNote needs at least one block; an empty document is one paragraph.
@@ -110,10 +99,7 @@ function EditorContent({
 
     const editor = useCreateBlockNote({
         dictionary: de,
-        initialContent:
-            initial.document.content.length > 0
-                ? initial.document.content
-                : undefined,
+        initialContent: initial.document.content.length > 0 ? initial.document.content : undefined,
     });
 
     useEffect(() => {
@@ -174,10 +160,7 @@ function EditorContent({
     useEffect(() => {
         if (!showSupersededNotice) return;
 
-        const timer = setTimeout(
-            () => setShowSupersededNotice(false),
-            SUPERSEDED_NOTICE_MS,
-        );
+        const timer = setTimeout(() => setShowSupersededNotice(false), SUPERSEDED_NOTICE_MS);
         return () => clearTimeout(timer);
     }, [showSupersededNotice]);
 
@@ -251,9 +234,7 @@ export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
     const { user } = useAuth();
     const store = user ? localDocumentStoreFor(user.id) : null;
 
-    const [loadResult, setLoadResult] = useState<LoadResult | null>(
-        null,
-    );
+    const [loadResult, setLoadResult] = useState<LoadResult | null>(null);
 
     useEffect(() => {
         if (!store) return;
@@ -280,26 +261,16 @@ export default function BlockEditor({ pageId, ...frame }: BlockEditorProps) {
     // so the effect needs no synchronous reset.
     if (!user || !store || !loadResult || loadResult.pageId !== pageId) {
         return (
-            <EditorFrame
-                topBarStart={frame.topBarStart}
-                topBarEnd={frame.topBarEnd}
-                fullWidth={frame.fullWidth}
-            >
+            <EditorFrame topBarStart={frame.topBarStart} topBarEnd={frame.topBarEnd} fullWidth={frame.fullWidth}>
                 {frame.renderHeader(false)}
-                <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">
-                    Dokument wird geladen …
-                </p>
+                <p className="px-[var(--page-gutter)] text-sm text-muted-foreground">Dokument wird geladen …</p>
             </EditorFrame>
         );
     }
 
     if ("error" in loadResult) {
         return (
-            <EditorFrame
-                topBarStart={frame.topBarStart}
-                topBarEnd={frame.topBarEnd}
-                fullWidth={frame.fullWidth}
-            >
+            <EditorFrame topBarStart={frame.topBarStart} topBarEnd={frame.topBarEnd} fullWidth={frame.fullWidth}>
                 {frame.renderHeader(false)}
                 <p className="px-[var(--page-gutter)] text-sm text-destructive" role="alert">
                     {loadResult.error}

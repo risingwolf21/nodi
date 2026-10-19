@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-    compareVersions,
-    interpretSaveResult,
-    parseLocalDocument,
-    parseRemoteDocumentRow,
-} from "./document-sync";
+import { compareVersions, interpretSaveResult, parseLocalDocument, parseRemoteDocumentRow } from "./document-sync";
 
 const idA = "00000000-0000-4000-8000-00000000000a";
 const idB = "00000000-0000-4000-8000-00000000000b";
