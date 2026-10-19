@@ -1,7 +1,14 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
-import type { DatabaseData, DatabaseProperty, DatabaseView, PropertyOption, RelatedEntry } from "../types";
+import type {
+    DatabaseBlockRef,
+    DatabaseData,
+    DatabaseProperty,
+    DatabaseView,
+    PropertyOption,
+    RelatedEntry,
+} from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
     "Offline: Die Datenbank kann erst wieder mit Internetverbindung geändert werden.";
@@ -12,6 +19,15 @@ const PROPERTY_COLUMNS = "id,databaseId:database_id,name,type,options,position";
 const VIEW_COLUMNS = "id,databaseId:database_id,name,type,config,position";
 // The feed shows the start of each entry's text: only the first blocks are
 // sent, not whole documents.
+/** Views of a database block live in their own table, with the same columns. */
+const viewTable = (block: DatabaseBlockRef | undefined) => (block ? "block_views" : "database_views");
+
+/** Views of the database, or of a block that shows it (package 19c). */
+function viewsQuery(databaseId: string, block: DatabaseBlockRef | undefined) {
+    const query = supabase.from(viewTable(block)).select(VIEW_COLUMNS).eq("database_id", databaseId);
+    return (block ? query.eq("page_id", block.pageId).eq("block_id", block.blockId) : query).order("position");
+}
+
 const PREVIEW_BLOCKS = ["block0:document->0", "block1:document->1", "block2:document->2"].join(",");
 
 type Response = {
@@ -120,14 +136,14 @@ function parseWriteResult(data: unknown, mutationId: string): ValueWriteResult {
  * field). Entries are pages and loaded with the page tree.
  */
 export const databaseRepository = {
-    async load(databaseId: string): Promise<DatabaseData> {
+    async load(databaseId: string, block?: DatabaseBlockRef): Promise<DatabaseData> {
         const [properties, views, values, documents, canEdit] = await Promise.all([
             supabase
                 .from("database_properties")
                 .select(PROPERTY_COLUMNS)
                 .eq("database_id", databaseId)
                 .order("position"),
-            supabase.from("database_views").select(VIEW_COLUMNS).eq("database_id", databaseId).order("position"),
+            viewsQuery(databaseId, block),
             supabase
                 .from("page_property_values")
                 .select("pageId:page_id,propertyId:property_id,value,updatedAt:updated_at,pages!inner(parent_id)")
@@ -255,25 +271,29 @@ export const databaseRepository = {
         return parseViews(response.data);
     },
 
-    async addView(databaseId: string, view: NewView): Promise<DatabaseView> {
+    async addView(databaseId: string, view: NewView, block?: DatabaseBlockRef): Promise<DatabaseView> {
         const response = await supabase
-            .from("database_views")
-            .insert({ database_id: databaseId, ...view })
+            .from(viewTable(block))
+            .insert({
+                database_id: databaseId,
+                ...(block ? { page_id: block.pageId, block_id: block.blockId } : {}),
+                ...view,
+            })
             .select(VIEW_COLUMNS);
         const failure = databaseError(response, "Die Ansicht konnte nicht angelegt werden.");
         if (failure) throw failure;
         return requireRow(parseViews(response.data));
     },
 
-    async updateView(viewId: string, changes: ViewChanges): Promise<DatabaseView> {
-        const response = await supabase.from("database_views").update(changes).eq("id", viewId).select(VIEW_COLUMNS);
+    async updateView(viewId: string, changes: ViewChanges, block?: DatabaseBlockRef): Promise<DatabaseView> {
+        const response = await supabase.from(viewTable(block)).update(changes).eq("id", viewId).select(VIEW_COLUMNS);
         const failure = databaseError(response, "Die Ansicht konnte nicht geändert werden.");
         if (failure) throw failure;
         return requireRow(parseViews(response.data));
     },
 
-    async deleteView(viewId: string): Promise<void> {
-        const response = await supabase.from("database_views").delete().eq("id", viewId).select("id");
+    async deleteView(viewId: string, block?: DatabaseBlockRef): Promise<void> {
+        const response = await supabase.from(viewTable(block)).delete().eq("id", viewId).select("id");
         const failure = databaseError(response, "Die Ansicht konnte nicht gelöscht werden.");
         if (failure) throw failure;
         requireRow(response.data);

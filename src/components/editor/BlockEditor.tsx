@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useCreateBlockNote, useEditorChange } from "@blocknote/react";
+import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from "@blocknote/core";
+import {
+    getDefaultReactSlashMenuItems,
+    SuggestionMenuController,
+    useCreateBlockNote,
+    useEditorChange,
+} from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
+import { Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
 import { RemoteRequestError } from "@/lib/request-errors";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { editorTheme } from "@/components/editor/editor-theme";
+import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
+import { editorSchema } from "@/components/editor/editor-schema";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import { localDocumentStoreFor, type LocalDocumentStore } from "@/features/editor/services/local-document-store";
@@ -29,7 +38,12 @@ type FrameProps = {
     fullWidth: boolean;
     /** Title and icon above the content; editable only with edit rights. */
     renderHeader: (canEdit: boolean) => ReactNode;
+    /** What "Datenbank" blocks need from the app (package 19c). */
+    databaseBlocks: DatabaseBlockApp;
 };
+
+/** The part of a database block's context that does not come from the editor. */
+export type DatabaseBlockApp = Omit<DatabaseBlockContextValue, "pageId" | "userId" | "canEditPage">;
 
 type BlockEditorProps = FrameProps & {
     pageId: string;
@@ -96,6 +110,7 @@ function EditorContent({
     topBarEnd,
     fullWidth,
     renderHeader,
+    databaseBlocks,
 }: FrameProps & {
     userId: string;
     pageId: string;
@@ -113,6 +128,7 @@ function EditorContent({
     const applyingRemoteContent = useRef(false);
 
     const editor = useCreateBlockNote({
+        schema: editorSchema,
         dictionary,
         initialContent: initial.document.content.length > 0 ? initial.document.content : undefined,
         uploadFile: (file) => uploadPageFile(pageId, file),
@@ -187,6 +203,13 @@ function EditorContent({
         session.current?.recordEdit(editor.document);
     }, editor);
 
+    const databaseBlockContext: DatabaseBlockContextValue = {
+        ...databaseBlocks,
+        pageId,
+        userId,
+        canEditPage: canEdit !== false && !databaseBlocks.readOnly,
+    };
+
     const canRetry = status.kind === "error" || status.kind === "loadFailed" || status.kind === "unsynced";
     const isFailure = status.kind === "error" || status.kind === "loadFailed";
 
@@ -239,11 +262,38 @@ function EditorContent({
             }
         >
             {renderHeader(canEdit !== false)}
-            <BlockNoteView
-                editor={editor}
-                theme={{ light: editorTheme, dark: editorTheme }}
-                editable={canEdit !== false}
-            />
+            <DatabaseBlockContext value={databaseBlockContext}>
+                <BlockNoteView
+                    editor={editor}
+                    theme={{ light: editorTheme, dark: editorTheme }}
+                    editable={canEdit !== false}
+                    slashMenu={false}
+                >
+                    <SuggestionMenuController
+                        triggerCharacter="/"
+                        getItems={(query) =>
+                            Promise.resolve(
+                                filterSuggestionItems(
+                                    [
+                                        ...getDefaultReactSlashMenuItems(editor),
+                                        {
+                                            title: "Datenbank",
+                                            subtext: "Ansicht einer bestehenden Datenbank",
+                                            aliases: ["datenbank", "database", "tabelle", "ansicht", "view"],
+                                            group: "Datenbanken",
+                                            icon: <Table2 size={18} />,
+                                            onItemClick: () => {
+                                                insertOrUpdateBlockForSlashMenu(editor, { type: "database" });
+                                            },
+                                        },
+                                    ],
+                                    query,
+                                ),
+                            )
+                        }
+                    />
+                </BlockNoteView>
+            </DatabaseBlockContext>
         </EditorFrame>
     );
 }
