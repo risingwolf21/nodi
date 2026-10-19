@@ -82,7 +82,13 @@ type UsePagesResult = {
     fromCache: boolean;
     /** A subpage takes the section of its parent; `section` is for root pages. */
     /** Below a database the page is an entry; it may have an empty title. */
-    createPage: (title: string, parentId: string | null, section: PageSection, kind?: PageKind) => Promise<Page>;
+    createPage: (
+        title: string,
+        parentId: string | null,
+        section: PageSection,
+        kind?: PageKind,
+        id?: string,
+    ) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
@@ -217,6 +223,8 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             parentId: string | null,
             section: PageSection,
             kind: PageKind = "page",
+            // Known before the page exists, e.g. for links to it (Notion import).
+            id: string = crypto.randomUUID(),
         ): Promise<Page> => {
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
@@ -240,7 +248,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 : null;
 
             const createdPage: Page = {
-                id: crypto.randomUUID(),
+                id,
                 title: normalizedTitle,
                 parent_id: parentId,
                 owner_id: userId,

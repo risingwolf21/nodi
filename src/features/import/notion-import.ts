@@ -2,6 +2,7 @@ import { isDocumentContent } from "@/features/editor/document-sync";
 import type { DocumentContent } from "@/features/editor/types";
 import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
 import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
+import type { DatabaseBlockRef, DatabaseView } from "@/features/databases/types";
 import { rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
 import {
     cleanCell,
@@ -23,8 +24,13 @@ import {
 export const IMPORT_ROOT_TITLE = "Notion-Import";
 
 export type ImportDependencies = {
-    /** A private page in the current workspace; the parent is a page of this import. */
-    createPage(title: string, parentId: string | null, kind?: "page" | "database"): Promise<{ id: string }>;
+    /** A private page in the current workspace; the parent is a page of this import. `id`: given in advance. */
+    createPage(
+        title: string,
+        parentId: string | null,
+        kind?: "page" | "database",
+        id?: string,
+    ): Promise<{ id: string }>;
     saveDocument(pageId: string, content: DocumentContent): Promise<void>;
     uploadFile(pageId: string, file: File): Promise<string>;
     markdownToBlocks(markdown: string): unknown[];
@@ -38,9 +44,10 @@ export type ImportDependencies = {
         pairedName: string,
     ): Promise<{ propertyId: string }>;
     /** The views of a database; a new one has the server's "Tabelle". */
-    listViews(databaseId: string): Promise<{ id: string; position: number }[]>;
+    listViews(databaseId: string): Promise<Pick<DatabaseView, "id" | "name" | "type" | "config" | "position">[]>;
     updateView(viewId: string, changes: ViewChanges): Promise<unknown>;
-    addView(databaseId: string, view: NewView): Promise<unknown>;
+    /** With `block`: a view of a "Datenbank" block in a page (package 19c). */
+    addView(databaseId: string, view: NewView, block?: DatabaseBlockRef): Promise<unknown>;
     onProgress?(progress: { done: number; total: number; title: string }): void;
     signal?: AbortSignal;
 };
@@ -114,6 +121,18 @@ export async function importNotionExport(
     }
     const plan = planNotionImport(markdown, archive.keys());
 
+    // Pages link the databases shown in them; their ids are fixed in advance,
+    // as a page's text is saved before the databases below it exist.
+    const databaseIds = new Map<string, string>();
+    for (const item of plan.items) {
+        if (item.kind !== "database") continue;
+        const id = crypto.randomUUID();
+        databaseIds.set(item.path, id);
+        databaseIds.set(item.dataPath, id);
+    }
+    // "Datenbank" blocks made from those links; they get the database's views at the end.
+    const databaseBlocks: (DatabaseBlockRef & { databaseId: string })[] = [];
+
     const summary: ImportSummary = {
         rootPageId: null,
         pages: 0,
@@ -143,7 +162,7 @@ export async function importNotionExport(
             if (!target) return { kind: "web" };
             const lower = target.toLowerCase();
             if (lower.endsWith(".md")) return { kind: "page" };
-            if (lower.endsWith(".csv")) return { kind: "database" };
+            if (lower.endsWith(".csv")) return { kind: "database", databaseId: databaseIds.get(target) ?? null };
             return archive.has(target) ? { kind: "file", path: target } : { kind: "missing", path: target };
         };
         const upload = async (filePath: string): Promise<UploadResult> => {
@@ -158,6 +177,7 @@ export async function importNotionExport(
         };
 
         const result = await rewriteImportedBlocks(dependencies.markdownToBlocks(body), classify, upload);
+        databaseBlocks.push(...result.databaseBlocks.map((block) => ({ ...block, pageId })));
         summary.files += result.files;
         summary.problems.push(...result.problems.map((problem) => `${title}: ${problem}`));
         if (result.blocks.length > 0 && isDocumentContent(result.blocks)) {
@@ -271,7 +291,12 @@ export async function importNotionExport(
     };
 
     const importDatabase = async (planned: PlannedDatabase, parentId: string, report: (title: string) => void) => {
-        const database = await dependencies.createPage(planned.title, parentId, "database");
+        const database = await dependencies.createPage(
+            planned.title,
+            parentId,
+            "database",
+            databaseIds.get(planned.path),
+        );
         const [header = [], ...rows] = parseCsv(decoder.decode(archive.get(planned.dataPath)));
 
         // The first column is the title; the others become properties.
@@ -356,6 +381,23 @@ export async function importNotionExport(
         }
     };
 
+    /** A database in a page shows the views of the database, as in Notion (they can be changed per block). */
+    const copyViewsToBlocks = async () => {
+        const imported = new Set([...importedDatabases.values()].map((database) => database.id));
+        for (const block of databaseBlocks) {
+            // Not imported (stopped early): the block says the database is not available.
+            if (!imported.has(block.databaseId)) continue;
+            for (const view of await dependencies.listViews(block.databaseId)) {
+                const { name, type, config, position } = view;
+                await dependencies.addView(
+                    block.databaseId,
+                    { name, type, config, position },
+                    { pageId: block.pageId, blockId: block.blockId },
+                );
+            }
+        }
+    };
+
     try {
         const root = await dependencies.createPage(IMPORT_ROOT_TITLE, null);
         summary.rootPageId = root.id;
@@ -390,6 +432,7 @@ export async function importNotionExport(
 
         if (relationColumns.length > 0) dependencies.onProgress?.({ done: total, total, title: "Verknüpfungen" });
         await importRelations();
+        await copyViewsToBlocks();
         dependencies.onProgress?.({ done: total, total, title: "" });
         await dependencies.saveDocument(root.id, rootDocument(summary));
     } catch (error) {

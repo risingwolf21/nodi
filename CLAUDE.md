@@ -1861,6 +1861,23 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         dem Update-Hinweis aktualisieren.
       - Tests: Playwright `database-block.e2e.ts` (Fake `block_views`);
         zusätzlich gegen die lokale Supabase geprüft.
+    - **Umsetzung 19d** (nur Frontend, keine Migration):
+      - Der Import vergibt die IDs der Datenbanken vorab
+        (`createPage(…, id)`): Der Text einer Seite wird gespeichert, bevor
+        die Datenbanken darunter angelegt sind.
+      - Ein Absatz, der nur aus einem Link auf eine importierte Datenbank
+        besteht (`….csv`), wird zum Block „Datenbank“ (feste Block-ID).
+        Links auf nicht importierte Datenbanken bleiben Text wie bisher.
+      - Am Ende bekommt jeder solche Block eine Kopie der Ansichten seiner
+        Datenbank (Tabelle mit ausgeblendeten Spalten, Board, Kalender) in
+        `block_views`; danach lassen sie sich je Block ändern.
+      - Wird der Import vorher abgebrochen, zeigt ein Block auf eine nicht
+        angelegte Datenbank den Hinweis „nicht verfügbar“.
+      - Bestehende Importe werden nicht umgebaut (Entscheidung des
+        Nutzers: neu importieren).
+      - Tests: Vitest (`import-blocks.test.ts`, `notion-import.test.ts`),
+        Playwright `notion-import.e2e.ts`; zusätzlich ein Export mit
+        Datenbank in einer Seite gegen die lokale Supabase importiert.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

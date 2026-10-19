@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { DocumentContent } from "@/features/editor/types";
 import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
 import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
+import type { DatabaseBlockRef } from "@/features/databases/types";
 import { importNotionExport, IMPORT_ROOT_TITLE, type ImportDependencies } from "./notion-import";
 import { readExportArchive } from "./read-archive";
 
@@ -57,12 +58,12 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
     const uploads: string[] = [];
     const properties: (NewProperty & { databaseId: string; id: string })[] = [];
     const values: { pageId: string; property: string; value: unknown }[] = [];
-    const views: (NewView & { databaseId: string; id: string })[] = [];
+    const views: (NewView & { databaseId: string; id: string; block?: DatabaseBlockRef })[] = [];
     const relations: { id: string; databaseId: string; name: string; targetDatabaseId: string; pairedName: string }[] =
         [];
     const deps: ImportDependencies = {
-        createPage: vi.fn(async (title: string, parentId: string | null, kind?: "page" | "database") => {
-            const page = { title, parentId, id: `p${created.length}`, ...(kind ? { kind } : {}) };
+        createPage: vi.fn(async (title: string, parentId: string | null, kind?: "page" | "database", id?: string) => {
+            const page = { title, parentId, id: id ?? `p${created.length}`, ...(kind ? { kind } : {}) };
             created.push(page);
             // The server adds the first view of a new database.
             if (kind === "database") {
@@ -90,8 +91,8 @@ function dependencies(overrides: Partial<ImportDependencies> = {}) {
         updateView: vi.fn(async (viewId: string, changes: ViewChanges) => {
             Object.assign(views.find((view) => view.id === viewId) ?? {}, changes);
         }),
-        addView: vi.fn(async (databaseId: string, view: NewView) => {
-            views.push({ ...view, databaseId, id: `view${views.length}` });
+        addView: vi.fn(async (databaseId: string, view: NewView, block?: DatabaseBlockRef) => {
+            views.push({ ...view, databaseId, id: `view${views.length}`, ...(block ? { block } : {}) });
         }),
         addRelation: vi.fn(async (databaseId: string, name: string, targetDatabaseId: string, pairedName: string) => {
             const id = `relation${relations.length}`;
@@ -110,11 +111,13 @@ describe("importNotionExport", () => {
         const { deps, created, saved, uploads, properties, values, views } = dependencies();
         const summary = await importNotionExport(exportFiles(), deps);
 
+        // A database's id is given in advance (pages link it before it exists).
+        const database = created[1].id;
         expect(created).toEqual([
             { title: IMPORT_ROOT_TITLE, parentId: null, id: "p0" },
-            { title: "Aufgaben", parentId: "p0", id: "p1", kind: "database" },
-            { title: "Bericht", parentId: "p1", id: "p2" },
-            { title: "Angebot", parentId: "p1", id: "p3" },
+            { title: "Aufgaben", parentId: "p0", id: database, kind: "database" },
+            { title: "Bericht", parentId: database, id: "p2" },
+            { title: "Angebot", parentId: database, id: "p3" },
             { title: "Reise", parentId: "p0", id: "p4" },
             { title: "Tag 1", parentId: "p4", id: "p5" },
         ]);
@@ -162,6 +165,38 @@ describe("importNotionExport", () => {
             error: null,
             cancelled: false,
         });
+    });
+
+    it("shows a database linked in a page as a database block with the database's views", async () => {
+        const project = `Projekt ${ID_A}`;
+        const archive = new Map<string, Uint8Array>([
+            [
+                `${project}.md`,
+                strToU8(`# Projekt\n\nVorher\n\n[Aufgaben](${encodeURIComponent(project)}/Aufgaben%20${ID_C}.csv)`),
+            ],
+            [`${project}/Aufgaben ${ID_C}.csv`, strToU8("Name,Status\nBericht,Erledigt")],
+            [`${project}/Aufgaben ${ID_C}/Bericht ${ID_D}.md`, strToU8("# Bericht")],
+        ]);
+        const { deps, created, saved, views } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id ?? "";
+        expect(created.find((page) => page.title === "Aufgaben")).toMatchObject({ parentId: id("Projekt") });
+        const document = saved.get(id("Projekt")) ?? [];
+        expect(document.map((block) => block.type)).toEqual(["paragraph", "database"]);
+        const block = document[1];
+        expect(block).toMatchObject({ type: "database", props: { databaseId: id("Aufgaben") } });
+        // The block shows the database's views (a table and a board for the status), stored for the block.
+        const ownViews = views.filter((view) => !view.block).map(({ name, type, config }) => [name, type, config]);
+        expect(views.filter((view) => view.block).map(({ name, type, config }) => [name, type, config])).toEqual(
+            ownViews,
+        );
+        expect(ownViews.map(([name]) => name)).toEqual(["Tabelle", "Board"]);
+        expect(views.find((view) => view.block)).toMatchObject({
+            databaseId: id("Aufgaben"),
+            block: { pageId: id("Projekt"), blockId: block.id },
+        });
+        expect(summary.problems).toEqual([]);
     });
 
     it("stops at the first failure and keeps what was imported", async () => {
