@@ -162,6 +162,8 @@ haben kann.
   so).
 - Seit Paket 14e: `leaflet` `1.9.4` (dependency, nur in der
   nachgeladenen Karte) und `@types/leaflet` (devDependency).
+- Seit Paket 16a: `fflate` (dependency, ZIP lesen beim Notion-Import,
+  nur im nachgeladenen Import-Dialog).
 
 Versionsnummern vor Installation oder Upgrade erneut prüfen. Keine
 größeren Versionsupdates durchführen, nur um eine PWA einzurichten.
@@ -319,6 +321,13 @@ src/
       services/page-files.ts        # Storage: hochladen, signierte URL
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
+    import/                 # Paket 16a
+      read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
+      notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
+      import-blocks.ts      # Links/Dateien in BlockNote-Blöcken umschreiben (Vitest)
+      notion-import.ts      # Ablauf: Seiten anlegen, Dateien hochladen, speichern (Vitest)
+      markdown-to-blocks.ts # BlockNote-Markdown-Parser ohne Ansicht
+      components/NotionImportDialog.tsx # nachgeladen; Auswahl, Fortschritt, Ergebnis
     pages/
       PageTree.tsx
       PageTreeItem.tsx      # kompakte Zeile: Pfeil, Emoji, Aktionen
@@ -1516,6 +1525,45 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
       Anhänge kommen in den Datei-Speicher (Paket 15). (4) Alles landet
       unter einer neuen privaten Seite „Notion-Import“ im aktuellen
       Workspace.
+    - **Umsetzung 16a** (nur Frontend, keine Migration;
+      `src/features/import/`):
+      - Workspace-Menü → „Aus Notion importieren“ (nur online und mit
+        Workspace). Der Dialog ist nachgeladen (fflate und der
+        Markdown-Parser nur bei Bedarf).
+      - ZIP im Browser lesen: höchstens 1 GB, Teil-ZIPs großer Exporte
+        (`…-Part-N.zip`) werden zusammengeführt, `__MACOSX`/`.DS_Store`
+        übersprungen, Pfade NFC (macOS schreibt zerlegte Umlaute).
+      - Seitenbaum: jede `Titel <32hex>.md` ist eine Seite; Unterseiten
+        liegen im gleichnamigen Ordner, Elternseite ist der nächste
+        Ordner mit passender `.md`. Reihenfolge der Geschwister wie die
+        Links in der Elternseite, sonst nach Titel. Titel aus der ersten
+        Überschrift `# …`, sonst aus dem Dateinamen ohne ID.
+      - Inhalt per BlockNote `tryParseMarkdownToBlocks`, dann
+        umgeschrieben: Bilder und Anhänge des Exports werden in den
+        Ordner der Seite hochgeladen (`uploadPageFile`, 10 MB) und als
+        `nodi-file:`-Verweis gespeichert; ein Absatz, der nur aus einem
+        Link auf eine Datei besteht, wird Bild- bzw. Datei-Block (ohne
+        Inline-Inhalt, sonst lehnt BlockNote das Dokument ab). Links auf
+        andere Seiten und Datenbanken werden Text, Web-Links bleiben.
+        Fehlende oder zu große Dateien stehen als kursiver Hinweis im
+        Text und in der Liste der Hinweise.
+      - Gespeichert wird per `save_page_document` (wie die Sync-Engine),
+        Seiten per `createPage` (privat). Der Import läuft Seite für
+        Seite, „Nach dieser Seite anhalten“ bricht ab; bei einem Fehler
+        stoppt er, Importiertes bleibt. Die Seite „Notion-Import“
+        enthält Datum, Seitenzahl und die noch nicht übernommenen
+        Datenbanken.
+      - Datenbanken (`.csv` und ihre Eintrags-Ordner) werden in 16a nur
+        genannt, nicht importiert (16b).
+      - Tests: Vitest (`notion-export`, `import-blocks`, `notion-import`
+        mit fflate-ZIPs), Playwright `notion-import.e2e.ts` (das
+        Fake-Backend liefert gespeicherte Dokumente jetzt zurück);
+        zusätzlich gegen die lokale Supabase geprüft (Baum, Dateien im
+        Bucket, Seite öffnet mit Bild und Anhang).
+      - Noch nicht: Notion-Callouts werden normale Absätze (Emoji
+        bleibt), Spalten und eingebettete Inhalte nur als Text, Links
+        auf importierte Seiten springen nicht zur Seite; kein Import
+        in den Bereich „Workspace“.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

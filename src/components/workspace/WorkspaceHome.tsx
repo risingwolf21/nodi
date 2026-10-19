@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,12 @@ import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
+import { Dialog } from "@/components/ui/dialog";
+import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
+
+// Loaded on demand: it brings the ZIP reader and BlockNote's Markdown parser.
+const NotionImportDialog = lazy(() => import("@/features/import/components/NotionImportDialog"));
 
 const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
@@ -87,6 +92,7 @@ export default function WorkspaceHome() {
     const [sharingPage, setSharingPage] = useState<Page | null>(null);
     const [movingPage, setMovingPage] = useState<{ page: Page; target: PageSection } | null>(null);
     const [membersOpen, setMembersOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
     const readOnly = workspacesFromCache || pagesFromCache;
@@ -253,6 +259,7 @@ export default function WorkspaceHome() {
                             onSelect={(id) => openPage(id)}
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
+                            onImportNotion={() => setImportOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
@@ -352,6 +359,28 @@ export default function WorkspaceHome() {
                         cleanUpRevokedCopies(user.id);
                     }}
                 />
+            )}
+
+            {importOpen && (
+                <LoadErrorBoundary
+                    fallback={
+                        <Dialog labelledBy="import-load-error" onClose={() => setImportOpen(false)}>
+                            <h2 id="import-load-error" className="sr-only">
+                                Import
+                            </h2>
+                            <LoadErrorNotice message="Der Import konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                        </Dialog>
+                    }
+                >
+                    <Suspense fallback={null}>
+                        <NotionImportDialog
+                            // Imported pages are private (decision of the user, CLAUDE.md §12 P16).
+                            createPage={(title, parentId) => createWorkspacePage(title, parentId, "private")}
+                            onOpen={(pageId) => openPage(pageId)}
+                            onClose={() => setImportOpen(false)}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
             )}
 
             {sharingPage && user && (
