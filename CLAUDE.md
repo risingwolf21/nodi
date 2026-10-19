@@ -381,13 +381,14 @@ supabase/
                             # Mitglieder und Bereiche (P12a),
                             # Seitenbaum/Teilen gehärtet (P13a),
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
-                            # Formeln (P14f), Datei-Speicher (P15a)
+                            # Formeln (P14f), Datei-Speicher (P15a),
+                            # Verknüpfungen (P17d)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
                             # Mitglieder und Bereiche (P12a), Härtung (P13a),
                             # Datenbanken (P14a), Orte (P14e), Formeln (P14f),
-                            # Dateien (P15a)
+                            # Dateien (P15a), Verknüpfungen (P17d)
 ```
 
 Die tatsächliche Dateistruktur vor neuen Dateien erneut untersuchen.
@@ -1672,6 +1673,36 @@ stored_mutation_id)`: LWW je Feld wie `save_page_document`
         Mitternacht.
       - Import: Notions Uhrzeiten (ohne Zeitzone) gelten als Ortszeit des
         Geräts und werden als Zeitstempel gespeichert.
+    - **Umsetzung 17d** (`20261019150000_relation_property.sql`):
+      - Eigenschaftstyp `relation`; `options` =
+        `{databaseId, pairedPropertyId}`. Jede Verknüpfung hat eine
+        Gegenseite in der Ziel-Datenbank; beide legt nur die RPC
+        `add_relation_property(database, name, target, paired_name)` →
+        `(property_id, paired_property_id)` an (Schreibrecht auf beide
+        Datenbanken, gleicher Workspace; `42501`, `22023`, `22004`).
+        Ziel kann dieselbe Datenbank sein (zwei Eigenschaften).
+      - Trigger `protect_relation_properties`: API-Clients legen keine
+        Verknüpfung direkt an (`42501`), ändern weder Typ von/zu
+        `relation` (`22023`) noch `options` (`42501`); umbenennen und
+        verschieben geht. Löschen entfernt die Gegenseite mit und
+        braucht Schreibrecht auf beide Datenbanken (`42501`); wird eine
+        Datenbank gelöscht, verschwinden die Gegenseiten ihrer
+        Verknüpfungen.
+      - Wert: JSON-Array von Eintrags-IDs der Ziel-Datenbank (höchstens
+        100, Duplikate entfernt, Reihenfolge bleibt; leer = JSON `null`).
+        `set_page_property` (Signatur unverändert) ruft für Verknüpfungen
+        `set_relation_value`: LWW für das eigene Feld; die Gegenseite
+        ändert sich als Menge (Eintrag hinzu/weg) und ihre
+        Bearbeitungszeit rückt vor, damit ein älteres Überschreiben dort
+        die Verknüpfung nicht einseitig aufhebt. Sperren auf die
+        betroffenen Seiten in fester Reihenfolge. Hinzufügen oder
+        Entfernen braucht Schreibrecht auf jeden betroffenen Eintrag
+        (`42501`).
+      - IDs später endgültig gelöschter Einträge bleiben in den Arrays;
+        die App übergeht sie.
+      - pgTAP: `database_relations.test.sql`.
+      - App-Versionen ab 14e lassen den unbekannten Typ aus; die
+        Oberfläche folgt in 17e.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
