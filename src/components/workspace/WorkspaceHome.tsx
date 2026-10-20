@@ -325,6 +325,11 @@ export default function WorkspaceHome() {
                                 )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
+                                onCreateSubpage={
+                                    sharedPage
+                                        ? undefined
+                                        : (parentId, kind) => void createPage(parentId, page.visibility, kind)
+                                }
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                                 knownPages={knownPages}

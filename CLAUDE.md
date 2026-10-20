@@ -345,6 +345,7 @@ src/
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
+      components/SubpageList.tsx       # Unterseiten eines Datenbank-Eintrags (23)
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -390,7 +391,8 @@ supabase/
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
                             # Verknüpfungen (P17d), Verschieben (P18a),
-                            # Ansichten je Block (P19b)
+                            # Ansichten je Block (P19b), Einträge mit
+                            # Unterseiten (P23)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2031,6 +2033,28 @@ nicht gewünscht.
     Unterseiten und Datenbanken (Seitenleiste, Eintrag, Verschieben;
     `move_page` erlaubt dann Seiten mit Unterseiten als Eintrag). Import
     übernimmt sie statt sie zu überspringen.
+    - **Annahme:** Einträge bleiben aus der Seitenleiste heraus (14b), ebenso
+      alles unter ihnen; ihre Unterseiten stehen im Eintrag (wie Notion sie im
+      Text zeigt). Der Pfad oben führt zurück.
+    - **Umsetzung 23** (`20261020090000_entries_with_subpages.sql`):
+      - `move_page` ohne die Regel „Seite mit Unterseiten wird kein Eintrag“
+        (sonst unverändert). Unterseiten und Datenbanken unter Einträgen
+        erlaubte der Server schon (Insert mit `can_edit_page(parent_id)`).
+        pgTAP: `entry_subpages.test.sql`, in `move_page.test.sql` entfällt
+        die alte Prüfung.
+      - `withoutDatabaseEntries` lässt Einträge **und alles darunter** aus
+        dem Baum (vorher wären Unterseiten von Einträgen als oberste Seiten
+        erschienen); `moveProblem` ohne die alte Regel.
+      - Ein Eintrag zeigt unter der Eigenschaftsleiste `SubpageList`:
+        Unterseiten und Datenbanken (Klick öffnet) und „+ Unterseite“ /
+        „+ Datenbank“ (nur mit Schreibrecht, online, eigener Workspace).
+      - Import: Eine `.md` direkt im Ordner einer Datenbank ist ein Eintrag;
+        alles tiefer (Seiten, Datenbanken, deren Einträge) wird mit dem
+        Eintrag als Elternseite übernommen, nach der Datenbank. Der Hinweis
+        „… nicht übernommen“ entfällt. Echter Export: 3 Datenbanken und 18
+        Einträge mehr, keine Fehler.
+      - Tests: Vitest (`page-hierarchy`, `notion-export`, `notion-import`),
+        Playwright `entry-subpages.e2e.ts`.
 24. **Rollups:** Eigenschaftstyp „Rollup“ (Verknüpfung, Eigenschaft der
     Ziel-Datenbank, Funktion: Anzahl, Summe, Durchschnitt, Min/Max,
     Anzeigen …), berechnet in der App wie Formeln. Import: Rollup- und

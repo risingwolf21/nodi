@@ -6,6 +6,7 @@ import {
     findArchivedAncestors,
     moveProblem,
     pagesInSection,
+    withoutDatabaseEntries,
 } from "./page-hierarchy";
 import type { Page } from "./types";
 
@@ -214,6 +215,21 @@ describe("pagesInSection", () => {
     });
 });
 
+describe("withoutDatabaseEntries", () => {
+    it("leaves out entries and everything below them, but not the database", () => {
+        const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
+        const pages = [
+            page("tasks", { kind: "database" }),
+            page("entry", { parent_id: "tasks" }),
+            page("sub", { parent_id: "entry" }),
+            page("costs", { parent_id: "sub", kind: "database" }),
+            page("notes"),
+            page("ideas", { parent_id: "notes" }),
+        ];
+        expect(withoutDatabaseEntries(pages).map((item) => item.id)).toEqual(["tasks", "notes", "ideas"]);
+    });
+});
+
 describe("moveProblem", () => {
     const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
     const notes = page("notes");
@@ -229,13 +245,14 @@ describe("moveProblem", () => {
         expect(moveProblem(ideas, { parentId: "tasks" }, pages, "u1")).toBeNull();
         expect(moveProblem(ideas, { section: "private" }, pages, "u1")).toBeNull();
         expect(moveProblem(tasks, { parentId: "notes" }, pages, "u1")).toBeNull();
+        // Entries have subpages (package 23).
+        expect(moveProblem(notes, { parentId: "tasks" }, pages, "u1")).toBeNull();
     });
 
     it("rejects what the server rejects", () => {
         expect(moveProblem(notes, { parentId: "ideas" }, pages, "u1")).toContain("in sich selbst");
         expect(moveProblem(notes, { parentId: "notes" }, pages, "u1")).toContain("in sich selbst");
         expect(moveProblem(contacts, { parentId: "tasks" }, pages, "u1")).toContain("Datenbank");
-        expect(moveProblem(notes, { parentId: "tasks" }, pages, "u1")).toContain("Unterseiten");
         expect(moveProblem(ideas, { parentId: "notes" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
         expect(moveProblem(notes, { section: "private" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
         expect(moveProblem(ideas, { parentId: "gone" }, pages, "u1")).toContain("gibt es nicht mehr");
