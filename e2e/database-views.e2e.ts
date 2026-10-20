@@ -33,7 +33,8 @@ test.describe("Board, Liste und Galerie", () => {
         await page.getByRole("menuitem", { name: "Board" }).click();
         const column = (name: string) => page.getByRole("region", { name, exact: true });
 
-        await expect(page.locator("section[aria-label]")).toHaveCount(4);
+        // The board's columns; the page's comments are a section too.
+        await expect(page.locator('section[aria-label]:not([aria-label="Kommentare"])')).toHaveCount(4);
         await expect(page.getByRole("button", { name: "Gruppieren" })).toHaveText("Gruppieren: Status");
         await expect(column("Ohne Status").getByRole("button", { name: /Angebot/ })).toBeVisible();
 

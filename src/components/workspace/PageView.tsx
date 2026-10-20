@@ -3,6 +3,7 @@ import { Check, ChevronLeft, FileText, MoreHorizontal, Star, Table2 } from "luci
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { PageComments } from "@/features/comments/components/PageComments";
 import { Backlinks } from "@/features/pages/components/Backlinks";
 import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
@@ -287,6 +288,7 @@ export function PageView({
                     }
                 />
             )}
+            <PageComments pageId={page.id} userId={userId} online={!readOnly} canComment={canEdit && !readOnly} />
         </>
     );
 
