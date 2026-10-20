@@ -10,6 +10,7 @@ import {
     Link,
     List,
     MapPin,
+    SearchCheck,
     Sigma,
     Tags,
     Type,
@@ -29,6 +30,7 @@ const ICONS = {
     place: MapPin,
     formula: Sigma,
     relation: ArrowUpRight,
+    rollup: SearchCheck,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

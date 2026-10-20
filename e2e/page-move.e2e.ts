@@ -53,13 +53,9 @@ test("Ziehen in der Seitenleiste verschiebt eine Seite; in eine Datenbank wird s
     context,
 }) => {
     const backend = tree();
+    backend.pages.push(fakePage("p3", "Anhang", { parent_id: "p1", visibility: "workspace" }));
     await openApp(page, context, backend);
     const item = (title: string) => page.getByRole("button", { name: title, exact: true });
-
-    // A page with subpages cannot become an entry: nothing happens.
-    await item("Projekt").dragTo(item("Aufgaben"));
-    await item("Kapitel").dragTo(item("Projekt"));
-    expect(backend.pages.find((entry) => entry.id === "p1")?.parent_id).toBeNull();
 
     // Within the workspace: onto the section title.
     await item("Kapitel").dragTo(page.getByRole("heading", { name: "Workspace" }));
@@ -73,4 +69,14 @@ test("Ziehen in der Seitenleiste verschiebt eine Seite; in eine Datenbank wird s
         .poll(() => backend.pages.find((entry) => entry.id === "p2"))
         .toMatchObject({ parent_id: "db", position: 2, visibility: "private" });
     await expect(item("Kapitel")).toBeHidden();
+
+    // A page with subpages becomes an entry as well (package 23); its subpages go with it.
+    await item("Projekt").dragTo(item("Aufgaben"));
+    await page
+        .getByRole("dialog", { name: "„Projekt“ verschieben nach …" })
+        .getByRole("button", { name: "Verschieben", exact: true })
+        .click();
+    await expect.poll(() => backend.pages.find((entry) => entry.id === "p1")?.parent_id).toBe("db");
+    await expect(item("Projekt")).toBeHidden();
+    await expect(item("Anhang")).toBeHidden();
 });

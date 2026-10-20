@@ -336,6 +336,80 @@ describe("importNotionExport", () => {
         expect(summary.problems).toEqual([]);
     });
 
+    it("takes relations, rollups and formulas of newer exports from the entry pages", async () => {
+        const PLANS = "5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b";
+        const workout = (title: string, id: string) =>
+            `${title} (../Workouts/${encodeURIComponent(`${title} ${id}`)}.md)`;
+        const archive = new Map<string, Uint8Array>([
+            [`Workouts ${ID_A}_all.csv`, strToU8("Name,Tag\nOberkörper,Montag\nBeine,Dienstag\n")],
+            [`Workouts/Oberkörper ${ID_B}.md`, strToU8("# Oberkörper\n\nTag: Montag")],
+            [`Workouts/Beine ${ID_C}.md`, strToU8("# Beine\n\nTag: Dienstag")],
+            // The CSV has no relation and no rollup; the pages do.
+            [`Übungen ${PLANS}_all.csv`, strToU8("Name,Sätze\nKniebeuge,3\nRudern,4\n")],
+            [
+                `Übungen/Kniebeuge ${ID_D}.md`,
+                strToU8(
+                    `# Kniebeuge\n\nSätze: 3\nWorkout: ${workout("Beine", ID_C)}\nVolumen: 175\n\nFazit: gut\n\nTief gehen.`,
+                ),
+            ],
+            [
+                `Übungen/Rudern ${ID_A.slice(0, 31)}e.md`,
+                strToU8(`# Rudern\n\nSätze: 4\nWorkout: ${workout("Oberkörper", ID_B)}\nVolumen: 80.5`),
+            ],
+        ]);
+        const { deps, created, properties, relations, values, saved } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id;
+        expect(properties.map(({ name, type }) => [name, type])).toEqual([
+            // "Übungen" comes first (by title); its relation is made after all databases.
+            ["Sätze", "number"],
+            ["Volumen", "number"],
+            ["Tag", "text"],
+            ["Workout", "relation"],
+        ]);
+        expect(relations).toMatchObject([
+            { databaseId: id("Übungen"), name: "Workout", targetDatabaseId: id("Workouts"), pairedName: "Übungen" },
+        ]);
+        expect(values.filter((value) => value.property !== "Tag")).toEqual([
+            { pageId: id("Kniebeuge"), property: "Sätze", value: 3 },
+            { pageId: id("Kniebeuge"), property: "Volumen", value: 175 },
+            { pageId: id("Rudern"), property: "Sätze", value: 4 },
+            { pageId: id("Rudern"), property: "Volumen", value: 80.5 },
+            { pageId: id("Kniebeuge"), property: "Workout", value: [id("Beine")] },
+            { pageId: id("Rudern"), property: "Workout", value: [id("Oberkörper")] },
+        ]);
+        // The property lines are values now; "Fazit: gut" below the blank line is text.
+        expect(saved.get(id("Kniebeuge") ?? "")).toMatchObject([
+            { content: [{ text: "Fazit: gut" }] },
+            { content: [{ text: "Tief gehen." }] },
+        ]);
+        expect(summary.problems).toEqual([]);
+    });
+
+    it("imports the subpages and databases of entries below them", async () => {
+        const archive = new Map<string, Uint8Array>([
+            [`Aufgaben ${ID_A}_all.csv`, strToU8("Name\nBericht\n")],
+            [`Aufgaben/Bericht ${ID_B}.md`, strToU8(`# Bericht\n\n[Entwurf](Bericht/Entwurf%20${ID_C}.md)`)],
+            [`Aufgaben/Bericht/Entwurf ${ID_C}.md`, strToU8("# Entwurf\n\nErster Teil.")],
+            [`Aufgaben/Bericht/Kosten ${ID_D}_all.csv`, strToU8("Name\nHotel\n")],
+        ]);
+        const { deps, created, saved } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id;
+        expect(created.map(({ title, parentId }) => [title, parentId])).toEqual([
+            [IMPORT_ROOT_TITLE, null],
+            ["Aufgaben", id(IMPORT_ROOT_TITLE)],
+            ["Bericht", id("Aufgaben")],
+            ["Entwurf", id("Bericht")],
+            ["Kosten", id("Bericht")],
+            ["Hotel", id("Kosten")],
+        ]);
+        expect(saved.get(id("Entwurf") ?? "")).toMatchObject([{ content: [{ text: "Erster Teil." }] }]);
+        expect(summary).toMatchObject({ pages: 1, databases: 2, entries: 2, problems: [], error: null });
+    });
+
     it("explains an archive without pages", async () => {
         const { deps } = dependencies();
         const summary = await importNotionExport(new Map([["foto.png", new Uint8Array([1])]]), deps);

@@ -1,4 +1,4 @@
-/** Property types of the server (packages 14a, 14e, 14f, 17d); formula and the last two are computed. */
+/** Property types of the server (packages 14a, 14e, 14f, 17d, 24); formula, rollup and the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -12,6 +12,7 @@ export type PropertyType =
     | "place"
     | "formula"
     | "relation"
+    | "rollup"
     | "created_time"
     | "last_edited_time";
 
@@ -42,6 +43,38 @@ export type RelationSettings = {
     entries: RelatedEntry[];
 };
 
+/** What a rollup computes from the related entries (package 24, Notion's functions). */
+export type RollupFunction =
+    | "show_original"
+    | "count_all"
+    | "count_values"
+    | "count_unique"
+    | "count_empty"
+    | "count_not_empty"
+    | "percent_empty"
+    | "percent_not_empty"
+    | "sum"
+    | "average"
+    | "median"
+    | "min"
+    | "max"
+    | "range"
+    | "earliest"
+    | "latest"
+    | "checked"
+    | "unchecked"
+    | "percent_checked";
+
+/** A rollup reads a property of the entries a relation links (server: options). */
+export type RollupSettings = {
+    relationPropertyId: string;
+    /** A property of the related database, or `TITLE_FIELD`. */
+    targetPropertyId: string;
+    function: RollupFunction;
+    /** Loaded with the database: the target property (null: the title) and its stored values per entry. */
+    target?: { property: DatabaseProperty | null; values: Record<string, unknown> };
+};
+
 export type DatabaseProperty = {
     id: string;
     databaseId: string;
@@ -55,6 +88,8 @@ export type DatabaseProperty = {
     numberFormat?: NumberFormat;
     /** Relation properties: the related database (server: options.databaseId, options.pairedPropertyId). */
     relation?: RelationSettings;
+    /** Rollup properties (server: options.relationPropertyId, …). */
+    rollup?: RollupSettings;
     position: number;
 };
 

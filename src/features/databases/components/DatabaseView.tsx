@@ -22,6 +22,7 @@ import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
 import { FormulaEditor } from "./FormulaEditor";
+import { RollupEditor } from "./RollupEditor";
 import { GalleryView } from "./GalleryView";
 import { ListView } from "./ListView";
 import { MapView } from "./MapView";
@@ -168,7 +169,7 @@ export function DatabaseView({
     const [activeViewId, setActiveViewId] = useState("");
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
-    const [formulaPropertyId, setFormulaPropertyId] = useState("");
+    const [editedPropertyId, setEditedPropertyId] = useState("");
     const [addViewOpen, setAddViewOpen] = useState(false);
 
     const views = useMemo(() => [...(data?.views ?? [])].sort((a, b) => a.position - b.position), [data]);
@@ -206,7 +207,10 @@ export function DatabaseView({
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
     const formulaProperty = data.properties.find(
-        (property) => property.id === formulaPropertyId && property.type === "formula",
+        (property) => property.id === editedPropertyId && property.type === "formula",
+    );
+    const rollupProperty = data.properties.find(
+        (property) => property.id === editedPropertyId && property.type === "rollup",
     );
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
@@ -443,10 +447,10 @@ export function DatabaseView({
                     onAddRelation={(target) => addRelation(target, database.title)}
                     onAddProperty={async (type) => {
                         const property = await addProperty(type);
-                        // A new formula needs its expression first.
-                        if (type === "formula") setFormulaPropertyId(property.id);
+                        // A new formula needs its expression first, a rollup its settings.
+                        if (type === "formula" || type === "rollup") setEditedPropertyId(property.id);
                     }}
-                    onEditFormula={setFormulaPropertyId}
+                    onEditFormula={setEditedPropertyId}
                     onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
                     onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
                     onChangePropertyType={(propertyId, type) =>
@@ -470,8 +474,16 @@ export function DatabaseView({
                     property={formulaProperty}
                     data={data}
                     sample={rows[0]?.page ?? entries[0]}
-                    onClose={() => setFormulaPropertyId("")}
+                    onClose={() => setEditedPropertyId("")}
                     onSave={(formula) => updateProperty(formulaProperty.id, { formula })}
+                />
+            )}
+            {rollupProperty && (
+                <RollupEditor
+                    property={rollupProperty}
+                    properties={data.properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(rollup) => updateProperty(rollupProperty.id, { rollup })}
                 />
             )}
 

@@ -84,6 +84,10 @@ export type FakeBackend = {
     savedDocuments: Map<string, unknown>;
     /** Pages behind a public link, by token. */
     publicPages: Map<string, { title: string; icon: string | null; full_width: boolean; document: unknown[] }>;
+    /** Rules of recurring entries (package 25), as the app stored them. */
+    recurrences: Record<string, unknown>[];
+    /** Workspaces create_due_recurring_entries was called for, oldest first. */
+    recurrenceRuns: string[];
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -128,6 +132,8 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         files: new Map(),
         savedDocuments: new Map(),
         publicPages: new Map(),
+        recurrences: [],
+        recurrenceRuns: [],
         ...initial,
     };
 }
@@ -570,6 +576,33 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
+    if (path === "/rest/v1/rpc/create_due_recurring_entries") {
+        backend.recurrenceRuns.push(text(requestBody(route), "p_workspace_id"));
+        return json(0);
+    }
+    if (path === "/rest/v1/entry_recurrences") {
+        const pageId = query.get("page_id")?.replace("eq.", "");
+        // The server's names, aliased like the app asks for them; the next day is the start here.
+        const shown = (row: Record<string, unknown>) => ({
+            pageId: row.page_id,
+            frequency: row.frequency,
+            interval: row.interval,
+            weekdays: row.weekdays,
+            startDate: row.start_date,
+            nextDate: row.start_date,
+            datePropertyId: row.date_property_id,
+        });
+        if (method === "GET") return json(backend.recurrences.filter((row) => row.page_id === pageId).map(shown));
+        if (method === "POST") {
+            const body = requestBody(route);
+            backend.recurrences = [...backend.recurrences.filter((row) => row.page_id !== body.page_id), body];
+            return json([shown(body)], 201);
+        }
+        if (method === "DELETE") {
+            backend.recurrences = backend.recurrences.filter((row) => row.page_id !== pageId);
+            return json([]);
+        }
+    }
 
     return json([]);
 }

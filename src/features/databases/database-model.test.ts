@@ -479,6 +479,89 @@ describe("relations", () => {
     });
 });
 
+describe("rollups", () => {
+    const hours: DatabaseProperty = {
+        id: "hours",
+        databaseId: "other",
+        name: "Stunden",
+        type: "number",
+        options: [],
+        position: 0,
+        numberFormat: "euro",
+    };
+    const tasks: DatabaseProperty = {
+        id: "tasks",
+        databaseId: "db",
+        name: "Aufgaben",
+        type: "relation",
+        options: [],
+        position: 5,
+        relation: {
+            databaseId: "other",
+            pairedPropertyId: "back",
+            entries: [
+                { id: "t1", title: "Entwurf", icon: null },
+                { id: "t2", title: "Texte", icon: null },
+                { id: "t3", title: "Bilder", icon: null },
+            ],
+        },
+    };
+    const rollup = (fn: "sum" | "count_all" | "show_original" | "percent_not_empty", targetPropertyId = "hours") =>
+        ({
+            id: `r-${fn}`,
+            databaseId: "db",
+            name: fn,
+            type: "rollup",
+            options: [],
+            position: 6,
+            rollup: {
+                relationPropertyId: "tasks",
+                targetPropertyId,
+                function: fn,
+                target: { property: targetPropertyId === TITLE_FIELD ? null : hours, values: { t1: 2.5, t3: 4 } },
+            },
+        }) satisfies DatabaseProperty;
+
+    it("computes from the related entries' values, in the target's format", () => {
+        const properties = [
+            tasks,
+            rollup("sum"),
+            rollup("count_all"),
+            rollup("show_original", TITLE_FIELD),
+            rollup("percent_not_empty"),
+        ];
+        const [row, empty] = buildRows(entries.slice(0, 2), {
+            ...data,
+            properties,
+            // "gone" is not readable: it does not count.
+            values: [{ pageId: "a", propertyId: "tasks", value: ["t1", "t2", "t3", "gone"], updatedAt: "" }],
+        });
+        expect(row.values["r-sum"]).toBe(6.5);
+        expect(formatValue(properties[1], 6.5)).toBe("6,50\u00a0€");
+        expect(row.values["r-count_all"]).toBe(3);
+        expect(row.values["r-show_original"]).toBe("Entwurf, Texte, Bilder");
+        expect(formatValue(properties[4], row.values["r-percent_not_empty"])).toBe("66,7\u00a0%");
+        // Without related entries.
+        expect([empty.values["r-sum"], empty.values["r-count_all"], empty.values["r-show_original"]]).toEqual([
+            0,
+            0,
+            null,
+        ]);
+    });
+
+    it("reads its settings from the server and, with the target, from the cache", () => {
+        const options = { relationPropertyId: "tasks", targetPropertyId: "hours", function: "sum" };
+        const [fromServer] = parseProperties([{ id: "r", databaseId: "db", name: "R", type: "rollup", options }]);
+        expect(fromServer.rollup).toEqual(options);
+        const cached = rollup("sum");
+        expect(parseProperties([{ ...cached }])[0].rollup).toEqual(cached.rollup);
+        // Not set up yet: no settings, still a property.
+        const [unset] = parseProperties([{ id: "n", databaseId: "db", name: "N", type: "rollup", options: {} }]);
+        expect(unset.rollup).toBeUndefined();
+        expect(buildRows(entries.slice(0, 1), { ...data, properties: [unset] })[0].values.n).toBeNull();
+    });
+});
+
 describe("dates with a time", () => {
     const at = (hours: number, minutes = 0) => new Date(2026, 9, 19, hours, minutes).toISOString();
 
@@ -542,7 +625,7 @@ describe("parsing", () => {
 
     it("rejects broken server rows, but leaves out types of a newer app version", () => {
         expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
-        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "rollup" }])).toEqual([]);
+        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "button" }])).toEqual([]);
         expect(parseViews([{ id: "v", databaseId: "db", name: "Zeitleiste", type: "timeline" }])).toEqual([]);
     });
 

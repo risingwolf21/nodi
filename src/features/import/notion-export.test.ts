@@ -12,6 +12,8 @@ const ID_A = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d";
 const ID_B = "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e";
 const ID_C = "3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f";
 const ID_D = "4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a";
+const ID_E = "5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b";
+const ID_F = "6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c";
 
 describe("paths and titles", () => {
     it("removes Notion ids and extensions", () => {
@@ -56,10 +58,9 @@ describe("planNotionImport", () => {
             ["Tag 1", "Reise"],
             ["Notizen", "Tag 1"],
         ]);
-        expect(plan.skippedInEntries).toBe(0);
     });
 
-    it("places databases in the tree, with their entries and all properties", () => {
+    it("places databases in the tree, with their entries, all properties and the entries' subpages", () => {
         const files = new Map([
             [
                 `Projekte ${ID_A}.md`,
@@ -67,15 +68,16 @@ describe("planNotionImport", () => {
             ],
             [`Projekte ${ID_A}/Notizen ${ID_D}.md`, "# Notizen"],
             [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}.md`, "# Bericht\n\nStatus: Erledigt"],
-            // Entries have no subpages in Nodi.
-            [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Anhang ${ID_D}.md`, "# Anhang"],
+            // An entry's subpages and databases (package 23).
+            [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Anhang ${ID_E}.md`, "# Anhang"],
         ]);
         const plan = planNotionImport(files, [
             ...files.keys(),
             `Projekte ${ID_A}/Aufgaben ${ID_B}.csv`,
             `Projekte ${ID_A}/Aufgaben ${ID_B}_all.csv`,
-            `Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Tabelle ${ID_D}.csv`,
+            `Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}/Tabelle ${ID_F}.csv`,
         ]);
+        const report = `Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}`;
         expect(plan.items).toEqual([
             { kind: "page", path: `Projekte ${ID_A}.md`, title: "Projekte", parentPath: null },
             {
@@ -84,7 +86,16 @@ describe("planNotionImport", () => {
                 dataPath: `Projekte ${ID_A}/Aufgaben ${ID_B}_all.csv`,
                 title: "Aufgaben",
                 parentPath: `Projekte ${ID_A}.md`,
-                entryPaths: [`Projekte ${ID_A}/Aufgaben ${ID_B}/Bericht ${ID_C}.md`],
+                entryPaths: [`${report}.md`],
+            },
+            { kind: "page", path: `${report}/Anhang ${ID_E}.md`, title: "Anhang", parentPath: `${report}.md` },
+            {
+                kind: "database",
+                path: `${report}/Tabelle ${ID_F}.csv`,
+                dataPath: `${report}/Tabelle ${ID_F}.csv`,
+                title: "Tabelle",
+                parentPath: `${report}.md`,
+                entryPaths: [],
             },
             {
                 kind: "page",
@@ -93,7 +104,6 @@ describe("planNotionImport", () => {
                 parentPath: `Projekte ${ID_A}.md`,
             },
         ]);
-        expect(plan.skippedInEntries).toBe(2);
     });
 
     it("attaches pages in plain folders (e.g. the export folder) to the nearest page or the top", () => {
@@ -156,6 +166,22 @@ describe("planNotionImport", () => {
         expect(plan.databaseCopies).toEqual(
             new Map([[`Untitled ${ID_B.slice(0, 4)}-${ID_B.slice(-4)}_all.csv`, `Projekte/Aufgaben ${ID_B}.csv`]]),
         );
+    });
+
+    it("orders by links whose targets keep parentheses", () => {
+        const files = new Map([
+            [
+                `Ordner ${ID_A}.md`,
+                `# Ordner\n\n[Zweite](Ordner/Zweite%20(2)%20${ID_C}.md)\n\n[Erste](Ordner/Erste%20${ID_B}.md)`,
+            ],
+            [`Ordner/Erste ${ID_B}.md`, "# Erste"],
+            [`Ordner/Zweite (2) ${ID_C}.md`, "# Zweite (2)"],
+        ]);
+        expect(planNotionImport(files, files.keys()).items.map((item) => item.title)).toEqual([
+            "Ordner",
+            "Zweite (2)",
+            "Erste",
+        ]);
     });
 
     it("gives siblings with the same title the subpages they link", () => {

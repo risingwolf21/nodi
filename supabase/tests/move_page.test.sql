@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(26);
+select plan(25);
 
 -- Owner O and member M of workspace W; X with workspace W2.
 insert into auth.users (id, email, email_confirmed_at) values
@@ -153,22 +153,18 @@ select results_eq(
   'Its subpage is shared as well'
 );
 
--- 17-19: into a database (an entry at the end), not with subpages, not a database
+-- 17-19: into a database (an entry at the end), not a database (with subpages: entry_subpages.test.sql)
 select lives_ok(
   $$select public.move_page('50000000-0000-4000-8000-000000000003', 'd0000000-0000-4000-8000-000000000001', null)$$,
   'A page moves into a database'
 );
 select is(pg_temp.page('50000000-0000-4000-8000-000000000003'), 'Aufgaben workspace 4', 'It is the last entry');
 select throws_ok(
-  $$select public.move_page('50000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', null)$$,
-  '22023', null, 'A page with subpages does not become an entry'
-);
-select throws_ok(
   $$select public.move_page('d0000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', null)$$,
   '22023', null, 'A database does not become an entry'
 );
 
--- 21-24: an entry leaves its database: its values go, its relations are unlinked
+-- 20-23: an entry leaves its database: its values go, its relations are unlinked
 select lives_ok(
   $$select public.move_page('e0000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000001', null)$$,
   'An entry moves out of its database'

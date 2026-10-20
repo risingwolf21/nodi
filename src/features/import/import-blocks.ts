@@ -156,3 +156,48 @@ export async function rewriteImportedBlocks(
 
     return { blocks: await rewriteAll(blocks), files, problems, databaseBlocks };
 }
+
+const ASIDE = /<aside>([\s\S]*?)<\/aside>/g;
+// An emoji at the start of a callout's text is its icon ("💡 Tipp").
+const LEADING_EMOJI = /^(\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*)\s*/u;
+
+const isOnlyLink = (content: unknown[]) =>
+    content.filter((item) => !(isObject(item) && item.type === "text" && String(item.text).trim() === "")).length ===
+        1 && content.some((item) => isObject(item) && item.type === "link");
+
+/** A callout from the blocks inside an `<aside>`: the first paragraph is its text, the rest is nested. */
+function callout(inner: unknown[]): JsonObject {
+    const [first, ...rest] = inner;
+    // A link on its own stays a block (it may become a database or a file).
+    if (!isObject(first) || first.type !== "paragraph" || !Array.isArray(first.content) || isOnlyLink(first.content)) {
+        return { type: "callout", props: {}, content: [], children: inner };
+    }
+    const content = [...first.content];
+    const props: JsonObject = {};
+    const [head] = content;
+    const emoji = isObject(head) && head.type === "text" ? LEADING_EMOJI.exec(String(head.text)) : null;
+    if (emoji && isObject(head)) {
+        props.emoji = emoji[1];
+        const text = String(head.text).slice(emoji[0].length);
+        if (text) content[0] = { ...head, text };
+        else content.shift();
+    }
+    const children = Array.isArray(first.children) ? first.children : [];
+    return { type: "callout", props, content, children: [...children, ...rest] };
+}
+
+/** Parses an exported page; Notion's callouts (`<aside>…</aside>`) become callout blocks (package 22). */
+export function markdownToImportedBlocks(
+    markdown: string,
+    markdownToBlocks: (markdown: string) => unknown[],
+): unknown[] {
+    const parse = (part: string) => (part.trim() ? markdownToBlocks(part) : []);
+    const blocks: unknown[] = [];
+    let end = 0;
+    for (const match of markdown.matchAll(ASIDE)) {
+        blocks.push(...parse(markdown.slice(end, match.index)), callout(parse(match[1])));
+        end = match.index + match[0].length;
+    }
+    blocks.push(...parse(markdown.slice(end)));
+    return blocks;
+}

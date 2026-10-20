@@ -271,7 +271,8 @@ src/
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
-    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c)
+    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c) + „Callout“ (22)
+    editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
@@ -305,6 +306,8 @@ src/
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
+      rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
+      recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
@@ -344,6 +347,7 @@ src/
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
+      components/SubpageList.tsx       # Unterseiten eines Datenbank-Eintrags (23)
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -389,7 +393,9 @@ supabase/
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
                             # Verknüpfungen (P17d), Verschieben (P18a),
-                            # Ansichten je Block (P19b)
+                            # Ansichten je Block (P19b), Einträge mit
+                            # Unterseiten (P23), Rollups (P24),
+                            # wiederkehrende Einträge (P25)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -1985,19 +1991,144 @@ nicht gewünscht.
         Repository): 20 Seiten, 20 Datenbanken, 374 Einträge, 63
         Datenbank-Blöcke, keine Fehler. Tests: Vitest (`notion-export`,
         `notion-import`), Playwright „Ein neuerer Notion-Export …“.
+    - **Umsetzung 21b** (nur Frontend, keine Migration):
+      - `readPropertyLines`: die Zeilen „Name: Wert“ direkt unter dem Titel
+        eines Eintrags (bis zur ersten anderen Zeile). Namen, die die CSV
+        nicht hat, werden Eigenschaften, wenn sie in mindestens zwei
+        Einträgen stehen oder neben einer CSV-Eigenschaft (sonst könnte es
+        Text sein, „Fazit: gut“). Der CSV-Wert hat Vorrang; Einträge ohne
+        CSV-Zeile bekommen alle Werte ihrer Seite.
+      - Diese Werte laufen durch dieselbe Typerkennung wie CSV-Spalten.
+        Links auf Einträge **einer** Datenbank werden Verknüpfungen
+        (aufgelöst vom Ordner der Eintragsseite); Rollup- und Formelwerte
+        werden feste Zahlen, Texte usw. Ein Rollup, das verknüpfte Seiten
+        zeigt, sieht aus wie eine Verknüpfung und wird eine.
+      - Daten: Zeitzone aus „(GMT+2)“/„(GMT-5:30)“ wird berücksichtigt
+        (ohne Zone: Ortszeit des Geräts); ein Zeitraum, dessen Ende nur eine
+        Uhrzeit ist („… 7:20 (GMT+2) → 16:00“), endet am selben Tag.
+      - Links und Relationszellen, deren Pfad Klammern enthält
+        („Notizen%20(2)%20….md“), werden erkannt.
+      - Titel mit führendem Zeilenumbruch: schon durch `trim` abgedeckt.
+      - Echter Export (nur lokal): 113 Eigenschaften (vorher 74), davon 15
+        Verknüpfungen, 1747 Werte (vorher 1041), keine Fehler.
 22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
     „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
+    - **Umsetzung 22** (nur Frontend, keine Migration):
+      - Block `callout` in `editor-schema.tsx`: Inline-Text, Props `emoji`
+        (Standard 💡) und `color` (BlockNotes Farbnamen, Standard grau;
+        `components/editor/callout.ts`). Verschachtelte Blöcke (Tab) stehen
+        mit im farbigen Kasten (`.nodi-callout`-Regeln in `index.css` per
+        `:has`, hell und dunkel).
+      - Klick auf das Emoji (nur mit Schreibrecht): Emoji-Auswahl (dieselbe
+        Liste wie Seiten-Icons, jetzt `features/pages/page-icons.ts`) und
+        Hintergrund. Slash-Menü „/Callout“ (auch „hinweis“, „info“).
+      - Öffentliche Ansicht: dasselbe Schema, Emoji nicht klickbar.
+      - Import: `markdownToImportedBlocks` macht aus `<aside>…</aside>`
+        einen Callout; der erste Absatz ist sein Text (ein führendes Emoji
+        wird das Icon), der Rest wird verschachtelt. Steht am Anfang nur
+        ein Link (Datenbank, Datei), bleibt er ein eigener Block im Callout.
+      - Achtung: App-Versionen vor 22 kennen den Block nicht und können
+        Seiten mit Callout nicht öffnen (wie 19c); installierte Apps nach
+        dem Update-Hinweis aktualisieren.
+      - Tests: Vitest `import-blocks.test.ts`, Playwright `callout.e2e.ts`
+        und „Notion-Callouts werden Callout-Blöcke“.
 23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
     Unterseiten und Datenbanken (Seitenleiste, Eintrag, Verschieben;
     `move_page` erlaubt dann Seiten mit Unterseiten als Eintrag). Import
     übernimmt sie statt sie zu überspringen.
+    - **Annahme:** Einträge bleiben aus der Seitenleiste heraus (14b), ebenso
+      alles unter ihnen; ihre Unterseiten stehen im Eintrag (wie Notion sie im
+      Text zeigt). Der Pfad oben führt zurück.
+    - **Umsetzung 23** (`20261020090000_entries_with_subpages.sql`):
+      - `move_page` ohne die Regel „Seite mit Unterseiten wird kein Eintrag“
+        (sonst unverändert). Unterseiten und Datenbanken unter Einträgen
+        erlaubte der Server schon (Insert mit `can_edit_page(parent_id)`).
+        pgTAP: `entry_subpages.test.sql`, in `move_page.test.sql` entfällt
+        die alte Prüfung.
+      - `withoutDatabaseEntries` lässt Einträge **und alles darunter** aus
+        dem Baum (vorher wären Unterseiten von Einträgen als oberste Seiten
+        erschienen); `moveProblem` ohne die alte Regel.
+      - Ein Eintrag zeigt unter der Eigenschaftsleiste `SubpageList`:
+        Unterseiten und Datenbanken (Klick öffnet) und „+ Unterseite“ /
+        „+ Datenbank“ (nur mit Schreibrecht, online, eigener Workspace).
+      - Import: Eine `.md` direkt im Ordner einer Datenbank ist ein Eintrag;
+        alles tiefer (Seiten, Datenbanken, deren Einträge) wird mit dem
+        Eintrag als Elternseite übernommen, nach der Datenbank. Der Hinweis
+        „… nicht übernommen“ entfällt. Echter Export: 3 Datenbanken und 18
+        Einträge mehr, keine Fehler.
+      - Tests: Vitest (`page-hierarchy`, `notion-export`, `notion-import`),
+        Playwright `entry-subpages.e2e.ts`.
 24. **Rollups:** Eigenschaftstyp „Rollup“ (Verknüpfung, Eigenschaft der
     Ziel-Datenbank, Funktion: Anzahl, Summe, Durchschnitt, Min/Max,
     Anzeigen …), berechnet in der App wie Formeln. Import: Rollup- und
     Formelwerte bleiben feste Werte; die Rechnung legt man einmal neu an.
+    - **Umsetzung 24** (`20261020100000_rollup_property.sql`):
+      - Eigenschaftstyp `rollup`; Einstellungen in `options`:
+        `relationPropertyId`, `targetPropertyId` (Eigenschaft der
+        verknüpften Datenbank oder `title`), `function` (Check-Constraint,
+        `23514`; alle drei fehlen, solange das Rollup nicht eingerichtet
+        ist). Keine Werte: `set_page_property` lehnt ab (`22023`). pgTAP:
+        `database_rollups.test.sql`.
+      - Funktionen (`features/databases/rollup.ts`, wie Notion): Werte
+        anzeigen, Anzahl, Werte/Eindeutige/Leere/Nicht leere zählen, Prozent
+        leer/nicht leer; bei Zahlen Summe, Durchschnitt, Median, Minimum,
+        Maximum, Spanne; bei Daten frühestes/spätestes Datum und Spanne in
+        Tagen; bei Checkboxen angehakt/nicht angehakt zählen, Prozent
+        angehakt. Angeboten wird, was zum Typ passt.
+      - `databaseRepository.load` lädt zu jedem Rollup die Ziel-Eigenschaft
+        und ihre gespeicherten Werte (`withRollupTargets`, RLS entscheidet)
+        und hängt sie an die Eigenschaft (`rollup.target`, auch im Cache:
+        offline berechnet). Berechnet in `buildRows` vor den Formeln (Formeln
+        sehen Rollups als Zahl, Datum oder Text). Anzeige: Prozent als
+        Prozent, Summe & Co. im Zahlenformat des Ziels.
+      - Oberfläche: „+“ → „Rollup“ öffnet den `RollupEditor` (Verknüpfung,
+        Eigenschaft, Berechnung), ebenso „Rollup bearbeiten“ im Spaltenkopf
+        und der Name in der Eigenschaftsleiste. Nach einer Änderung wird neu
+        geladen. Filter und Sortierung wie bei Formeln.
+      - Noch nicht: Rollups über Formeln, Rollups, Verknüpfungen und die
+        Zeit-Eigenschaften der Ziel-Datenbank (dort gibt es keine
+        gespeicherten Werte); mehr als 1000 Werte je Ziel-Eigenschaft
+        (`max_rows`); der Import legt keine Rollups an (feste Werte, §24).
+      - Tests: Vitest `rollup.test.ts`, `database-model.test.ts`,
+        Playwright `database-rollups.e2e.ts`.
 25. **Wiederkehrende Einträge:** Eintrag als Wiederholung („täglich“,
     „wöchentlich am …“), neue Einträge entstehen automatisch.
-    Offen: auf dem Server (zeitgesteuert) oder beim Öffnen der App.
+    - **Entschieden (Nutzer, 2026-10-20):** beim Öffnen der App (nicht
+      zeitgesteuert auf dem Server); der Server verhindert doppelte
+      Einträge.
+    - **Annahmen:** Der wiederholte Eintrag ist die Vorlage: Jede Kopie
+      bekommt Titel, Icon, Werte und Text, das Datum in einer gewählten
+      Datums-Eigenschaft. Verpasste Termine (App länger nicht geöffnet)
+      werden nachgeholt, höchstens 31 je Regel und Aufruf. Eine neue oder
+      geänderte Regel beginnt frühestens heute. Tage sind Server-Tage (UTC).
+    - **Umsetzung 25** (`20261020110000_entry_recurrences.sql`):
+      - Tabelle `entry_recurrences` (je Eintrag eine Regel: `frequency`
+        daily/weekly/monthly/yearly, `interval`, `weekdays` 1 = Montag,
+        `start_date`, `next_date`, `date_property_id`); der Trigger setzt
+        `database_id` (nur Einträge, `22023`), prüft die
+        Datums-Eigenschaft und berechnet `next_date`. RLS: lesen mit
+        `can_read_page`, ändern mit `can_edit_page` des Eintrags.
+      - `next_recurrence_date(…)`: nächster Termin nach einem Tag
+        (Monatsende bleibt Monatsende, jede n-te Woche ab der Startwoche).
+      - RPC `create_due_recurring_entries(workspace)` → Anzahl: alle
+        fälligen Regeln des Workspace mit Schreibrecht auf die Datenbank,
+        `for update skip locked` (zwei Geräte legen nichts doppelt an);
+        Kopie per `copy_recurring_entry` (Werte über `set_page_property`,
+        damit Verknüpfungen beidseitig bleiben; Text als neues Dokument).
+        pgTAP: `entry_recurrences.test.sql`.
+      - App: `usePages` ruft die RPC vor jedem Laden des Seitenbaums vom
+        Server (Start, `online`, App wieder sichtbar); scheitert sie, lädt
+        der Baum trotzdem (Fehler in der Konsole). Klein gehalten in
+        `services/recurring-entries.ts`, damit der Datenbank-Code im
+        eigenen Chunk bleibt.
+      - Eigenschaftsleiste eines Eintrags: Zeile „Wiederholen“ mit Regel
+        und nächstem Termin; Dialog mit Rhythmus, „Alle …“, Wochentagen,
+        Start, Datums-Eigenschaft, „Nicht mehr wiederholen“
+        (`recurrence.ts`: Texte und Validierung).
+      - Tests: Vitest `recurrence.test.ts`, Playwright
+        `entry-recurrence.e2e.ts`.
+      - Noch nicht: Wiederholung aus einer Vorlage (Paket 26), Uhrzeit des
+        Termins, Ende einer Wiederholung.
 26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
     Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
 27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline

@@ -219,11 +219,17 @@ export function useDatabase(
             const current = requireEditable();
             const before = current.properties.find((item) => item.id === propertyId);
             const updated = await databaseRepository.updateProperty(propertyId, changes);
-            // The related entries are loaded with the database, not with the property.
+            // The related entries and a rollup's target are loaded with the database, not with the property.
+            const sameTarget =
+                updated.rollup?.targetPropertyId === before?.rollup?.targetPropertyId && before?.rollup?.target;
             const property =
                 updated.relation && before?.relation
                     ? { ...updated, relation: { ...updated.relation, entries: before.relation.entries } }
-                    : updated;
+                    : updated.rollup && sameTarget
+                      ? { ...updated, rollup: { ...updated.rollup, target: sameTarget } }
+                      : updated;
+            // A rollup reading something new needs its target's values.
+            if (changes.rollup && !sameTarget) setManualReloads((count) => count + 1);
             // The server clears the values when the type changes.
             const typeChanged = before !== undefined && before.type !== property.type;
             change((latest) => ({

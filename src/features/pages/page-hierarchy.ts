@@ -18,11 +18,23 @@ export function isDatabaseEntry(pageId: string, pages: Page[]): boolean {
 
 /**
  * Entries of databases are shown in the database, not in the page tree;
- * the database itself stays (its entries are not its tree children).
+ * the database itself stays (its entries are not its tree children). The
+ * subpages of an entry are shown in the entry (package 23), so they and
+ * everything below them are left out as well.
  */
 export function withoutDatabaseEntries(pages: Page[]): Page[] {
-    const databaseIds = new Set(pages.filter((page) => page.kind === "database").map((page) => page.id));
-    return pages.filter((page) => !page.parent_id || !databaseIds.has(page.parent_id));
+    const byId = new Map(pages.map((page) => [page.id, page]));
+    const isEntry = (page: Page) => page.parent_id !== null && byId.get(page.parent_id)?.kind === "database";
+    const inEntry = (page: Page) => {
+        const seen = new Set<string>();
+        for (let current: Page | undefined = page; current && !seen.has(current.id);) {
+            if (isEntry(current)) return true;
+            seen.add(current.id);
+            current = current.parent_id ? byId.get(current.parent_id) : undefined;
+        }
+        return false;
+    };
+    return pages.filter((page) => !inEntry(page));
 }
 
 export function collectDescendantIds(pageId: string, pages: Page[]): string[] {
@@ -123,9 +135,6 @@ export function moveProblem(page: Page, target: MoveTarget, pages: Page[], userI
         }
         if (parent.kind === "database" && page.kind === "database") {
             return "Eine Datenbank kann kein Eintrag einer anderen Datenbank werden.";
-        }
-        if (parent.kind === "database" && pages.some((item) => item.parent_id === page.id)) {
-            return "Eine Seite mit Unterseiten kann kein Eintrag werden.";
         }
     }
 

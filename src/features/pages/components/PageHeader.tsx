@@ -1,59 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SmilePlus } from "lucide-react";
 import { Menu } from "@/components/ui/menu";
+import { PAGE_ICONS } from "../page-icons";
 import type { Page } from "../types";
-
-// A small, fixed choice keeps the picker light; no emoji library needed.
-const PAGE_ICONS = [
-    "📄",
-    "📝",
-    "📌",
-    "📎",
-    "📚",
-    "📖",
-    "🗂️",
-    "🗃️",
-    "📅",
-    "🗓️",
-    "✅",
-    "☑️",
-    "⭐",
-    "💡",
-    "🔥",
-    "🚀",
-    "🎯",
-    "🧭",
-    "🧩",
-    "🛠️",
-    "⚙️",
-    "🔒",
-    "🔑",
-    "💬",
-    "📊",
-    "📈",
-    "💰",
-    "🧾",
-    "🏠",
-    "🏢",
-    "✈️",
-    "🌍",
-    "🍳",
-    "🛒",
-    "🎵",
-    "🎨",
-    "📷",
-    "🎮",
-    "🏃",
-    "❤️",
-    "🌱",
-    "🐾",
-    "☕",
-    "🎁",
-    "🧠",
-    "🔬",
-    "🧪",
-    "🏷️",
-];
 
 type PageHeaderProps = {
     page: Page;

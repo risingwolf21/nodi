@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createDueRecurringEntries } from "@/features/databases/services/recurring-entries";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import {
@@ -182,6 +183,11 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                     userId: currentUserId,
                     readCache: () => pageTreeCacheFor(currentUserId).getPages(workspaceId),
                     fetchServer: async () => {
+                        // Recurring entries that are due appear with this load (package 25). Without
+                        // them the tree still loads; they come with the next one.
+                        await createDueRecurringEntries(workspaceId).catch((err: unknown) => {
+                            console.error("Wiederkehrende Einträge konnten nicht angelegt werden:", err);
+                        });
                         const response = await supabase
                             .from("pages")
                             .select(PAGE_COLUMNS)
