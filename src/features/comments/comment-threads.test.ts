@@ -28,6 +28,14 @@ describe("comments", () => {
         ]);
     });
 
+    it("reads the quote of a thread on text (package 31b)", () => {
+        const [onText, onPage] = parseComments([
+            { ...row("t1", null, "2026-10-20T10:00:00Z"), quote: "am Freitag" },
+            row("t2", null, "2026-10-20T10:01:00Z"),
+        ]);
+        expect([onText.quote, onPage.quote]).toEqual(["am Freitag", null]);
+    });
+
     it("rejects broken rows", () => {
         expect(() => parseComments([{ id: "x" }])).toThrow();
         expect(() => parseComments(null)).toThrow();

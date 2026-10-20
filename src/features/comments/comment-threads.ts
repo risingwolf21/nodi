@@ -5,6 +5,8 @@ export type PageComment = {
     authorId: string;
     authorEmail: string;
     body: string;
+    /** The text a thread is about (package 31b); null for comments on the page. */
+    quote: string | null;
     createdAt: string;
     editedAt: string | null;
     resolvedAt: string | null;
@@ -35,6 +37,7 @@ export function parseComments(rows: unknown): PageComment[] {
             authorId,
             authorEmail: text("author_email") ?? "",
             body,
+            quote: text("quote"),
             createdAt,
             editedAt: text("edited_at"),
             resolvedAt: text("resolved_at"),

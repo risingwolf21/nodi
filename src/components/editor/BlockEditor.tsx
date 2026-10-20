@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu, isTouchDevice } from "@blocknote/core";
 import {
+    FormattingToolbar,
     FormattingToolbarController,
+    getFormattingToolbarItems,
     getDefaultReactSlashMenuItems,
     MobileFormattingToolbarController,
     SuggestionMenuController,
@@ -21,6 +23,7 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { editorTheme } from "@/components/editor/editor-theme";
 import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
 import { editorSchema } from "@/components/editor/editor-schema";
+import { CommentButton } from "@/components/editor/CommentButton";
 import { displayTitle } from "@/features/pages/page-display";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
@@ -102,7 +105,19 @@ function statusText(status: SessionStatus): string {
  * of the user, package 20), so typing keeps the room; formatting otherwise
  * goes through "/" and Markdown shortcuts.
  */
-function SelectionFormattingToolbar() {
+/** BlockNote's buttons and "Kommentieren" (package 31b). */
+function toolbarWithComments(pageId: string) {
+    return function ToolbarWithComments() {
+        return (
+            <FormattingToolbar>
+                {getFormattingToolbarItems()}
+                <CommentButton key="comment" pageId={pageId} />
+            </FormattingToolbar>
+        );
+    };
+}
+
+function SelectionFormattingToolbar({ toolbar }: { toolbar: () => ReactNode }) {
     // Keeps BlockNote's keyboard detection running from the start: it has to
     // see the full height before the keyboard opens.
     useVirtualKeyboard();
@@ -113,7 +128,7 @@ function SelectionFormattingToolbar() {
             return !selection.empty && selection.$from.parent.isTextblock;
         },
     });
-    return textSelected ? <MobileFormattingToolbarController /> : null;
+    return textSelected ? <MobileFormattingToolbarController formattingToolbar={toolbar} /> : null;
 }
 
 function loadErrorMessage(error: unknown): string {
@@ -231,6 +246,9 @@ function EditorContent({
     }, editor);
 
     // Pages to link: known pages (not templates), title matches first, a few at a time.
+    // A stable component: a new one on each render would remount the toolbar.
+    const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
+
     const pageLinkItems = (query: string) => {
         const needle = query.trim().toLocaleLowerCase("de");
         return databaseBlocks.pages
@@ -324,7 +342,11 @@ function EditorContent({
                     formattingToolbar={false}
                 >
                     {/* Elsewhere the toolbar floats at the selection, as before. */}
-                    {isTouchDevice() ? <SelectionFormattingToolbar /> : <FormattingToolbarController />}
+                    {isTouchDevice() ? (
+                        <SelectionFormattingToolbar toolbar={commentToolbar} />
+                    ) : (
+                        <FormattingToolbarController formattingToolbar={commentToolbar} />
+                    )}
                     <SuggestionMenuController
                         triggerCharacter="/"
                         getItems={(query) =>

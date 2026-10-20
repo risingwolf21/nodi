@@ -42,3 +42,58 @@ test("Kommentare: schreiben, antworten, bearbeiten, erledigen, löschen", async 
     await expect(thread).toHaveCount(0);
     expect(backend.comments).toEqual([]);
 });
+
+test("Kommentar an einer Textstelle: markieren, kommentieren, anspringen, erledigen", async ({ page, context }) => {
+    const backend = createBackend({ pages: [fakePage(NOTES, "Notizen")] });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Notizen", exact: true }).click();
+    const editor = page.locator(".bn-editor");
+    const comments = page.getByRole("region", { name: "Kommentare" });
+
+    await editor.click();
+    await page.keyboard.type("Freitag");
+    await editor.getByText("Freitag").dblclick();
+    await page.getByRole("button", { name: "Kommentieren" }).click();
+
+    // The first comment is asked for under the title, with the quoted text.
+    await expect(comments.locator("blockquote")).toHaveText("Freitag");
+    await comments.getByLabel("Kommentar zum Text").fill("Oder Donnerstag?");
+    await comments.getByRole("button", { name: "Kommentieren" }).click();
+    const thread = comments.getByRole("article", { name: "Kommentar von owner@nodi.test" });
+    await expect(thread).toContainText("Oder Donnerstag?");
+    const [stored] = backend.comments;
+    expect(stored.quote).toBe("Freitag");
+
+    // The text keeps the thread's id as its mark; an open thread highlights it.
+    const mark = editor.locator(`.nodi-comment-mark[data-thread-id="${stored.id}"]`);
+    await expect(mark).toBeVisible();
+    await expect
+        .poll(() => JSON.stringify(backend.savedDocuments.get(NOTES) ?? null))
+        .toContain(`"comment":"${stored.id}"`);
+    await mark.click();
+    await expect(thread).toHaveClass(/ring-2/);
+
+    // Resolved: the mark stays in the text, but is not highlighted.
+    await thread.getByRole("button", { name: "Erledigt" }).click();
+    await expect(mark).toHaveCount(0);
+});
+
+test("Ein nicht abgeschickter Kommentar an einer Textstelle hinterlässt keine Markierung", async ({
+    page,
+    context,
+}) => {
+    const backend = createBackend({ pages: [fakePage(NOTES, "Notizen")] });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Notizen", exact: true }).click();
+    const editor = page.locator(".bn-editor");
+
+    await editor.click();
+    await page.keyboard.type("Nur ein Entwurf");
+    await editor.getByText("Nur ein Entwurf").dblclick();
+    await page.getByRole("button", { name: "Kommentieren" }).click();
+    await page.getByRole("region", { name: "Kommentare" }).getByRole("button", { name: "Abbrechen" }).click();
+
+    await expect.poll(() => JSON.stringify(backend.savedDocuments.get(NOTES) ?? null)).toContain("Nur ein Entwurf");
+    expect(JSON.stringify(backend.savedDocuments.get(NOTES))).not.toContain('"comment"');
+    expect(backend.comments).toEqual([]);
+});

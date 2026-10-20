@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Check, MessageSquare, RotateCcw } from "lucide-react";
+import { commentMarks, onCommentRequest, onShowThread, type CommentRequest } from "../comment-marks";
 import { groupThreads, MAX_COMMENT_LENGTH, type CommentThread, type PageComment } from "../comment-threads";
 import { pageComments } from "../services/page-comments";
 
@@ -27,6 +28,10 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
     const [error, setError] = useState("");
     const [writing, setWriting] = useState(false);
     const [showResolved, setShowResolved] = useState(false);
+    // A thread on selected text, waiting for its first comment (package 31b).
+    const [pending, setPending] = useState<CommentRequest | null>(null);
+    const pendingRef = useRef<CommentRequest | null>(null);
+    const [shownThreadId, setShownThreadId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!online) return;
@@ -46,6 +51,36 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
         };
     }, [pageId, online, reloads]);
 
+    // The marks in the text show the threads of this page only.
+    const threads = useMemo(() => (loaded?.pageId === pageId ? groupThreads(loaded.comments) : []), [loaded, pageId]);
+    useEffect(() => {
+        commentMarks.setThreads(
+            threads.map(({ root }) => ({ id: root.id, state: root.resolvedAt ? "resolved" : "open" })),
+        );
+    }, [threads]);
+    useEffect(() => () => commentMarks.setThreads([]), []);
+
+    useEffect(
+        () =>
+            onCommentRequest((request) => {
+                if (request.pageId !== pageId) return;
+                // Only one at a time: an unsent one loses its mark.
+                pendingRef.current?.cancel();
+                pendingRef.current = request;
+                setPending(request);
+            }),
+        [pageId],
+    );
+
+    useEffect(
+        () =>
+            onShowThread((threadId) => {
+                setShownThreadId(threadId);
+                document.getElementById(`comment-thread-${threadId}`)?.scrollIntoView({ block: "center" });
+            }),
+        [],
+    );
+
     // The server sets times, authors and who resolved: load again after each change.
     const run: RunChange = useCallback(async (change) => {
         setError("");
@@ -60,7 +95,6 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
     }, []);
 
     if (!online) return null;
-    const threads = loaded?.pageId === pageId ? groupThreads(loaded.comments) : [];
     const open = threads.filter((thread) => thread.root.resolvedAt === null);
     const resolved = threads.filter((thread) => thread.root.resolvedAt !== null);
     if (threads.length === 0 && !canComment && !error) return null;
@@ -72,6 +106,7 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
             thread={thread}
             userId={userId}
             canComment={canComment}
+            shown={thread.root.id === shownThreadId}
             run={run}
         />
     );
@@ -82,6 +117,30 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
                 <p className="mb-2 text-sm text-destructive" role="alert">
                     {error}
                 </p>
+            )}
+            {pending && (
+                <div className="mb-3 rounded-lg border border-brand/40 p-3">
+                    <Quote text={pending.quote} />
+                    <CommentForm
+                        label="Kommentar zum Text"
+                        submitLabel="Kommentieren"
+                        onCancel={() => {
+                            pending.cancel();
+                            pendingRef.current = null;
+                            setPending(null);
+                        }}
+                        onSubmit={async (body) => {
+                            const done = await run(() =>
+                                pageComments.add(pageId, body, null, { id: pending.threadId, quote: pending.quote }),
+                            );
+                            if (done) {
+                                pendingRef.current = null;
+                                setPending(null);
+                            }
+                            return done;
+                        }}
+                    />
+                </div>
             )}
             {open.length > 0 && <div className="space-y-3">{open.map(renderThread)}</div>}
             {resolved.length > 0 && (
@@ -128,16 +187,29 @@ type ThreadProps = {
     thread: CommentThread;
     userId: string | undefined;
     canComment: boolean;
+    /** Chosen in the text: shown with a frame. */
+    shown: boolean;
     run: RunChange;
 };
 
-function Thread({ pageId, thread, userId, canComment, run }: ThreadProps) {
+function Quote({ text }: { text: string }) {
+    return (
+        <blockquote className="mb-2 border-l-2 border-brand/60 pl-2 text-sm text-muted-foreground">{text}</blockquote>
+    );
+}
+
+function Thread({ pageId, thread, userId, canComment, shown, run }: ThreadProps) {
     const [replying, setReplying] = useState(false);
     const { root } = thread;
     const isResolved = root.resolvedAt !== null;
 
     return (
-        <article aria-label={`Kommentar von ${root.authorEmail}`} className="rounded-lg border p-3">
+        <article
+            id={`comment-thread-${root.id}`}
+            aria-label={`Kommentar von ${root.authorEmail}`}
+            className={`rounded-lg border p-3 ${shown ? "ring-2 ring-brand" : ""}`}
+        >
+            {root.quote && <Quote text={root.quote} />}
             <Comment comment={root} own={root.authorId === userId} run={run} />
             {thread.replies.map((reply) => (
                 <div key={reply.id} className="mt-3 border-l-2 pl-3">

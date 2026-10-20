@@ -275,6 +275,7 @@ src/
     editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
+    editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -405,7 +406,7 @@ supabase/
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
-                            # Titelbilder (P30c), Kommentare (P31a)
+                            # Titelbilder (P30c), Kommentare (P31a/b)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2324,6 +2325,34 @@ nicht gewünscht.
         Kommentare offline, Echtzeit-Aktualisierung.
       - Tests: Vitest `comment-threads.test.ts`, Playwright
         `page-comments.e2e.ts`.
+    - **Umsetzung 31b** (`20261020190000_comment_quotes.sql`):
+      - Im Text steht ein eigener Stil `comment` (Editor-Schema), dessen
+        Wert die ID des Threads ist; die App wählt die ID, damit Markierung
+        und Thread zusammenpassen. `page_comments.quote` (höchstens 500
+        Zeichen, nur am Thread, beim Anlegen gesetzt, danach unveränderlich)
+        hält den zitierten Text, falls der Text sich ändert oder die
+        Markierung gelöscht wird. `list_page_comments` liefert ihn mit (neu
+        angelegt, weil sich der Rückgabetyp ändert). pgTAP:
+        `comment_quotes.test.sql`.
+      - Editor: In der Formatierungsleiste (auch mobil) „Kommentieren“, solange
+        Text markiert ist und die Seite bearbeitbar ist (`CommentButton`): Der
+        Text bekommt die Markierung, unter dem Seitenkopf erscheint das Feld
+        für den ersten Kommentar mit dem Zitat. „Abbrechen“ entfernt die
+        Markierung wieder.
+      - `features/comments/comment-marks.ts` verbindet Editor und
+        Kommentarliste: Die Liste meldet, welche Threads offen sind; nur
+        diese Markierungen sind hervorgehoben (`CommentMark`, Klick springt
+        zum Thread und rahmt ihn ein). Erledigte, gelöschte oder unbekannte
+        Threads (auch in der öffentlichen Ansicht) lassen normalen Text.
+      - Achtung: App-Versionen vor 31b kennen den Stil nicht und können
+        Seiten mit Textkommentaren eventuell nicht öffnen (wie 19c/22);
+        installierte Apps nach dem Update-Hinweis aktualisieren.
+      - Noch nicht: Markierung beim Löschen eines Threads aus dem Text
+        entfernen (sie bleibt unsichtbar stehen), Kommentare am Rand neben
+        dem Text, Verlassen der Seite mit offenem Entwurf (die Markierung
+        bleibt ohne Thread, unsichtbar).
+      - Tests: Vitest `comment-threads.test.ts`, Playwright
+        `page-comments.e2e.ts` (Textstelle kommentieren, Abbrechen).
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
     und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,

@@ -104,6 +104,7 @@ export type FakeComment = {
     author_id: string;
     author_email: string;
     body: string;
+    quote: string | null;
     created_at: string;
     edited_at: string | null;
     resolved_at: string | null;
@@ -420,12 +421,14 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         if (method === "POST") {
             const body = requestBody(route);
             const comment: FakeComment = {
-                id: crypto.randomUUID(),
+                // A thread on text brings its id (the mark in the text) and the quote (package 31b).
+                id: typeof body.id === "string" ? body.id : crypto.randomUUID(),
                 page_id: text(body, "page_id"),
                 parent_id: typeof body.parent_id === "string" ? body.parent_id : null,
                 author_id: OWNER,
                 author_email: "owner@nodi.test",
                 body: text(body, "body"),
+                quote: typeof body.quote === "string" && typeof body.parent_id !== "string" ? body.quote : null,
                 created_at: new Date().toISOString(),
                 edited_at: null,
                 resolved_at: null,

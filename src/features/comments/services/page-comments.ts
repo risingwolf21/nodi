@@ -33,10 +33,16 @@ export const pageComments = {
         return parseComments(response.data);
     },
 
-    async add(pageId: string, body: string, parentId: string | null): Promise<void> {
+    /** A thread on text brings the id of its mark and the quoted text (package 31b). */
+    async add(
+        pageId: string,
+        body: string,
+        parentId: string | null,
+        onText?: { id: string; quote: string },
+    ): Promise<void> {
         const response = await supabase
             .from("page_comments")
-            .insert({ page_id: pageId, parent_id: parentId, body })
+            .insert({ page_id: pageId, parent_id: parentId, body, ...(onText ?? {}) })
             .select("id");
         const failure = commentError(response, "Der Kommentar konnte nicht gespeichert werden.");
         if (failure) throw failure;
