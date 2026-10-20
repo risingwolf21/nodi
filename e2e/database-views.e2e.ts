@@ -207,6 +207,28 @@ test.describe("Feed und Kalender", () => {
         await expect(calendar.getByRole("button", { name: "Bericht" })).toHaveCount(3);
     });
 
+    test("Zeitleiste zeigt Einträge als Balken über ihren Zeitraum", async ({ page, context }) => {
+        const backend = calendarDatabase();
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+        await page.getByRole("button", { name: "Ansicht hinzufügen" }).click();
+        await page.getByRole("menuitem", { name: "Zeitleiste" }).click();
+        await expect.poll(() => backend.views.map(({ type }) => type)).toContain("timeline");
+        const timeline = page.getByRole("region", { name: "Zeitleiste" });
+
+        // From the Monday before last (12 Oct): Bericht (10–12 Oct) starts before, one day is shown.
+        await expect(page.getByRole("heading", { name: /12\. Okt\. 2026 – 22\. Nov\. 2026/ })).toBeVisible();
+        const bar = timeline.getByRole("button", { name: "Bericht" });
+        await expect(bar).toHaveCSS("width", "28px");
+        await expect(page.getByText("1 Eintrag ohne Fällig")).toBeVisible();
+
+        // Two weeks earlier all three days are there.
+        await page.getByRole("button", { name: "Früher" }).click();
+        await expect(bar).toHaveCSS("width", `${3 * 32 - 4}px`);
+        await bar.click();
+        await expect(page.getByRole("region", { name: "Eigenschaften" })).toBeVisible();
+    });
+
     test("Kalender ohne Datums-Eigenschaft bietet an, eine anzulegen; mobil ohne seitliches Scrollen", async ({
         page,
         context,

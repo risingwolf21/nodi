@@ -15,6 +15,7 @@ import {
     matchesFilter,
     monthGrid,
     moveDate,
+    timelineBars,
     weekDays,
     parseCachedDatabase,
     parseProperties,
@@ -238,6 +239,30 @@ describe("feed", () => {
 });
 
 describe("calendar", () => {
+    it("puts entries on the timeline, clipped to the shown days", () => {
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [due],
+            values: [
+                { pageId: "a", propertyId: "due", value: { start: "2026-10-18", end: "2026-10-22" }, updatedAt: "" },
+                { pageId: "b", propertyId: "due", value: { start: "2026-10-25", end: null }, updatedAt: "" },
+                { pageId: "c", propertyId: "due", value: { start: "2026-12-01", end: null }, updatedAt: "" },
+            ],
+        });
+        expect(
+            timelineBars(rows, due, "2026-10-19", 7).map(({ row, first, last, startsBefore, endsAfter }) => [
+                row.page.id,
+                first,
+                last,
+                startsBefore,
+                endsAfter,
+            ]),
+        ).toEqual([
+            ["a", 0, 3, true, false],
+            ["b", 6, 6, false, false],
+        ]);
+    });
+
     it("shows the week of a day, Monday first", () => {
         expect(weekDays("2026-10-22")).toEqual([
             "2026-10-19",
@@ -728,7 +753,7 @@ describe("parsing", () => {
     it("rejects broken server rows, but leaves out types of a newer app version", () => {
         expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
         expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "button" }])).toEqual([]);
-        expect(parseViews([{ id: "v", databaseId: "db", name: "Zeitleiste", type: "timeline" }])).toEqual([]);
+        expect(parseViews([{ id: "v", databaseId: "db", name: "Gantt", type: "gantt" }])).toEqual([]);
     });
 
     it("reads the server's options object and the cached list alike", () => {

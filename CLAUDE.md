@@ -301,7 +301,8 @@ src/
       components/ListView.tsx        # Liste (14c)
       components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
-      components/CalendarView.tsx    # Monatskalender (14d)
+      components/CalendarView.tsx    # Kalender: Monat/Woche, Ziehen (14d, 32b)
+      components/TimelineView.tsx    # Zeitleiste (32d); GroupedRows.tsx: Gruppen in Tabelle/Liste (32c)
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
       components/DatabaseBlockContent.tsx # Datenbank als Block im Text: Auswahl, eigene Ansichten (19c)
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
@@ -406,7 +407,8 @@ supabase/
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
-                            # Titelbilder (P30c), Kommentare (P31a/b)
+                            # Titelbilder (P30c), Kommentare (P31a/b),
+                            # Zeitleiste (P32d)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2409,6 +2411,22 @@ nicht gewünscht.
         Galerie und Feed gruppieren, Reihenfolge der Gruppen ändern.
       - Tests: Vitest `database-model.test.ts`, Playwright
         `database-grouping.e2e.ts`.
+    - **Umsetzung 32d** (`20261020200000_timeline_view.sql`):
+      - Ansichtstyp `timeline` für Datenbanken und Datenbank-Blöcke (nur die
+        erlaubten Werte wachsen; Apps ab 14e lassen den Typ aus). pgTAP:
+        `timeline_view.test.sql`.
+      - „Zeitleiste“ (`TimelineView`): sechs Wochen ab dem Montag der
+        Vorwoche, „Früher“/„Später“ um zwei Wochen, „Heute“; Tage als Spalten
+        (Wochentag, Monatsanfang), heute hervorgehoben. Je Eintrag mit Datum
+        im Zeitraum ein Balken vom Start bis zum Ende (`timelineBars`, an den
+        Rändern abgeschnitten und markiert); Klick öffnet den Eintrag. Die
+        Datums-Eigenschaft wählt „Datum“ in der Leiste wie beim Kalender.
+        Darunter die Zahl der Einträge ohne Datum und „Neu“. Die Tage
+        scrollen seitlich in der Ansicht, nicht die Seite.
+      - Noch nicht: Balken ziehen oder in der Länge ändern, andere Maßstäbe
+        (Monate, Quartale), Abhängigkeiten.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-views.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
