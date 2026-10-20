@@ -2356,7 +2356,30 @@ nicht gewünscht.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
     und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,
-    Button-Eigenschaft.
+    Button-Eigenschaft. Aufteilung: 32a Reihenfolge, 32b Kalender, 32c
+    Gruppierung, 32d Zeitleiste, 32e Spalten im Text, 32f Button (je ein PR).
+    - **Umsetzung 32a** (nur Frontend, keine Migration; `pages.position` ist
+      für Bearbeiter schon änderbar):
+      - Geschwister in der Seitenleiste stehen nach `position`, dann nach
+        Erstellung (`compareByPosition`, jetzt in `page-hierarchy.ts`; die
+        Datenbank-Ansichten nutzen dieselbe Regel). `placeBefore` berechnet
+        die neue Reihenfolge: zwischen zwei Nachbarn mit Position genügt eine
+        Änderung (Mittelwert), sonst werden die Geschwister neu nummeriert
+        (Seiten ohne Position, gleiche Positionen).
+      - Seitenleiste: Ziehen auf den oberen oder unteren Rand einer Seite
+        (je ein Viertel) setzt sie davor bzw. dahinter (Linie als Hinweis),
+        nur unter Geschwistern desselben Bereichs; die Mitte macht wie bisher
+        eine Unterseite daraus.
+      - Board: Eine Karte auf eine andere ziehen setzt sie davor (in einer
+        anderen Spalte auch deren Wert); in eine leere Stelle einer anderen
+        Spalte ans Ende. Nur ohne Sortierregel der Ansicht (wie Notion); die
+        Reihenfolge gilt für alle Ansichten ohne Sortierung.
+      - `usePages.reorderPages`: sofort sichtbar, je Seite ein Update; lehnt
+        der Server ab, lädt der Baum neu und ein Hinweis erscheint.
+      - Noch nicht: Reihenfolge in geteilten Seiten anderer Workspaces,
+        Ziehen in Tabelle und Liste, auf Touch-Geräten.
+      - Tests: Vitest `page-hierarchy.test.ts`, Playwright
+        `page-order.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

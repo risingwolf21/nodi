@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { CalendarDays, Columns3, LayoutGrid, List, Map as MapIcon, MapPin, Plus, Rss, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { placeBefore, type PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page } from "@/features/pages/types";
 import { cn } from "@/lib/utils";
 import {
@@ -57,6 +58,8 @@ type DatabaseViewProps = {
     block?: DatabaseBlockOptions;
     /** Templates of the database; undefined where they cannot be used (blocks, other workspaces). */
     templateActions?: TemplateActions;
+    /** New manual order of entries (package 32a); undefined where it cannot change. */
+    onReorderEntries?: (updates: PositionUpdate[]) => Promise<void>;
 };
 
 function ViewTab({
@@ -153,6 +156,7 @@ export function DatabaseView({
     databases,
     block,
     templateActions,
+    onReorderEntries,
 }: DatabaseViewProps) {
     // Templates are entries the views leave out; "Vorlagen" offers them.
     const entries = useMemo(() => pagesBelow.filter((page) => !page.is_template), [pagesBelow]);
@@ -383,6 +387,12 @@ export function DatabaseView({
                             : undefined
                     }
                     onMoveEntry={(pageId, optionId) => setValue(pageId, boardGroup?.id ?? "", optionId)}
+                    // The manual order counts only where no sort rule decides (like Notion).
+                    onPlaceEntry={
+                        onReorderEntries && activeView.config.sort.length === 0
+                            ? (pageId, beforeId) => onReorderEntries(placeBefore(entries, pageId, beforeId))
+                            : undefined
+                    }
                     onAddGroupProperty={async () => {
                         await addProperty("status");
                     }}

@@ -8,6 +8,7 @@ import {
     isDatabaseEntry,
     nextPosition,
     type MoveTarget,
+    type PositionUpdate,
 } from "../page-hierarchy";
 import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
 import type { Page, PageKind, PageSection, PageSettings, StoredPage } from "../types";
@@ -115,6 +116,8 @@ type UsePagesResult = {
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
     /** Adds the page to the user's favorites or removes it (package 30b). */
     setFavorite: (pageId: string, favorite: boolean) => Promise<void>;
+    /** New manual order of siblings or entries (package 32a, `placeBefore`). */
+    reorderPages: (updates: PositionUpdate[]) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
     /** Deletes the user's pages in the trash for good (with their subpages); how many. */
     emptyTrash: () => Promise<number>;
@@ -536,6 +539,41 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         [workspaceId, requireOnline, switchedSince],
     );
 
+    const reorderPages = useCallback(
+        async (updates: PositionUpdate[]) => {
+            if (updates.length === 0) return;
+            requireOnline();
+            setError("");
+
+            const positions = new Map(updates.map((update) => [update.id, update.position]));
+            // Shown at once; the server's answer decides.
+            setPages((current) =>
+                current.map((page) =>
+                    positions.has(page.id) ? { ...page, position: positions.get(page.id) ?? null } : page,
+                ),
+            );
+            const responses = await Promise.all(
+                updates.map((update) =>
+                    supabase
+                        .from("pages")
+                        .update({ position: update.position })
+                        .eq("id", update.id)
+                        .eq("workspace_id", workspaceId)
+                        .select("id"),
+                ),
+            );
+            const failure = responses
+                .map((response) => pageChangeError(response, "Die Reihenfolge konnte nicht gespeichert werden."))
+                .find((item) => item !== null);
+            const refused = responses.some((response) => (response.data ?? []).length === 0);
+            if (failure || refused) {
+                setMovesToLoad((count) => count + 1);
+                throw failure ?? new Error(NO_EDIT_RIGHT_MESSAGE);
+            }
+        },
+        [workspaceId, requireOnline],
+    );
+
     const archivePage = useCallback(
         async (pageId: string): Promise<string[]> => {
             requireOnline();
@@ -676,6 +714,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         renamePage,
         updatePage,
         setFavorite,
+        reorderPages,
         archivePage,
         restorePage,
         permanentlyDeletePage,

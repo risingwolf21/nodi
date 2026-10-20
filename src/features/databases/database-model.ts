@@ -1,5 +1,6 @@
 import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
+import { compareByPosition } from "@/features/pages/page-hierarchy";
 import { fileNameOfPath, pageIdOfFilePath } from "@/features/files/file-reference";
 import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
 import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
@@ -1044,12 +1045,7 @@ function compareKeys(a: string | number | null, b: string | number | null): numb
 }
 
 /** Manual order, then creation; used when a view has no sort rules. */
-export function compareByPosition(a: Page, b: Page): number {
-    if (a.position !== null && b.position !== null && a.position !== b.position) return a.position - b.position;
-    if (a.position !== null && b.position === null) return -1;
-    if (a.position === null && b.position !== null) return 1;
-    return a.created_at.localeCompare(b.created_at);
-}
+export { compareByPosition };
 
 /** Rows of a view: filtered (all rules), sorted by its rules or by position. */
 export function applyView(rows: DatabaseRow[], config: ViewConfig, properties: DatabaseProperty[]): DatabaseRow[] {
