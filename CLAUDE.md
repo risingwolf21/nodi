@@ -331,6 +331,7 @@ src/
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
+    comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -404,7 +405,7 @@ supabase/
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
-                            # Titelbilder (P30c)
+                            # Titelbilder (P30c), Kommentare (P31a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2293,7 +2294,36 @@ nicht gewünscht.
         Notion-Import (nicht im Export).
       - Tests: Vitest `page-cover.test.ts`, `page-tree-cache.test.ts`,
         Playwright `page-cover.e2e.ts`.
-31. **Kommentare** an Seiten und Textstellen.
+31. **Kommentare** an Seiten und Textstellen. Aufteilung: 31a Kommentare
+    zur Seite, 31b Kommentare an Textstellen.
+    - **Annahme:** Kommentieren, antworten und erledigen darf, wer die Seite
+      bearbeiten darf (es gibt keine eigene Rolle „Kann kommentieren“); wer
+      sie lesen darf, liest die Kommentare.
+    - **Umsetzung 31a** (`20261020180000_page_comments.sql`):
+      - Tabelle `page_comments`: Seite, `parent_id` (Antwort auf einen
+        Thread, eine Ebene wie Notion; sonst `22023`), Autor (Standard
+        `auth.uid()`), Text 1–5000 Zeichen, `created_at`, `edited_at`,
+        `resolved_at`/`resolved_by` (nur am Thread). RLS: lesen mit
+        `can_read_page`, schreiben mit `can_edit_page`, ändern nur Autor
+        (Text) bzw. Bearbeiter (erledigt), löschen nur der Autor; ein
+        gelöschter Thread nimmt seine Antworten mit. Der Trigger
+        `check_page_comment` setzt Zeiten und wer erledigt hat und hält den
+        Rest unveränderlich (`42501`).
+      - RPC `list_page_comments(page)` (security definer, prüft
+        `can_read_page`): Kommentare mit E-Mail der Autoren (wer die Seite
+        lesen darf, sieht, wer kommentiert hat). pgTAP:
+        `page_comments.test.sql`.
+      - App (`features/comments/`): unter dem Seitenkopf (bei Einträgen unter
+        den Eigenschaften) offene Threads mit Antworten, „Kommentar
+        hinzufügen“, „Antworten“, „Erledigt“/„Wieder öffnen“, eigene
+        Kommentare bearbeiten und löschen (Rückfrage per zweitem Klick);
+        Strg/⌘+Enter sendet. Erledigte Threads hinter „Erledigte Kommentare
+        (n)“. Nur online; nach jeder Änderung neu geladen (der Server setzt
+        Zeiten und Autoren).
+      - Noch nicht: Benachrichtigungen, @-Erwähnungen in Kommentaren,
+        Kommentare offline, Echtzeit-Aktualisierung.
+      - Tests: Vitest `comment-threads.test.ts`, Playwright
+        `page-comments.e2e.ts`.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
     und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,

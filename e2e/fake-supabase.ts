@@ -93,6 +93,20 @@ export type FakeBackend = {
     recurrenceRuns: string[];
     /** Page ids in the user's favorites (package 30b). */
     favorites: string[];
+    /** Comments of pages (package 31a), as the server stores them. */
+    comments: FakeComment[];
+};
+
+export type FakeComment = {
+    id: string;
+    page_id: string;
+    parent_id: string | null;
+    author_id: string;
+    author_email: string;
+    body: string;
+    created_at: string;
+    edited_at: string | null;
+    resolved_at: string | null;
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -140,6 +154,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         recurrences: [],
         recurrenceRuns: [],
         favorites: [],
+        comments: [],
         ...initial,
     };
 }
@@ -395,6 +410,43 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
 
+    if (path === "/rest/v1/rpc/list_page_comments") {
+        const pageId = text(requestBody(route), "p_page_id");
+        return json(backend.comments.filter((item) => item.page_id === pageId));
+    }
+    if (path === "/rest/v1/page_comments") {
+        // Like the server: author and times come from it; only own comments change their text.
+        const id = query.get("id")?.replace("eq.", "");
+        if (method === "POST") {
+            const body = requestBody(route);
+            const comment: FakeComment = {
+                id: crypto.randomUUID(),
+                page_id: text(body, "page_id"),
+                parent_id: typeof body.parent_id === "string" ? body.parent_id : null,
+                author_id: OWNER,
+                author_email: "owner@nodi.test",
+                body: text(body, "body"),
+                created_at: new Date().toISOString(),
+                edited_at: null,
+                resolved_at: null,
+            };
+            backend.comments.push(comment);
+            return json([{ id: comment.id }], 201);
+        }
+        const target = backend.comments.find((item) => item.id === id);
+        if (!target) return json([]);
+        if (method === "PATCH") {
+            const body = requestBody(route);
+            if (typeof body.body === "string")
+                Object.assign(target, { body: body.body, edited_at: new Date().toISOString() });
+            if ("resolved_at" in body) target.resolved_at = body.resolved_at === null ? null : new Date().toISOString();
+            return json([{ id: target.id }]);
+        }
+        if (method === "DELETE") {
+            backend.comments = backend.comments.filter((item) => item.id !== id && item.parent_id !== id);
+            return json([{ id: target.id }]);
+        }
+    }
     if (path === "/rest/v1/page_favorites") {
         if (method === "POST") backend.favorites.push(text(requestBody(route), "page_id"));
         if (method === "DELETE") {
