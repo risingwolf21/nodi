@@ -72,6 +72,18 @@ describe("rewriteImportedBlocks", () => {
         ]);
     });
 
+    it("turns a link to an imported page into a page link", async () => {
+        const result = await rewriteImportedBlocks(
+            [{ type: "paragraph", content: [text("Siehe "), link("Tag%201.md", "Tag 1")], children: [] }],
+            (href) => (href.endsWith(".md") ? { kind: "page", pageId: "page-1" } : classify(href)),
+            upload,
+        );
+        expect(result.blocks[0].content).toEqual([
+            text("Siehe "),
+            { type: "pageLink", props: { pageId: "page-1", title: "Tag 1" } },
+        ]);
+    });
+
     it("turns a link to an imported database on its own into a database block", async () => {
         const result = await rewriteImportedBlocks(
             [

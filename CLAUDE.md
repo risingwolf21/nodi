@@ -274,6 +274,7 @@ src/
     editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c) + „Callout“ (22)
     editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
+    editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -349,6 +350,7 @@ src/
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
       components/SubpageList.tsx       # Unterseiten eines Datenbank-Eintrags (23)
+      components/Backlinks.tsx         # „Verlinkt von“ (28); services/page-links.ts: RPC page_backlinks
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -397,7 +399,7 @@ supabase/
                             # Ansichten je Block (P19b), Einträge mit
                             # Unterseiten (P23), Rollups (P24),
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
-                            # Suche (P27)
+                            # Suche (P27), Rückverweise (P28)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2184,6 +2186,28 @@ nicht gewünscht.
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
     Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
     exportierte Seiten echte Seitenlinks.
+    - **Umsetzung 28** (`20261020140000_page_backlinks.sql`):
+      - Inline-Inhalt `pageLink` (`props.pageId`, `props.title` = Titel beim
+        Verlinken) im Editor-Schema. „@“ im Text öffnet eine Auswahl der
+        bekannten Seiten und Datenbanken (ohne Vorlagen und die Seite selbst,
+        höchstens 12, Tippen filtert); der Link zeigt den aktuellen Titel aus
+        dem Seitenbaum (folgt Umbenennen), Klick öffnet die Seite. Unbekannte
+        Seiten (gelöscht, nicht freigegeben) und die öffentliche Ansicht zeigen
+        den gespeicherten Titel als grauen Text.
+      - RPC `page_backlinks(page)` (SQL mit den Rechten des Aufrufers, RLS
+        entscheidet): aktive Seiten, deren Dokument einen `pageLink` auf die
+        Seite enthält (`jsonb_path_exists`), höchstens 100. Liest jedes
+        lesbare Dokument; ein Index kann später folgen. pgTAP:
+        `page_backlinks.test.sql`.
+      - Unter dem Seitenkopf „Verlinkt von“ mit den verlinkenden Seiten (nur
+        online, nur Seiten, die die App öffnen kann).
+      - Import: Seiten, Datenbanken und Einträge des Exports bekommen ihre ID
+        vorab; ein Link auf eine importierte Seite wird ein `pageLink` (vorher
+        Text). Links auf nicht importierte Seiten bleiben Text.
+      - Tests: Vitest (`import-blocks`, `notion-import`), Playwright
+        `page-links.e2e.ts`.
+      - Noch nicht: Erwähnungen von Personen und Daten, Seitenlinks in der
+        Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
 29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
     Dateien & Medien im Datei-Speicher (Paket 15).
 30. **Favoriten, Titelbilder, Emoji-Suche.**

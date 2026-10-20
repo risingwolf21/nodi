@@ -12,7 +12,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { MessageSquareText, Table2 } from "lucide-react";
+import { FileText, MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -21,6 +21,7 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { editorTheme } from "@/components/editor/editor-theme";
 import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
 import { editorSchema } from "@/components/editor/editor-schema";
+import { displayTitle } from "@/features/pages/page-display";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import { localDocumentStoreFor, type LocalDocumentStore } from "@/features/editor/services/local-document-store";
@@ -57,6 +58,8 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
+// The "@" menu shows this many pages; typing narrows them down.
+const PAGE_LINK_CHOICES = 12;
 
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
@@ -227,6 +230,32 @@ function EditorContent({
         session.current?.recordEdit(editor.document);
     }, editor);
 
+    // Pages to link: known pages (not templates), title matches first, a few at a time.
+    const pageLinkItems = (query: string) => {
+        const needle = query.trim().toLocaleLowerCase("de");
+        return databaseBlocks.pages
+            .filter((page) => !page.is_template && page.id !== pageId)
+            .filter((page) => displayTitle(page).toLocaleLowerCase("de").includes(needle))
+            .slice(0, PAGE_LINK_CHOICES)
+            .map((page) => ({
+                title: displayTitle(page),
+                group: "Seite verlinken",
+                icon: page.icon ? (
+                    <span>{page.icon}</span>
+                ) : page.kind === "database" ? (
+                    <Table2 size={18} />
+                ) : (
+                    <FileText size={18} />
+                ),
+                onItemClick: () => {
+                    editor.insertInlineContent([
+                        { type: "pageLink", props: { pageId: page.id, title: displayTitle(page) } },
+                        " ",
+                    ]);
+                },
+            }));
+    };
+
     const databaseBlockContext: DatabaseBlockContextValue = {
         ...databaseBlocks,
         pageId,
@@ -328,6 +357,11 @@ function EditorContent({
                                 ),
                             )
                         }
+                    />
+                    {/* "@" links a page (package 28). */}
+                    <SuggestionMenuController
+                        triggerCharacter="@"
+                        getItems={(query) => Promise.resolve(pageLinkItems(query))}
                     />
                 </BlockNoteView>
             </DatabaseBlockContext>

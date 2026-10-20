@@ -111,15 +111,17 @@ describe("importNotionExport", () => {
         const { deps, created, saved, uploads, properties, values, views } = dependencies();
         const summary = await importNotionExport(exportFiles(), deps);
 
-        // A database's id is given in advance (pages link it before it exists).
-        const database = created[1].id;
+        // Ids of databases and of pages in the export are given in advance (links point to them before they exist).
+        const id = (title: string) => created.find((page) => page.title === title)?.id ?? "";
+        const database = id("Aufgaben");
+        const [bericht, angebot, reise, tag1] = [id("Bericht"), id("Angebot"), id("Reise"), id("Tag 1")];
         expect(created).toEqual([
             { title: IMPORT_ROOT_TITLE, parentId: null, id: "p0" },
             { title: "Aufgaben", parentId: "p0", id: database, kind: "database" },
-            { title: "Bericht", parentId: database, id: "p2" },
-            { title: "Angebot", parentId: database, id: "p3" },
-            { title: "Reise", parentId: "p0", id: "p4" },
-            { title: "Tag 1", parentId: "p4", id: "p5" },
+            { title: "Bericht", parentId: database, id: bericht },
+            { title: "Angebot", parentId: database, id: angebot },
+            { title: "Reise", parentId: "p0", id: reise },
+            { title: "Tag 1", parentId: reise, id: tag1 },
         ]);
         // All properties (_all.csv), typed from their values.
         expect(properties.map(({ name, type, position }) => [name, type, position])).toEqual([
@@ -129,10 +131,10 @@ describe("importNotionExport", () => {
         ]);
         const offen = properties[0].options[0].id;
         expect(values).toEqual([
-            { pageId: "p2", property: "Status", value: offen },
-            { pageId: "p2", property: "Fällig", value: { start: "2026-10-19", end: null } },
-            { pageId: "p3", property: "Status", value: offen },
-            { pageId: "p3", property: "Erledigt", value: true },
+            { pageId: bericht, property: "Status", value: offen },
+            { pageId: bericht, property: "Fällig", value: { start: "2026-10-19", end: null } },
+            { pageId: angebot, property: "Status", value: offen },
+            { pageId: angebot, property: "Erledigt", value: true },
         ]);
         // Notion's view (Aufgaben.csv) showed only the status; a board and a calendar are added.
         const hidden = { ...EMPTY_VIEW_CONFIG, hiddenPropertyIds: ["prop1", "prop2"] };
@@ -142,15 +144,20 @@ describe("importNotionExport", () => {
             ["Kalender", "calendar", { ...hidden, datePropertyId: "prop2" }, 2],
         ]);
         // The entry's text without the repeated property lines.
-        expect(saved.get("p2")).toEqual([
+        expect(saved.get(bericht)).toEqual([
             { type: "paragraph", content: [{ type: "text", text: "Erster Entwurf.", styles: {} }], children: [] },
         ]);
-        expect(uploads).toEqual(["p4:Strand.png:4"]);
-        expect(saved.get("p4")).toEqual([
-            { type: "image", props: { url: "nodi-file:p4/x-Strand.png", name: "Strand.png" }, children: [] },
-            { type: "paragraph", content: [{ type: "text", text: "Tag 1", styles: {} }], children: [] },
+        expect(uploads).toEqual([`${reise}:Strand.png:4`]);
+        expect(saved.get(reise)).toEqual([
+            { type: "image", props: { url: `nodi-file:${reise}/x-Strand.png`, name: "Strand.png" }, children: [] },
+            // A link to a page of the export becomes a page link (package 28).
+            {
+                type: "paragraph",
+                content: [{ type: "pageLink", props: { pageId: tag1, title: "Tag 1" } }],
+                children: [],
+            },
         ]);
-        expect(saved.get("p5")).toEqual([
+        expect(saved.get(tag1)).toEqual([
             { type: "paragraph", content: [{ type: "text", text: "Ankunft.", styles: {} }], children: [] },
         ]);
         expect(JSON.stringify(saved.get("p0"))).toContain("2 Seiten und 1 Datenbank");

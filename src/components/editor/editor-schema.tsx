@@ -1,8 +1,9 @@
-import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
-import { createReactBlockSpec } from "@blocknote/react";
+import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from "@blocknote/core";
+import { createReactBlockSpec, createReactInlineContentSpec } from "@blocknote/react";
 import { DEFAULT_CALLOUT_EMOJI, isCalloutColor } from "./callout";
 import { CalloutIcon } from "./CalloutIcon";
 import { DatabaseBlock } from "./DatabaseBlock";
+import { PageLink } from "./PageLink";
 
 /**
  * A "Datenbank" block (package 19c): an existing database with views of its
@@ -55,7 +56,22 @@ const calloutBlock = createReactBlockSpec(
     },
 );
 
-/** The blocks of Nodi's documents: BlockNote's own, the database block and the callout. */
+/** A link to a page in the text, inserted with "@" (package 28). */
+const pageLink = createReactInlineContentSpec(
+    {
+        type: "pageLink",
+        propSchema: { pageId: { default: "" }, title: { default: "" } },
+        content: "none",
+    },
+    {
+        render: ({ inlineContent }) => (
+            <PageLink pageId={inlineContent.props.pageId} title={inlineContent.props.title} />
+        ),
+    },
+);
+
+/** The blocks of Nodi's documents: BlockNote's own, the database block and the callout; page links in the text. */
 export const editorSchema = BlockNoteSchema.create({
     blockSpecs: { ...defaultBlockSpecs, database: databaseBlock(), callout: calloutBlock() },
+    inlineContentSpecs: { ...defaultInlineContentSpecs, pageLink },
 });
