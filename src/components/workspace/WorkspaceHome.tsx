@@ -72,6 +72,7 @@ export default function WorkspaceHome() {
         error: pagesError,
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
+        createEntryFromTemplate,
         setPageSection,
         movePage,
         renamePage,
@@ -325,6 +326,20 @@ export default function WorkspaceHome() {
                                 )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
+                                templateActions={
+                                    sharedPage
+                                        ? undefined
+                                        : {
+                                              onCreateFromTemplate: async (templateId) =>
+                                                  (await createEntryFromTemplate(templateId)).id,
+                                              onCreateTemplate: async () =>
+                                                  (
+                                                      await createWorkspacePage("", page.id, page.visibility, "page", {
+                                                          isTemplate: true,
+                                                      })
+                                                  ).id,
+                                          }
+                                }
                                 onCreateSubpage={
                                     sharedPage
                                         ? undefined
@@ -427,7 +442,7 @@ export default function WorkspaceHome() {
                         <NotionImportDialog
                             // Imported pages are private (decision of the user, CLAUDE.md §12 P16).
                             createPage={(title, parentId, kind, id) =>
-                                createWorkspacePage(title, parentId, "private", kind, id)
+                                createWorkspacePage(title, parentId, "private", kind, { id })
                             }
                             onOpen={(pageId) => openPage(pageId)}
                             onClose={() => setImportOpen(false)}

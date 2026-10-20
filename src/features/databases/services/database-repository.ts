@@ -85,6 +85,8 @@ async function withRelatedEntries(properties: DatabaseProperty[]): Promise<Datab
         .select("id,title,icon,parentId:parent_id")
         .in("parent_id", targets)
         .eq("is_archived", false)
+        // Templates are no entries to link (package 26).
+        .eq("is_template", false)
         .order("position", { ascending: true, nullsFirst: false })
         .order("created_at");
     const failure = toRequestError(response);

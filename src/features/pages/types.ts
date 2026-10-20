@@ -21,6 +21,8 @@ export type Page = {
     position: number | null;
     /** ISO time; empty for trees cached before package 14. */
     created_at: string;
+    /** An entry that is a template of its database (package 26); missing means no. */
+    is_template?: boolean;
 };
 
 /** Page settings that can be changed after creation. */
