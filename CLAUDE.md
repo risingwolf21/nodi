@@ -328,6 +328,7 @@ src/
       services/page-files.ts        # Storage: hochladen, signierte URL
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
+    search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -395,7 +396,8 @@ supabase/
                             # Verknüpfungen (P17d), Verschieben (P18a),
                             # Ansichten je Block (P19b), Einträge mit
                             # Unterseiten (P23), Rollups (P24),
-                            # wiederkehrende Einträge (P25), Vorlagen (P26)
+                            # wiederkehrende Einträge (P25), Vorlagen (P26),
+                            # Suche (P27)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2157,6 +2159,28 @@ nicht gewünscht.
         Seitenvorlagen ohne Datenbank.
 27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
     lokal; Suchfeld in der Seitenleiste und Tastenkürzel.
+    - **Umsetzung 27** (`20261020130000_page_search.sql`):
+      - `page_documents.search_text`: generierte Spalte mit dem Klartext
+        des Dokuments (`document_plain_text`: alle `text`-Werte der Blöcke,
+        höchstens 200 000 Zeichen); für bestehende Zeilen berechnet, ohne
+        `updated_at` zu ändern. Trigramm-Indizes (`pg_trgm`) auf Text und
+        `pages.title`.
+      - RPC `search_pages(query, limit)` mit den Rechten des Aufrufers (RLS
+        entscheidet): Teilstring in Titel oder Text, Groß/klein egal,
+        mindestens zwei Zeichen, `%`/`_` sind Zeichen; Titel-Treffer zuerst,
+        mit Textausschnitt um den ersten Treffer; höchstens 100 (App: 30).
+        pgTAP: `page_search.test.sql`.
+      - App (`features/search/`): „Suchen“ oben in der Seitenleiste und
+        Strg/⌘+K öffnen `SearchDialog` (kurze Tipp-Pause, Pfeiltasten,
+        Enter öffnet, Treffer hervorgehoben, Pfad und Ausschnitt). Gezeigt
+        werden nur Seiten, die die App öffnen kann (Workspace und „Mit mir
+        geteilt“).
+      - Offline oder ohne Server: Titel der bekannten Seiten und Text der auf
+        dem Gerät gespeicherten Dokumente (`LocalDocumentStore.listAll`,
+        `documentText`), mit Hinweis.
+      - Tests: Vitest `search-text.test.ts`, Playwright `search.e2e.ts`.
+      - Noch nicht: Suche in Datenbank-Werten (Eigenschaften), Filter nach
+        Workspace oder Typ, Rangfolge nach Relevanz.
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
     Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
     exportierte Seiten echte Seitenlinks.
