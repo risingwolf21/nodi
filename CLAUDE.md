@@ -346,6 +346,7 @@ src/
       page-display.ts       # „Ohne Titel“ für leere Namen (Einträge)
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite/Datenbank, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
+      components/IconGrid.tsx       # Emoji suchen/einfügen (30a); Liste in page-icons.ts
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
@@ -2241,7 +2242,17 @@ nicht gewünscht.
       - Noch nicht: Dateien beim Entfernen aus dem Wert löschen, Bilder als
         Titelbild der Galerie, Personen aus dem Notion-Import (die CSV
         enthält nur Namen; bleibt Text), Benachrichtigungen.
-30. **Favoriten, Titelbilder, Emoji-Suche.**
+30. **Favoriten, Titelbilder, Emoji-Suche.** Aufteilung: 30a Emoji-Suche,
+    30b Favoriten, 30c Titelbilder (je ein PR).
+    - **Umsetzung 30a** (nur Frontend, keine Migration):
+      - `page-icons.ts`: rund 140 Emojis mit deutschen Suchwörtern
+        (`searchIcons`: jedes Wort der Eingabe muss einen Wortanfang
+        treffen). Ein eingetipptes oder eingefügtes einzelnes Emoji
+        (`typedEmoji`, auch mit Hautton, ZWJ-Folgen und Flaggen) lässt sich
+        ebenfalls wählen, auch wenn es nicht in der Liste steht.
+      - `IconGrid` (Suchfeld mit Fokus, Enter wählt das erste) für das
+        Seiten-Icon (`PageHeader`) und das Callout-Icon.
+      - Tests: Vitest `page-icons.test.ts`, Playwright `page-icon.e2e.ts`.
 31. **Kommentare** an Seiten und Textstellen.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
@@ -2322,8 +2333,8 @@ Noch nicht abschließend geprüft:
   (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
   Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
 - Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
-  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
-  Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
+  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
+  Suche (feste Liste plus eingefügte Emojis). Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
   der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SmilePlus } from "lucide-react";
 import { Menu } from "@/components/ui/menu";
-import { PAGE_ICONS } from "../page-icons";
 import type { Page } from "../types";
+import { IconGrid } from "./IconGrid";
 
 type PageHeaderProps = {
     page: Page;
@@ -82,20 +82,7 @@ export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon }: 
                 )}
 
                 <Menu open={pickerOpen} onClose={() => setPickerOpen(false)} align="start" className="w-72 p-2">
-                    <div className="grid grid-cols-8 gap-0.5" role="group" aria-label="Icons">
-                        {PAGE_ICONS.map((icon) => (
-                            <button
-                                key={icon}
-                                type="button"
-                                role="menuitem"
-                                aria-label={`Icon ${icon}`}
-                                onClick={() => chooseIcon(icon)}
-                                className="flex size-8 items-center justify-center rounded text-xl hover:bg-accent"
-                            >
-                                {icon}
-                            </button>
-                        ))}
-                    </div>
+                    <IconGrid onChoose={chooseIcon} />
                     {page.icon && (
                         <button
                             type="button"
