@@ -12,7 +12,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { Table2 } from "lucide-react";
+import { MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -303,6 +303,16 @@ function EditorContent({
                                 filterSuggestionItems(
                                     [
                                         ...getDefaultReactSlashMenuItems(editor),
+                                        {
+                                            title: "Callout",
+                                            subtext: "Hervorgehobener Text mit Emoji",
+                                            aliases: ["callout", "hinweis", "info", "box", "aside"],
+                                            group: "Einfache Blöcke",
+                                            icon: <MessageSquareText size={18} />,
+                                            onItemClick: () => {
+                                                insertOrUpdateBlockForSlashMenu(editor, { type: "callout" });
+                                            },
+                                        },
                                         {
                                             title: "Datenbank",
                                             subtext: "Ansicht einer bestehenden Datenbank",

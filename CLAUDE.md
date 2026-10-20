@@ -271,7 +271,8 @@ src/
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
-    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c)
+    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c) + „Callout“ (22)
+    editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
@@ -2007,6 +2008,25 @@ nicht gewünscht.
         Verknüpfungen, 1747 Werte (vorher 1041), keine Fehler.
 22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
     „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
+    - **Umsetzung 22** (nur Frontend, keine Migration):
+      - Block `callout` in `editor-schema.tsx`: Inline-Text, Props `emoji`
+        (Standard 💡) und `color` (BlockNotes Farbnamen, Standard grau;
+        `components/editor/callout.ts`). Verschachtelte Blöcke (Tab) stehen
+        mit im farbigen Kasten (`.nodi-callout`-Regeln in `index.css` per
+        `:has`, hell und dunkel).
+      - Klick auf das Emoji (nur mit Schreibrecht): Emoji-Auswahl (dieselbe
+        Liste wie Seiten-Icons, jetzt `features/pages/page-icons.ts`) und
+        Hintergrund. Slash-Menü „/Callout“ (auch „hinweis“, „info“).
+      - Öffentliche Ansicht: dasselbe Schema, Emoji nicht klickbar.
+      - Import: `markdownToImportedBlocks` macht aus `<aside>…</aside>`
+        einen Callout; der erste Absatz ist sein Text (ein führendes Emoji
+        wird das Icon), der Rest wird verschachtelt. Steht am Anfang nur
+        ein Link (Datenbank, Datei), bleibt er ein eigener Block im Callout.
+      - Achtung: App-Versionen vor 22 kennen den Block nicht und können
+        Seiten mit Callout nicht öffnen (wie 19c); installierte Apps nach
+        dem Update-Hinweis aktualisieren.
+      - Tests: Vitest `import-blocks.test.ts`, Playwright `callout.e2e.ts`
+        und „Notion-Callouts werden Callout-Blöcke“.
 23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
     Unterseiten und Datenbanken (Seitenleiste, Eintrag, Verschieben;
     `move_page` erlaubt dann Seiten mit Unterseiten als Eintrag). Import
