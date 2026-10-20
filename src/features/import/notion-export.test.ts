@@ -158,6 +158,22 @@ describe("planNotionImport", () => {
         );
     });
 
+    it("orders by links whose targets keep parentheses", () => {
+        const files = new Map([
+            [
+                `Ordner ${ID_A}.md`,
+                `# Ordner\n\n[Zweite](Ordner/Zweite%20(2)%20${ID_C}.md)\n\n[Erste](Ordner/Erste%20${ID_B}.md)`,
+            ],
+            [`Ordner/Erste ${ID_B}.md`, "# Erste"],
+            [`Ordner/Zweite (2) ${ID_C}.md`, "# Zweite (2)"],
+        ]);
+        expect(planNotionImport(files, files.keys()).items.map((item) => item.title)).toEqual([
+            "Ordner",
+            "Zweite (2)",
+            "Erste",
+        ]);
+    });
+
     it("gives siblings with the same title the subpages they link", () => {
         const files = new Map([
             [`Woche ${ID_A}.md`, `# Woche\n\n[Montag](Woche/Montag%20${ID_C}.md)`],

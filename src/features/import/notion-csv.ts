@@ -80,14 +80,15 @@ export function parseCsv(text: string): string[][] {
  * as paths in the export, resolved from the CSV's folder.
  */
 export function relationLinks(cell: string, csvPath: string): string[] {
-    return [...cell.matchAll(/\(([^()]*\.md)\)/gi)].flatMap(
+    // Paths are URL-encoded (no spaces) but may keep parentheses: "Notes (2) (../Notes%20(2)%20….md)".
+    return [...cell.matchAll(/\((\S+?\.md)\)/gi)].flatMap(
         (match) => resolveExportPath(csvPath, match[1])?.normalize("NFC") ?? [],
     );
 }
 
 /** "Bericht (Aufgaben%20…/Bericht%20….md)" → "Bericht": relations and links to pages. */
 export function cleanCell(value: string): string {
-    return value.replace(/\s*\([^()]*\.(?:md|csv)\)/gi, "").trim();
+    return value.replace(/\s*\(\S+?\.(?:md|csv)\)/gi, "").trim();
 }
 
 const MONTHS: Record<string, number> = {
@@ -112,24 +113,45 @@ function validDate(year: number, month: number, day: number): boolean {
     return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
-/** "10:30", "10:30 AM", "22:15 Uhr" → hours and minutes (24 h); null for anything else. */
-function parseTime(text: string): { hours: number; minutes: number } | null {
-    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp])\.?[Mm]\.?)?(?:\s*(?:Uhr|\(.*\)))?$/.exec(text.trim());
+type Time = {
+    hours: number;
+    minutes: number;
+    /** Minutes east of UTC ("(GMT+2)"); null: local time. */ offset: number | null;
+};
+type DateParts = { year: number; month: number; day: number; time: Time | null };
+
+/** "+2", "-5:30" → minutes east of UTC. */
+function zoneOffset(zone: string | undefined): number | null {
+    const match = /^(?:GMT|UTC)(?:([+-])(\d{1,2})(?::?(\d{2}))?)?$/i.exec(zone?.trim() ?? "");
+    if (!match) return null;
+    const minutes = Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+    return match[1] === "-" ? -minutes : minutes;
+}
+
+/** "10:30", "10:30 AM", "22:15 Uhr", "8:30 (GMT+2)" → hours and minutes (24 h); null for anything else. */
+function parseTime(text: string): Time | null {
+    const match = /^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AaPp])\.?[Mm]\.?)?(?:\s*Uhr)?(?:\s*\(([^)]*)\))?$/.exec(
+        text.trim(),
+    );
     if (!match) return null;
     const hours = Number(match[1]);
     const minutes = Number(match[2]);
     const meridiem = match[3]?.toLowerCase();
     if (minutes > 59 || hours > (meridiem ? 12 : 23) || (meridiem && hours < 1)) return null;
-    return { hours: meridiem ? (hours % 12) + (meridiem === "p" ? 12 : 0) : hours, minutes };
+    return {
+        hours: meridiem ? (hours % 12) + (meridiem === "p" ? 12 : 0) : hours,
+        minutes,
+        offset: zoneOffset(match[4]),
+    };
 }
 
 /** One date (optionally with time) in one of Notion's date formats. */
-function parseSingleDate(text: string, dayFirst: boolean): string | null {
+function parseDateParts(text: string, dayFirst: boolean): DateParts | null {
     const value = text.trim().replace(/\s+/g, " ");
-    let date: { year: number; month: number; day: number } | null = null;
+    let date: Omit<DateParts, "time"> | null = null;
     let rest = "";
 
-    const patterns: [RegExp, (match: RegExpExecArray) => { year: number; month: number; day: number } | null][] = [
+    const patterns: [RegExp, (match: RegExpExecArray) => Omit<DateParts, "time"> | null][] = [
         // 2026-10-19, 2026/10/19
         [/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/, (m) => ({ year: +m[1], month: +m[2], day: +m[3] })],
         // 10/19/2026 or 19/10/2026; 19.10.2026
@@ -157,23 +179,34 @@ function parseSingleDate(text: string, dayFirst: boolean): string | null {
         break;
     }
     if (!date || !validDate(date.year, date.month, date.day)) return null;
-    if (!rest) return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
-
-    // Notion writes the time without a zone, as the user saw it: local time of this device.
+    if (!rest) return { ...date, time: null };
     const time = parseTime(rest.replace(/^T/, ""));
-    if (!time) return null;
-    return new Date(date.year, date.month - 1, date.day, time.hours, time.minutes).toISOString();
+    return time ? { ...date, time } : null;
 }
 
-/** "October 19, 2026" or a range "October 19, 2026 → October 21, 2026". */
+function dateValue({ year, month, day, time }: DateParts): string {
+    if (!time) return `${year}-${pad(month)}-${pad(day)}`;
+    // With a zone ("(GMT+2)") the time is exact; without one Notion wrote it as the user saw it: local time.
+    if (time.offset !== null) {
+        return new Date(Date.UTC(year, month - 1, day, time.hours, time.minutes) - time.offset * 60_000).toISOString();
+    }
+    return new Date(year, month - 1, day, time.hours, time.minutes).toISOString();
+}
+
+/**
+ * "October 19, 2026", a range "October 19, 2026 → October 21, 2026", or a
+ * range on one day whose end is only a time ("August 6, 2026 7:20 (GMT+2) → 16:00").
+ */
 export function parseNotionDate(text: string, dayFirst = false): DateValue | null {
     const [startText, endText, ...more] = text.split("→");
     if (more.length > 0) return null;
-    const start = parseSingleDate(startText, dayFirst);
+    const start = parseDateParts(startText, dayFirst);
     if (!start) return null;
-    if (endText === undefined) return { start, end: null };
-    const end = parseSingleDate(endText, dayFirst);
-    return end ? { start, end } : null;
+    if (endText === undefined) return { start: dateValue(start), end: null };
+    let end = parseDateParts(endText, dayFirst);
+    const endTime = !end && start.time ? parseTime(endText) : null;
+    if (start.time && endTime) end = { ...start, time: { ...endTime, offset: endTime.offset ?? start.time.offset } };
+    return end ? { start: dateValue(start), end: dateValue(end) } : null;
 }
 
 const CHECKED = new Set(["yes", "ja", "true", "✓"]);
@@ -362,4 +395,25 @@ export function stripPropertyLines(body: string, columnNames: readonly string[])
         index += 1;
     }
     return index === start ? body : lines.slice(index).join("\n");
+}
+
+// "Name: Value" or "Name:" (empty); names have no colon.
+const PROPERTY_LINE = /^([^:\n]{1,100}):(?: (.*))?$/;
+
+/**
+ * The "Name: Value" lines below an entry's title. Newer exports write
+ * properties there that the CSV leaves out (relations, rollups, formulas,
+ * package 21b); they end at the first other line.
+ */
+export function readPropertyLines(body: string): { name: string; value: string }[] {
+    const lines = body.split(/\r?\n/);
+    let index = 0;
+    while (index < lines.length && lines[index].trim() === "") index += 1;
+    const properties: { name: string; value: string }[] = [];
+    for (; index < lines.length; index += 1) {
+        const match = PROPERTY_LINE.exec(lines[index]);
+        if (!match) break;
+        properties.push({ name: match[1], value: match[2] ?? "" });
+    }
+    return properties;
 }

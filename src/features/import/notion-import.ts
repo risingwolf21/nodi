@@ -9,6 +9,7 @@ import {
     columnValue,
     inferColumn,
     parseCsv,
+    readPropertyLines,
     relationLinks,
     stripPropertyLines,
     type ImportedColumn,
@@ -80,18 +81,40 @@ type ImportedDatabase = {
     path: string;
     id: string;
     title: string;
-    /** The entry of each CSV row, in order. */
-    rowPageIds: string[];
+    /** The page of each entry, in order (CSV rows first). */
+    entryPageIds: string[];
     /** Property ids by name, the title column as `TITLE_FIELD` (sortings of embedded views name them). */
     propertyIds: Map<string, string>;
 };
+
+/** A value of an entry: from the CSV or from the entry's page (links resolve from there). */
+type Cell = { text: string; from: string };
+
+/**
+ * Properties found only in entry pages. A "Name: Value" line could also be
+ * the start of the text: a name counts if two entries have it, or if the
+ * lines also hold a property of the CSV.
+ */
+function pagePropertyNames(csvNames: ReadonlySet<string>, pageProperties: readonly { name: string }[][]): string[] {
+    const counts = new Map<string, number>();
+    const confirmed = new Set<string>();
+    for (const lines of pageProperties) {
+        const withCsv = lines.some((line) => csvNames.has(line.name));
+        for (const name of new Set(lines.map((line) => line.name))) {
+            if (csvNames.has(name)) continue;
+            counts.set(name, (counts.get(name) ?? 0) + 1);
+            if (withCsv) confirmed.add(name);
+        }
+    }
+    return [...counts].flatMap(([name, count]) => (count >= 2 || confirmed.has(name) ? [name] : []));
+}
 
 type RelationColumn = {
     database: ImportedDatabase;
     name: string;
     /** The linked database in the export. */
     targetPath: string;
-    /** Linked entry files, per CSV row. */
+    /** Linked entry files, per entry. */
     links: string[][];
 };
 
@@ -213,9 +236,9 @@ export async function importNotionExport(
     const pageIdOfEntry = new Map<string, string>();
 
     /** A column whose cells only link entries of one database of the export is a relation to it. */
-    const relationTarget = (cells: string[], csvPath: string): Pick<RelationColumn, "targetPath" | "links"> | null => {
-        const links = cells.map((cell) => relationLinks(cell, csvPath));
-        const filled = cells.flatMap((cell, row) => (cell.trim() ? [links[row]] : []));
+    const relationTarget = (cells: (Cell | undefined)[]): Pick<RelationColumn, "targetPath" | "links"> | null => {
+        const links = cells.map((cell) => (cell ? relationLinks(cell.text, cell.from) : []));
+        const filled = cells.flatMap((cell, entry) => (cell?.text.trim() ? [links[entry]] : []));
         if (filled.length === 0 || filled.some((rowLinks) => rowLinks.length === 0)) return null;
         const targets = new Set(links.flat().map((path) => databaseOfEntry.get(path)));
         const [targetPath] = targets;
@@ -256,10 +279,10 @@ export async function importNotionExport(
                 linked.set(from, (linked.get(from) ?? new Set()).add(to));
             };
             for (const [row, links] of column.links.entries()) {
-                for (const path of links) addLink(column.database.rowPageIds[row], pageIdOfEntry.get(path));
+                for (const path of links) addLink(column.database.entryPageIds[row], pageIdOfEntry.get(path));
             }
             for (const [row, links] of partner?.links.entries() ?? []) {
-                for (const path of links) addLink(pageIdOfEntry.get(path), partner?.database.rowPageIds[row]);
+                for (const path of links) addLink(pageIdOfEntry.get(path), partner?.database.entryPageIds[row]);
             }
             for (const [pageId, ids] of linked) {
                 await dependencies.setValue(pageId, propertyId, [...ids].slice(0, MAX_RELATION_ENTRIES));
@@ -275,7 +298,8 @@ export async function importNotionExport(
     const addViews = async (
         planned: PlannedDatabase,
         databaseId: string,
-        header: string[],
+        // The names of the CSV's columns; properties from entry pages come after them.
+        csvNames: string[],
         columns: ImportedColumn[],
         // null: a relation, created later.
         propertyIds: (string | null)[],
@@ -285,7 +309,9 @@ export async function importNotionExport(
             planned.dataPath !== planned.path && archive.has(planned.path) ? csvHeader(planned.path) : null;
         const shown = viewHeader && new Set(viewHeader.map((name) => name.trim()));
         const hiddenPropertyIds = shown
-            ? propertyIds.flatMap((id, index) => (id && !shown.has((header[index + 1] ?? "").trim()) ? [id] : []))
+            ? propertyIds.flatMap((id, index) =>
+                  id && index < csvNames.length && !shown.has(csvNames[index]) ? [id] : [],
+              )
             : [];
         const config = { ...EMPTY_VIEW_CONFIG, hiddenPropertyIds };
 
@@ -316,25 +342,55 @@ export async function importNotionExport(
             databaseIds.get(planned.path),
         );
         const [header = [], ...rows] = parseCsv(decoder.decode(archive.get(planned.dataPath)));
+        const csvNames = header.slice(1).map((name, index) => name.trim() || `Eigenschaft ${index + 1}`);
+
+        // Entry pages by title; a row takes the first one with its title.
+        const entryFiles = new Map<string, string[]>();
+        for (const path of planned.entryPaths) {
+            const title = splitTitle(markdown.get(path) ?? "").title ?? titleFromFileName(path);
+            entryFiles.set(title, [...(entryFiles.get(title) ?? []), path]);
+        }
+        const entries: { title: string; path: string | null; cells: Map<string, Cell> }[] = rows.map((row) => {
+            const title = (row[0] ?? "").trim();
+            const cells = new Map(
+                csvNames.map((name, index) => [name, { text: row[index + 1] ?? "", from: planned.dataPath }]),
+            );
+            return { title, path: entryFiles.get(title)?.shift() ?? null, cells };
+        });
+        const rowCount = entries.length;
+        // Entry pages without a row (e.g. a CSV of a filtered view).
+        for (const [title, paths] of entryFiles) {
+            for (const path of paths) entries.push({ title, path, cells: new Map() });
+        }
+
+        // Newer exports leave relations, rollups and formulas out of the CSV; the entry pages have them.
+        const pageProperties = entries.map((entry) =>
+            entry.path ? readPropertyLines(splitTitle(markdown.get(entry.path) ?? "").body) : [],
+        );
+        const extraNames = pagePropertyNames(new Set(csvNames), pageProperties);
+        for (const [index, entry] of entries.entries()) {
+            for (const { name, value } of pageProperties[index]) {
+                // The CSV's value wins; entries without a row take all of their page's values.
+                if (entry.path && (extraNames.includes(name) || (index >= rowCount && csvNames.includes(name)))) {
+                    entry.cells.set(name, { text: value, from: entry.path });
+                }
+            }
+        }
+        const names = [...csvNames, ...extraNames];
 
         // The first column is the title; the others become properties.
-        const columns = header.slice(1).map((name, index) =>
+        const columns = names.map((name) =>
             inferColumn(
-                name.trim() || `Eigenschaft ${index + 1}`,
-                rows.map((row) => cleanCell(row[index + 1] ?? "")),
+                name,
+                entries.map((entry) => cleanCell(entry.cells.get(name)?.text ?? "")),
             ),
         );
-        const relations = header.slice(1).map((_, index) =>
-            relationTarget(
-                rows.map((row) => row[index + 1] ?? ""),
-                planned.dataPath,
-            ),
-        );
+        const relations = names.map((name) => relationTarget(entries.map((entry) => entry.cells.get(name))));
         const imported: ImportedDatabase = {
             path: planned.path,
             id: database.id,
             title: planned.title,
-            rowPageIds: [],
+            entryPageIds: [],
             propertyIds: new Map([[(header[0] ?? "").trim(), TITLE_FIELD]]),
         };
         importedDatabases.set(planned.path, imported);
@@ -359,42 +415,26 @@ export async function importNotionExport(
             propertyIds.push(property.id);
             imported.propertyIds.set(column.name, property.id);
         }
-        await addViews(planned, database.id, header, columns, propertyIds);
+        await addViews(planned, database.id, csvNames, columns, propertyIds);
 
-        // Entry pages by title; a row takes the first one with its title.
-        const entryFiles = new Map<string, string[]>();
-        for (const path of planned.entryPaths) {
-            const title = splitTitle(markdown.get(path) ?? "").title ?? titleFromFileName(path);
-            entryFiles.set(title, [...(entryFiles.get(title) ?? []), path]);
-        }
-        const entries: { title: string; cells: string[]; path: string | null }[] = rows.map((row) => {
-            const title = (row[0] ?? "").trim();
-            return { title, cells: row.slice(1), path: entryFiles.get(title)?.shift() ?? null };
-        });
-        // Entry pages without a row (e.g. a CSV of a filtered view).
-        for (const [title, paths] of entryFiles) {
-            for (const path of paths) entries.push({ title, cells: [], path });
-        }
-
-        const columnNames = header.slice(1);
         for (const [index, entry] of entries.entries()) {
             if (dependencies.signal?.aborted) return;
             report(`${planned.title}: Eintrag ${index + 1} von ${entries.length}`);
             const page = await dependencies.createPage(entry.title, database.id);
-            // Rows first, in their order: relations find their entries by row.
-            if (index < rows.length) imported.rowPageIds.push(page.id);
+            // In order: relations find their entries by index.
+            imported.entryPageIds.push(page.id);
             if (entry.path) pageIdOfEntry.set(entry.path, page.id);
             await Promise.all(
                 columns.flatMap((column, columnIndex) => {
                     const propertyId = propertyIds[columnIndex];
-                    const value = columnValue(column, cleanCell(entry.cells[columnIndex] ?? ""));
+                    const value = columnValue(column, cleanCell(entry.cells.get(names[columnIndex])?.text ?? ""));
                     return value === undefined || !propertyId
                         ? []
                         : [dependencies.setValue(page.id, propertyId, value)];
                 }),
             );
             if (entry.path) {
-                const body = stripPropertyLines(splitTitle(markdown.get(entry.path) ?? "").body, columnNames);
+                const body = stripPropertyLines(splitTitle(markdown.get(entry.path) ?? "").body, names);
                 await importText(entry.path, page.id, body, entry.title || "Ohne Titel");
             }
             summary.entries += 1;
