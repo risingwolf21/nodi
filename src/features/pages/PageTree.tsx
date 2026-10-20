@@ -1,4 +1,4 @@
-import type { MoveTarget } from "./page-hierarchy";
+import { compareByPosition, type MoveTarget } from "./page-hierarchy";
 import { PageTreeItem } from "./PageTreeItem";
 import type { Page } from "./types";
 
@@ -9,6 +9,9 @@ export type TreeDragAndDrop = {
     start: (pageId: string) => void;
     end: () => void;
     drop: (target: MoveTarget) => void;
+    /** Before or after a sibling: a new order (package 32a). */
+    canPlace: (target: Page) => boolean;
+    place: (target: Page, where: "before" | "after") => void;
 };
 
 type PageTreeProps = {
@@ -38,7 +41,7 @@ export function PageTree({
     dragAndDrop,
     emptyText = "Noch keine Seiten",
 }: PageTreeProps) {
-    const rootPages = pages.filter((page) => page.parent_id === null);
+    const rootPages = pages.filter((page) => page.parent_id === null).sort(compareByPosition);
 
     if (rootPages.length === 0) {
         return <p className="px-2 py-1 text-sm text-muted-foreground">{emptyText}</p>;

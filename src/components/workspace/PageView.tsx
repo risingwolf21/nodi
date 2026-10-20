@@ -9,6 +9,7 @@ import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
+import type { PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
 
@@ -57,6 +58,8 @@ type PageViewProps = {
     databases?: Page[];
     /** All pages the app knows, for the databases shown as blocks in the text. */
     knownPages: Page[];
+    /** New manual order of a database's entries (package 32a); undefined where it cannot change. */
+    onReorderPages?: (updates: PositionUpdate[]) => Promise<void>;
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -97,6 +100,7 @@ export function PageView({
     templateActions,
     databases,
     knownPages,
+    onReorderPages,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
@@ -320,6 +324,7 @@ export function PageView({
                             onRenameEntry={onRename}
                             databases={databases}
                             templateActions={templateActions}
+                            onReorderEntries={onReorderPages}
                         />
                     </Suspense>
                 </LoadErrorBoundary>

@@ -4,7 +4,15 @@ import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree, type TreeDragAndDrop } from "../PageTree";
 import { displayTitle } from "../page-display";
-import { moveProblem, pagesInSection, withoutDatabaseEntries, type MoveTarget } from "../page-hierarchy";
+import {
+    moveProblem,
+    pagesInSection,
+    placeBefore,
+    withoutDatabaseEntries,
+    compareByPosition,
+    type MoveTarget,
+    type PositionUpdate,
+} from "../page-hierarchy";
 import type { Page, PageKind, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
 
@@ -40,6 +48,8 @@ type SidebarProps = {
     onMove: (page: Page) => void;
     /** A page dragged onto another page or a section title. */
     onDropPage: (page: Page, target: MoveTarget) => void;
+    /** A page dragged before or after a sibling (package 32a). */
+    onReorder: (updates: PositionUpdate[]) => void;
 };
 
 const SECTIONS: { section: PageSection; title: string; addLabel: string; emptyText: string }[] = [
@@ -81,6 +91,7 @@ export function Sidebar({
     onEmptyTrash,
     onMove,
     onDropPage,
+    onReorder,
 }: SidebarProps) {
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
@@ -99,11 +110,37 @@ export function Sidebar({
     const dragged = draggedId ? pages.find((page) => page.id === draggedId) : undefined;
     const canDrop = (target: MoveTarget) =>
         dragged !== undefined && moveProblem(dragged, target, pages, userId) === null;
+    // Reordering stays among siblings of one section; other places go through "Verschieben".
+    const siblingsOf = (page: Page) =>
+        treePages
+            .filter((item) => item.parent_id === page.parent_id && item.visibility === page.visibility)
+            .sort(compareByPosition);
+    const canPlace = (target: Page) =>
+        dragged !== undefined &&
+        dragged.id !== target.id &&
+        dragged.parent_id === target.parent_id &&
+        dragged.visibility === target.visibility;
+    const place = (target: Page, where: "before" | "after") => {
+        if (!dragged || !canPlace(target)) return;
+        const siblings = siblingsOf(target);
+        const others = siblings.filter((item) => item.id !== dragged.id);
+        const beforeId =
+            where === "before"
+                ? target.id
+                : (others[others.findIndex((item) => item.id === target.id) + 1]?.id ?? null);
+        onReorder(placeBefore(siblings, dragged.id, beforeId));
+    };
     const dragAndDrop: TreeDragAndDrop | undefined = readOnly
         ? undefined
         : {
               draggedId,
               canDrop,
+              canPlace,
+              place: (target, where) => {
+                  place(target, where);
+                  setDraggedId(null);
+                  setDropOnSection(null);
+              },
               start: setDraggedId,
               end: () => {
                   setDraggedId(null);

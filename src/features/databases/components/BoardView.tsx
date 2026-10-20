@@ -19,6 +19,8 @@ type BoardViewProps = {
     onCreateEntry?: (optionId: string | null) => Promise<void>;
     /** Moves an entry into another column by changing its value. */
     onMoveEntry: (pageId: string, optionId: string | null) => Promise<void>;
+    /** Puts an entry before another one (null: at the end); undefined while a sort rule decides the order. */
+    onPlaceEntry?: (pageId: string, beforeId: string | null) => Promise<void>;
     onAddGroupProperty: () => Promise<void>;
     onError: (message: string) => void;
 };
@@ -38,11 +40,14 @@ export function BoardView({
     onOpenEntry,
     onCreateEntry,
     onMoveEntry,
+    onPlaceEntry,
     onAddGroupProperty,
     onError,
 }: BoardViewProps) {
     const dragged = useRef<{ pageId: string; from: string } | null>(null);
     const [dropTarget, setDropTarget] = useState("");
+    // A card a dragged one would land before (package 32a).
+    const [dropBefore, setDropBefore] = useState("");
 
     if (!groupBy) {
         return (
@@ -74,13 +79,21 @@ export function BoardView({
     const cardProperties = properties.filter((item) => item.id !== property.id);
     const groups = groupRows(rows, property);
 
-    function drop(event: DragEvent<HTMLElement>, optionId: string | null) {
+    /** Into a column, before a card of it (or at its end). */
+    function drop(event: DragEvent<HTMLElement>, optionId: string | null, beforeId: string | null = null) {
         event.preventDefault();
+        event.stopPropagation();
         setDropTarget("");
+        setDropBefore("");
         const card = dragged.current;
         dragged.current = null;
-        if (!card || card.from === (optionId ?? NO_VALUE_COLUMN)) return;
-        onMoveEntry(card.pageId, optionId).catch((err: unknown) =>
+        if (!card) return;
+        const otherColumn = card.from !== (optionId ?? NO_VALUE_COLUMN);
+        if (!otherColumn && (!onPlaceEntry || beforeId === null || beforeId === card.pageId)) return;
+        (async () => {
+            if (otherColumn) await onMoveEntry(card.pageId, optionId);
+            if (onPlaceEntry && beforeId !== card.pageId) await onPlaceEntry(card.pageId, beforeId);
+        })().catch((err: unknown) =>
             onError(err instanceof Error ? err.message : "Der Eintrag konnte nicht verschoben werden."),
         );
     }
@@ -112,22 +125,40 @@ export function BoardView({
                                 <span aria-label={`${group.rows.length} Einträge`}>{group.rows.length}</span>
                             </header>
                             {group.rows.map((row) => (
-                                <EntryCard
+                                <div
                                     key={row.page.id}
-                                    row={row}
-                                    properties={cardProperties}
-                                    onOpen={() => onOpenEntry(row.page.id)}
-                                    onDragStart={
-                                        editable
-                                            ? (event) => {
-                                                  dragged.current = { pageId: row.page.id, from: key };
-                                                  event.dataTransfer.effectAllowed = "move";
-                                                  // Firefox only starts a drag that carries data.
-                                                  event.dataTransfer.setData("text/plain", displayTitle(row.page));
-                                              }
-                                            : undefined
+                                    onDragOver={(event) => {
+                                        if (!editable || !dragged.current || !onPlaceEntry) return;
+                                        event.preventDefault();
+                                        setDropBefore(row.page.id);
+                                    }}
+                                    onDragLeave={() =>
+                                        setDropBefore((current) => (current === row.page.id ? "" : current))
                                     }
-                                />
+                                    onDrop={(event) => {
+                                        if (onPlaceEntry) drop(event, group.option?.id ?? null, row.page.id);
+                                    }}
+                                    className={cn(
+                                        "rounded-lg",
+                                        dropBefore === row.page.id && "shadow-[0_-3px_0_var(--brand)]",
+                                    )}
+                                >
+                                    <EntryCard
+                                        row={row}
+                                        properties={cardProperties}
+                                        onOpen={() => onOpenEntry(row.page.id)}
+                                        onDragStart={
+                                            editable
+                                                ? (event) => {
+                                                      dragged.current = { pageId: row.page.id, from: key };
+                                                      event.dataTransfer.effectAllowed = "move";
+                                                      // Firefox only starts a drag that carries data.
+                                                      event.dataTransfer.setData("text/plain", displayTitle(row.page));
+                                                  }
+                                                : undefined
+                                        }
+                                    />
+                                </div>
                             ))}
                             {editable && onCreateEntry && (
                                 <button
