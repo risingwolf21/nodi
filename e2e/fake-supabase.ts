@@ -618,6 +618,17 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle));
         return json(hits.map(({ id, title, snippet }) => ({ id, title, snippet })));
     }
+    if (path === "/rest/v1/rpc/page_backlinks") {
+        // Like the server: active pages whose saved text has a page link to the page.
+        const target = text(requestBody(route), "p_page_id");
+        const links = (document: unknown) => JSON.stringify(document ?? []).includes(`"pageId":"${target}"`);
+        return json(
+            backend.pages
+                .filter((item) => item.id !== target && !item.is_archived)
+                .filter((item) => links(backend.savedDocuments.get(item.id)))
+                .map(({ id, title, icon, kind }) => ({ id, title, icon, kind })),
+        );
+    }
     if (path === "/rest/v1/rpc/create_entry_from_template") {
         // Like the server: a copy of the template (title, icon, values) at the end of its database.
         const template = backend.pages.find((item) => item.id === text(requestBody(route), "p_template_id"));

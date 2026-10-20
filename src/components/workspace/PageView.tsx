@@ -3,6 +3,7 @@ import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-rea
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { Backlinks } from "@/features/pages/components/Backlinks";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
@@ -212,6 +213,7 @@ export function PageView({
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
             />
+            <Backlinks pageId={page.id} knownPages={knownPages} online={!readOnly} onOpen={onSelect} />
             {database && (
                 // Its own boundary: the editor's fallback shows this header again.
                 <LoadErrorBoundary
