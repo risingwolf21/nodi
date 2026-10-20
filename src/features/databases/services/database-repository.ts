@@ -1,13 +1,15 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
-import type {
-    DatabaseBlockRef,
-    DatabaseData,
-    DatabaseProperty,
-    DatabaseView,
-    PropertyOption,
-    RelatedEntry,
+import { canRollUp } from "../rollup";
+import {
+    TITLE_FIELD,
+    type DatabaseBlockRef,
+    type DatabaseData,
+    type DatabaseProperty,
+    type DatabaseView,
+    type PropertyOption,
+    type RelatedEntry,
 } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
@@ -65,7 +67,7 @@ const optionsColumn = (options: PropertyOption[]) => ({ options });
 
 export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "numberFormat">;
 export type PropertyChanges = Partial<
-    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat">
+    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat" | "rollup">
 >;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
@@ -111,6 +113,55 @@ async function withRelatedEntries(properties: DatabaseProperty[]): Promise<Datab
               }
             : property,
     );
+}
+
+/**
+ * Rollups read a property of the related entries: its definition and its
+ * stored values are loaded with the database, like the related entries
+ * (RLS decides what is readable). The title needs nothing more.
+ */
+async function withRollupTargets(properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const targetIds = [
+        ...new Set(
+            properties.flatMap((property) =>
+                property.rollup && property.rollup.targetPropertyId !== TITLE_FIELD
+                    ? [property.rollup.targetPropertyId]
+                    : [],
+            ),
+        ),
+    ];
+    if (targetIds.length === 0) return properties;
+
+    const [targets, values] = await Promise.all([
+        supabase.from("database_properties").select(PROPERTY_COLUMNS).in("id", targetIds),
+        supabase
+            .from("page_property_values")
+            .select("pageId:page_id,propertyId:property_id,value,updatedAt:updated_at")
+            .in("property_id", targetIds),
+    ]);
+    for (const response of [targets, values]) {
+        const failure = toRequestError(response);
+        if (failure) throw failure;
+    }
+    // Computed targets have no stored values: the rollup shows nothing for them.
+    const targetProperties = new Map(
+        parseProperties(targets.data)
+            .filter((property) => canRollUp(property.type))
+            .map((property) => [property.id, property]),
+    );
+    const valuesByProperty = new Map<string, Record<string, unknown>>();
+    for (const value of parseValues(values.data)) {
+        const record = valuesByProperty.get(value.propertyId) ?? {};
+        record[value.pageId] = value.value;
+        valuesByProperty.set(value.propertyId, record);
+    }
+    return properties.map((property) => {
+        const rollup = property.rollup;
+        if (!rollup || rollup.targetPropertyId === TITLE_FIELD) return property;
+        const target = targetProperties.get(rollup.targetPropertyId) ?? null;
+        const loaded = { property: target, values: valuesByProperty.get(rollup.targetPropertyId) ?? {} };
+        return { ...property, rollup: { ...rollup, target: loaded } };
+    });
 }
 
 /** Whether a value write was taken or lost against a newer one (LWW). */
@@ -184,7 +235,7 @@ export const databaseRepository = {
         }
 
         return {
-            properties: await withRelatedEntries(parseProperties(properties.data)),
+            properties: await withRollupTargets(await withRelatedEntries(parseProperties(properties.data))),
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,
@@ -233,16 +284,22 @@ export const databaseRepository = {
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, formula, numberFormat, ...rest } = changes;
-        // The server keeps a formula's expression and a number's format in options as well.
+        const { options, formula, numberFormat, rollup, ...rest } = changes;
+        // The server keeps a formula's expression, a number's format and a rollup's settings in options.
         const column =
             formula !== undefined
                 ? { expression: formula }
                 : numberFormat !== undefined
                   ? { format: numberFormat }
-                  : options
-                    ? optionsColumn(options)
-                    : undefined;
+                  : rollup !== undefined
+                    ? {
+                          relationPropertyId: rollup.relationPropertyId,
+                          targetPropertyId: rollup.targetPropertyId,
+                          function: rollup.function,
+                      }
+                    : options
+                      ? optionsColumn(options)
+                      : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)
@@ -251,6 +308,18 @@ export const databaseRepository = {
         const failure = databaseError(response, "Die Eigenschaft konnte nicht geändert werden.");
         if (failure) throw failure;
         return requireRow(parseProperties(response.data));
+    },
+
+    /** The properties of another database, e.g. for choosing what a rollup reads. */
+    async listProperties(databaseId: string): Promise<DatabaseProperty[]> {
+        const response = await supabase
+            .from("database_properties")
+            .select(PROPERTY_COLUMNS)
+            .eq("database_id", databaseId)
+            .order("position");
+        const failure = databaseError(response, "Die Eigenschaften konnten nicht geladen werden.");
+        if (failure) throw failure;
+        return parseProperties(response.data);
     },
 
     async deleteProperty(propertyId: string): Promise<void> {
