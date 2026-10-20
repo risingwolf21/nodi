@@ -23,6 +23,8 @@ export type Page = {
     created_at: string;
     /** An entry that is a template of its database (package 26); missing means no. */
     is_template?: boolean;
+    /** In the user's favorites (package 30b); missing means no. */
+    favorite?: boolean;
 };
 
 /** Page settings that can be changed after creation. */

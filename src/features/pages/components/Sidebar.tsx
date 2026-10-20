@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Search, Table2, Trash2, Users } from "lucide-react";
+import { Check, ChevronsUpDown, FileInput, FileText, LogOut, Plus, Search, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree, type TreeDragAndDrop } from "../PageTree";
+import { displayTitle } from "../page-display";
 import { moveProblem, pagesInSection, withoutDatabaseEntries, type MoveTarget } from "../page-hierarchy";
 import type { Page, PageKind, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
@@ -89,6 +90,10 @@ export function Sidebar({
     const trashOpen = showTrash && !readOnly;
     const treePages = withoutDatabaseEntries(pages);
     const sharedTreePages = withoutDatabaseEntries(sharedPages);
+    // Entries too: a favorite opens wherever it is (package 30b).
+    const favorites = pages
+        .filter((page) => page.favorite)
+        .sort((a, b) => displayTitle(a).localeCompare(displayTitle(b), "de"));
 
     // Same rules as "Verschieben nach …"; the server checks the rights.
     const dragged = draggedId ? pages.find((page) => page.id === draggedId) : undefined;
@@ -218,6 +223,41 @@ export function Sidebar({
                     />
                 ) : (
                     <>
+                        {favorites.length > 0 && (
+                            <section aria-labelledby="section-favorites" className="mb-3">
+                                <h2
+                                    id="section-favorites"
+                                    className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground"
+                                >
+                                    Favoriten
+                                </h2>
+                                <ul>
+                                    {favorites.map((page) => (
+                                        <li key={page.id}>
+                                            <button
+                                                type="button"
+                                                aria-current={page.id === selectedPageId ? "page" : undefined}
+                                                onClick={() => onSelect(page.id)}
+                                                className={cn(
+                                                    "flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm hover:bg-sidebar-accent/70 pointer-coarse:h-10",
+                                                    page.id === selectedPageId && "bg-sidebar-accent font-medium",
+                                                )}
+                                            >
+                                                <span className="flex size-5 shrink-0 items-center justify-center">
+                                                    {page.icon ??
+                                                        (page.kind === "database" ? (
+                                                            <Table2 className="size-4 text-muted-foreground" />
+                                                        ) : (
+                                                            <FileText className="size-4 text-muted-foreground" />
+                                                        ))}
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate">{displayTitle(page)}</span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        )}
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
                             <section key={section} aria-labelledby={`section-${section}`} className="mb-3">
                                 {/* Dropping a page on the section title moves it to the top of the section. */}
