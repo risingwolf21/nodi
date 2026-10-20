@@ -2,8 +2,8 @@ import { isDocumentContent } from "@/features/editor/document-sync";
 import type { DocumentContent } from "@/features/editor/types";
 import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
 import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
-import type { DatabaseBlockRef, DatabaseView } from "@/features/databases/types";
-import { rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
+import { TITLE_FIELD, type DatabaseBlockRef, type DatabaseView, type SortRule } from "@/features/databases/types";
+import { rewriteImportedBlocks, type DatabaseBlockLink, type LinkTarget, type UploadResult } from "./import-blocks";
 import {
     cleanCell,
     columnValue,
@@ -17,7 +17,9 @@ import {
     planNotionImport,
     resolveExportPath,
     splitTitle,
+    takeViewSettings,
     titleFromFileName,
+    viewSortOf,
     type PlannedDatabase,
 } from "./notion-export";
 
@@ -80,6 +82,8 @@ type ImportedDatabase = {
     title: string;
     /** The entry of each CSV row, in order. */
     rowPageIds: string[];
+    /** Property ids by name, the title column as `TITLE_FIELD` (sortings of embedded views name them). */
+    propertyIds: Map<string, string>;
 };
 
 type RelationColumn = {
@@ -131,7 +135,7 @@ export async function importNotionExport(
         databaseIds.set(item.dataPath, id);
     }
     // "Datenbank" blocks made from those links; they get the database's views at the end.
-    const databaseBlocks: (DatabaseBlockRef & { databaseId: string })[] = [];
+    const databaseBlocks: (DatabaseBlockRef & DatabaseBlockLink)[] = [];
 
     const summary: ImportSummary = {
         rootPageId: null,
@@ -157,12 +161,20 @@ export async function importNotionExport(
 
     /** Text, images and attachments of a Markdown page, saved to `pageId`. */
     const importText = async (path: string, pageId: string, body: string, title: string) => {
+        const { markdown: text, sorts } = takeViewSettings(body);
+        // Notion leaves out some linked databases (e.g. views of databases outside the export).
+        const missingDatabases = new Set<string>();
         const classify = (href: string): LinkTarget => {
             const target = resolveExportPath(path, href)?.normalize("NFC");
             if (!target) return { kind: "web" };
             const lower = target.toLowerCase();
             if (lower.endsWith(".md")) return { kind: "page" };
-            if (lower.endsWith(".csv")) return { kind: "database", databaseId: databaseIds.get(target) ?? null };
+            if (lower.endsWith(".csv")) {
+                // A view embedded in a page is a copy of the database's CSV: the block shows the database.
+                const databaseId = databaseIds.get(plan.databaseCopies.get(target) ?? target) ?? null;
+                if (!archive.has(target)) missingDatabases.add(titleFromFileName(target));
+                return { kind: "database", databaseId, sort: viewSortOf(href, sorts) };
+            }
             return archive.has(target) ? { kind: "file", path: target } : { kind: "missing", path: target };
         };
         const upload = async (filePath: string): Promise<UploadResult> => {
@@ -176,10 +188,13 @@ export async function importNotionExport(
             }
         };
 
-        const result = await rewriteImportedBlocks(dependencies.markdownToBlocks(body), classify, upload);
+        const result = await rewriteImportedBlocks(dependencies.markdownToBlocks(text), classify, upload);
         databaseBlocks.push(...result.databaseBlocks.map((block) => ({ ...block, pageId })));
         summary.files += result.files;
         summary.problems.push(...result.problems.map((problem) => `${title}: ${problem}`));
+        for (const name of missingDatabases) {
+            summary.problems.push(`${title}: Datenbank „${name}“ fehlt im Export, nur ihr Name wurde übernommen`);
+        }
         if (result.blocks.length > 0 && isDocumentContent(result.blocks)) {
             await dependencies.saveDocument(pageId, result.blocks);
         }
@@ -233,6 +248,7 @@ export async function importNotionExport(
                 target.id,
                 partner?.name ?? column.database.title,
             );
+            column.database.propertyIds.set(column.name, propertyId);
             // The links of both columns, set on this side only: the server links the other side.
             const linked = new Map<string, Set<string>>();
             const addLink = (from: string | undefined, to: string | undefined) => {
@@ -264,7 +280,9 @@ export async function importNotionExport(
         // null: a relation, created later.
         propertyIds: (string | null)[],
     ) => {
-        const viewHeader = planned.dataPath === planned.path ? null : csvHeader(planned.path);
+        // Newer exports have only `…_all.csv`: nothing is hidden.
+        const viewHeader =
+            planned.dataPath !== planned.path && archive.has(planned.path) ? csvHeader(planned.path) : null;
         const shown = viewHeader && new Set(viewHeader.map((name) => name.trim()));
         const hiddenPropertyIds = shown
             ? propertyIds.flatMap((id, index) => (id && !shown.has((header[index + 1] ?? "").trim()) ? [id] : []))
@@ -317,6 +335,7 @@ export async function importNotionExport(
             id: database.id,
             title: planned.title,
             rowPageIds: [],
+            propertyIds: new Map([[(header[0] ?? "").trim(), TITLE_FIELD]]),
         };
         importedDatabases.set(planned.path, imported);
 
@@ -338,6 +357,7 @@ export async function importNotionExport(
                 position,
             });
             propertyIds.push(property.id);
+            imported.propertyIds.set(column.name, property.id);
         }
         await addViews(planned, database.id, header, columns, propertyIds);
 
@@ -381,14 +401,23 @@ export async function importNotionExport(
         }
     };
 
-    /** A database in a page shows the views of the database, as in Notion (they can be changed per block). */
+    /**
+     * A database in a page shows the views of the database, as in Notion (they
+     * can be changed per block), sorted like the embedded view if it says so.
+     */
     const copyViewsToBlocks = async () => {
-        const imported = new Set([...importedDatabases.values()].map((database) => database.id));
+        const imported = new Map([...importedDatabases.values()].map((database) => [database.id, database]));
         for (const block of databaseBlocks) {
+            const database = imported.get(block.databaseId);
             // Not imported (stopped early): the block says the database is not available.
-            if (!imported.has(block.databaseId)) continue;
+            if (!database) continue;
+            const sort = block.sort.flatMap((rule): SortRule[] => {
+                const propertyId = database.propertyIds.get(rule.name);
+                return propertyId ? [{ propertyId, direction: rule.direction }] : [];
+            });
             for (const view of await dependencies.listViews(block.databaseId)) {
-                const { name, type, config, position } = view;
+                const { name, type, position } = view;
+                const config = sort.length > 0 ? { ...view.config, sort } : view.config;
                 await dependencies.addView(
                     block.databaseId,
                     { name, type, config, position },

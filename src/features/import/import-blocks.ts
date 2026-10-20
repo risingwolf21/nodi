@@ -1,4 +1,5 @@
 import { isImagePath } from "@/features/files/file-reference";
+import type { NotionSort } from "./notion-export";
 
 // Blocks as BlockNote's Markdown parser returns them: plain JSON.
 type JsonObject = Record<string, unknown>;
@@ -7,15 +8,15 @@ type JsonObject = Record<string, unknown>;
 export type LinkTarget =
     | { kind: "web" }
     | { kind: "page" }
-    /** `databaseId` of the imported database; null when it is not imported. */
-    | { kind: "database"; databaseId: string | null }
+    /** `databaseId` of the imported database; null when it is not imported. `sort`: of an embedded view. */
+    | { kind: "database"; databaseId: string | null; sort?: NotionSort[] }
     | { kind: "file"; path: string }
     | { kind: "missing"; path: string };
 
 export type UploadResult = { reference: string } | { error: string };
 
 /** A "Datenbank" block made from a link (package 19d); it gets the database's views. */
-export type DatabaseBlockLink = { blockId: string; databaseId: string };
+export type DatabaseBlockLink = { blockId: string; databaseId: string; sort: NotionSort[] };
 
 export type RewriteResult = {
     blocks: JsonObject[];
@@ -137,7 +138,7 @@ export async function rewriteImportedBlocks(
         if (link?.kind === "database" && link.databaseId) {
             // A fixed id: the block's views are stored under it.
             const blockId = crypto.randomUUID();
-            databaseBlocks.push({ blockId, databaseId: link.databaseId });
+            databaseBlocks.push({ blockId, databaseId: link.databaseId, sort: link.sort ?? [] });
             return [
                 { id: blockId, type: "database", props: { databaseId: link.databaseId }, children: block.children },
             ];

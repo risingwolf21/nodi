@@ -1955,6 +1955,36 @@ nicht gewünscht.
       mit einem Ausschnitt des echten Formats (ohne persönliche Inhalte).
     - **Nicht möglich:** Filter der Ansichten, Formel-Ausdrücke,
       Seiten-Icons und Titelbilder (nicht im Export).
+    - **Aufteilung:** 21a Struktur (Baum, Datenbanken, Einträge,
+      eingebettete Ansichten), 21b Eigenschaften aus den Eintragsseiten
+      (Verknüpfungen, Rollup-/Formelwerte) und neue Datumsformate.
+    - **Umsetzung 21a** (nur Frontend, keine Migration):
+      - `planNotionImport` kennt beide Ordnerformen (`X <id>/` und `X/`).
+        Teilen sich gleichnamige Geschwister einen Ordner, gehört eine
+        Unterseite der Seite, die sie verlinkt (sonst der ersten).
+      - Datenbank = `X <id>.csv` und/oder `X <id>_all.csv`; Einträge im
+        Ordner `X <id>/` oder `X/`. Eine `.md` mit der ID einer Datenbank
+        im selben Ordner ist die Datenbank selbst (keine eigene Seite);
+        Links auf sie oder auf `_all.csv` ordnen die Datenbank ein.
+      - Gibt es nur `_all.csv`, blendet die Tabelle nichts aus (vorher
+        waren dann alle Eigenschaften ausgeblendet).
+      - Kopien eingebetteter Ansichten (`Untitled abcd-wxyz_all.csv`, ohne
+        volle ID) werden keine Datenbanken: `plan.databaseCopies` ordnet
+        sie der einen Datenbank zu, deren ID mit `abcd` beginnt und auf
+        `wxyz` endet. Der Link wird ein Datenbank-Block auf die echte
+        Datenbank.
+      - `takeViewSettings`: Unter dem Link stehende „filters:“/„sort:“-
+        Zeilen (bis zur nächsten Leerzeile oder einem HTML-Tag wie
+        `</aside>`) verschwinden aus dem Text; „Name: ascending/descending“
+        wird die Sortierung aller Ansichten des Blocks (Spaltenname →
+        Eigenschaft, Titelspalte → Titel; unbekannte Namen entfallen).
+        Filter sind nicht lesbar und entfallen.
+      - Fehlt eine verlinkte Datenbank im Export, bleibt ihr Name als Text
+        und es gibt einen Hinweis.
+      - Geprüft gegen den echten Export des Nutzers (nur lokal, nicht im
+        Repository): 20 Seiten, 20 Datenbanken, 374 Einträge, 63
+        Datenbank-Blöcke, keine Fehler. Tests: Vitest (`notion-export`,
+        `notion-import`), Playwright „Ein neuerer Notion-Export …“.
 22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
     „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
 23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
