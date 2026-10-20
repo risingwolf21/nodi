@@ -80,6 +80,7 @@ export default function WorkspaceHome() {
         archivePage,
         restorePage,
         permanentlyDeletePage,
+        emptyTrash,
     } = usePages(workspaceId, user?.id);
 
     const {
@@ -292,6 +293,7 @@ export default function WorkspaceHome() {
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
                             onDelete={permanentlyDeletePage}
+                            onEmptyTrash={emptyTrash}
                             onMove={(item) => setMovePageDialog({ page: item })}
                             onDropPage={(item, target) => void dropPage(item, target)}
                         />

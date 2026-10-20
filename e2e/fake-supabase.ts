@@ -342,6 +342,27 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             for (const target of targets) Object.assign(target, requestBody(route));
             return json(targets.map(({ id }) => ({ id })));
         }
+        if (method === "DELETE") {
+            // Deleting for good (trash): by id or all own archived pages; subpages go with them (cascade).
+            const id = query.get("id")?.replace("eq.", "");
+            const owner = query.get("owner_id")?.replace("eq.", "");
+            const deleted = backend.pages.filter(
+                (item) => item.is_archived && (!id || item.id === id) && (!owner || item.owner_id === owner),
+            );
+            const gone = new Set(deleted.map((item) => item.id));
+            let grew = true;
+            while (grew) {
+                grew = false;
+                for (const item of backend.pages) {
+                    if (item.parent_id && gone.has(item.parent_id) && !gone.has(item.id)) {
+                        gone.add(item.id);
+                        grew = true;
+                    }
+                }
+            }
+            backend.pages = backend.pages.filter((item) => !gone.has(item.id));
+            return json(deleted.map((item) => ({ id: item.id })));
+        }
         // Readable page ids, for deleting local copies of revoked pages.
         if (query.get("select") === "id") {
             const ids = backend.pages.map(({ id }) => ({ id }));

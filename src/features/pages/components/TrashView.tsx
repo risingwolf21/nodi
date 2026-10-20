@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { displayTitle } from "../page-display";
 import type { Page } from "../types";
-import { findArchivedAncestors } from "../page-hierarchy";
+import { collectDescendantIds, findArchivedAncestors } from "../page-hierarchy";
 import { Undo2, Trash2 } from "lucide-react";
 
 type TrashViewProps = {
@@ -12,13 +12,22 @@ type TrashViewProps = {
     userId: string | undefined;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
+    /** Deletes the user's pages in the trash for good; how many. */
+    onEmpty: () => Promise<number>;
 };
 
-export function TrashView({ pages, userId, onRestore, onDelete }: TrashViewProps) {
+export function TrashView({ pages, userId, onRestore, onDelete, onEmpty }: TrashViewProps) {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [pageToDelete, setPageToDelete] = useState<Page | null>(null);
     const [pageToRestore, setPageToRestore] = useState<Page | null>(null);
+    const [confirmEmpty, setConfirmEmpty] = useState(false);
+    // Only the user's own pages can be deleted; with them go their subpages.
+    const ownIds = new Set(pages.filter((page) => page.owner_id === userId).map((page) => page.id));
+    const deletedWithEmpty = new Set(
+        pages.filter((page) => ownIds.has(page.id)).flatMap((page) => collectDescendantIds(page.id, pages)),
+    );
+    const keptByEmpty = pages.length - deletedWithEmpty.size;
 
     // Root first, so the dialog reads like a breadcrumb.
     const ancestorsToRestore = pageToRestore ? findArchivedAncestors(pageToRestore.id, pages).reverse() : [];
@@ -83,6 +92,20 @@ export function TrashView({ pages, userId, onRestore, onDelete }: TrashViewProps
         }
     }
 
+    async function handleEmpty() {
+        setBusyId("all");
+        setError("");
+
+        try {
+            await onEmpty();
+            setConfirmEmpty(false);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Der Papierkorb konnte nicht geleert werden.");
+        } finally {
+            setBusyId(null);
+        }
+    }
+
     function renderPages(parentId: string | null): ReactNode {
         const children = childrenByParent.get(parentId) ?? [];
 
@@ -129,7 +152,23 @@ export function TrashView({ pages, userId, onRestore, onDelete }: TrashViewProps
     return (
         <div className="space-y-3 p-3">
             <div>
-                <h2 className="text-sm font-semibold">Papierkorb</h2>
+                <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold">Papierkorb</h2>
+                    {ownIds.size > 0 && (
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            disabled={busyId !== null}
+                            onClick={() => {
+                                setError("");
+                                setConfirmEmpty(true);
+                            }}
+                        >
+                            Papierkorb leeren
+                        </Button>
+                    )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                     Archivierte Seiten und ihre Unterseiten. Endgültig löschen kann nur, wem die Seite gehört.
                 </p>
@@ -179,6 +218,44 @@ export function TrashView({ pages, userId, onRestore, onDelete }: TrashViewProps
 
                         <Button disabled={busyId !== null} onClick={() => void handleRestore(pageToRestore.id)}>
                             {busyId === pageToRestore.id ? "Stellt wieder her …" : "Wiederherstellen"}
+                        </Button>
+                    </div>
+                </Dialog>
+            )}
+
+            {confirmEmpty && (
+                <Dialog
+                    role="alertdialog"
+                    labelledBy="empty-trash-title"
+                    onClose={() => setConfirmEmpty(false)}
+                    busy={busyId !== null}
+                    className="max-w-md"
+                >
+                    <h3 id="empty-trash-title" className="text-lg font-semibold">
+                        Papierkorb leeren?
+                    </h3>
+
+                    <p className="text-sm text-muted-foreground">
+                        {deletedWithEmpty.size === 1 ? "1 Seite wird" : `${deletedWithEmpty.size} Seiten werden`}{" "}
+                        dauerhaft gelöscht, mit allen Inhalten.
+                        {keptByEmpty > 0 &&
+                            ` ${keptByEmpty === 1 ? "1 Seite gehört" : `${keptByEmpty} Seiten gehören`} anderen und ${keptByEmpty === 1 ? "bleibt" : "bleiben"} im Papierkorb.`}{" "}
+                        Das kann nicht rückgängig gemacht werden.
+                    </p>
+
+                    {error && (
+                        <p role="alert" className="text-sm text-destructive">
+                            {error}
+                        </p>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                        <Button variant="outline" disabled={busyId !== null} onClick={() => setConfirmEmpty(false)}>
+                            Abbrechen
+                        </Button>
+
+                        <Button variant="destructive" disabled={busyId !== null} onClick={() => void handleEmpty()}>
+                            {busyId === "all" ? "Löscht …" : "Endgültig löschen"}
                         </Button>
                     </div>
                 </Dialog>

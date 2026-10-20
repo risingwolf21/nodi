@@ -2212,6 +2212,13 @@ Noch nicht abschließend geprüft:
   gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
   löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
   filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
+- (Umgesetzt, Nutzerwunsch 2026-10-20) „Papierkorb leeren“ oben im
+  Papierkorb, mit Rückfrage (Anzahl, Seiten anderer bleiben): ein Request
+  `delete … where workspace_id, is_archived, owner_id = Nutzer` (keine
+  ID-Liste in der URL, vgl. 19a), Unterseiten gehen per Kaskade mit, danach
+  lädt der Baum neu (`usePages.emptyTrash`). Ohne eigene Seiten im
+  Papierkorb gibt es den Knopf nicht. Keine Migration (Delete-Policy wie
+  bisher). Test: `trash.e2e.ts`.
 - (Umgesetzt in Paket 18a) Verschieben nur über `move_page`, die
   Rechte, Workspace, Bereichsregel und Zyklen prüft; `parent_id` bleibt
   für API-Clients gesperrt.
