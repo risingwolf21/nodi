@@ -1085,6 +1085,12 @@ export function canGroupBy(type: PropertyType): boolean {
     return type === "select" || type === "status";
 }
 
+/** Tables and lists are grouped only when chosen (package 32c), unlike a board. */
+export function chosenGroupProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const chosen = properties.find((property) => property.id === config.groupByPropertyId);
+    return chosen && canGroupBy(chosen.type) ? chosen : undefined;
+}
+
 /** The chosen group property, otherwise the first status, then the first select property. */
 export function groupProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
     const sorted = [...properties].sort((a, b) => a.position - b.position);

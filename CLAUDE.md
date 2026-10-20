@@ -2394,6 +2394,21 @@ nicht gewünscht.
         Touch-Geräten, Länge eines Zeitraums per Ziehen ändern.
       - Tests: Vitest `database-model.test.ts`, Playwright
         `database-views.e2e.ts`.
+    - **Umsetzung 32c** (nur Frontend, keine Migration; `config.groupByPropertyId`
+      gibt es seit 14c):
+      - Tabelle und Liste: „Gruppieren“ in der Leiste mit „Nicht gruppieren“
+        und den Auswahl- und Status-Eigenschaften. Anders als das Board wird
+        nur gruppiert, wenn man es wählt (`chosenGroupProperty`).
+      - Je Option mit Einträgen ein einklappbarer Abschnitt (`GroupedRows`,
+        Option als Abzeichen, Anzahl; leere Gruppen fallen weg, „Ohne …“
+        zuerst), darin die Tabelle bzw. Liste. In der Tabelle bleibt die
+        Spalte sichtbar (ein neuer Wert verschiebt den Eintrag in seine
+        Gruppe); „Neu“ in einer Gruppe setzt deren Wert. Eingeklappt ist nur
+        im Tab, nicht gespeichert.
+      - Noch nicht: Gruppieren nach anderen Typen (Checkbox, Datum, Person),
+        Galerie und Feed gruppieren, Reihenfolge der Gruppen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-grouping.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

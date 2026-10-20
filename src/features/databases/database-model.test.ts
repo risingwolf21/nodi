@@ -9,6 +9,7 @@ import {
     EMPTY_VIEW_CONFIG,
     dateProperty,
     formatValue,
+    chosenGroupProperty,
     groupProperty,
     groupRows,
     matchesFilter,
@@ -190,6 +191,12 @@ describe("board", () => {
         options: [{ id: "high", name: "Hoch", color: "red" }],
         position: 0,
     };
+
+    it("groups tables and lists only by a chosen select or status property (package 32c)", () => {
+        expect(chosenGroupProperty([status], config())).toBeUndefined();
+        expect(chosenGroupProperty([status], config({ groupByPropertyId: "status" }))).toBe(status);
+        expect(chosenGroupProperty([estimate], config({ groupByPropertyId: "estimate" }))).toBeUndefined();
+    });
 
     it("groups by the chosen property, otherwise by the first status", () => {
         expect(groupProperty([priority, status, estimate], config())?.id).toBe("status");

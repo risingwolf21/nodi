@@ -10,11 +10,14 @@ import {
     applyView,
     buildRows,
     canGroupBy,
+    chosenGroupProperty,
     dateProperty,
     defaultOptions,
     groupProperty,
+    groupRows,
     placeProperty,
     visibleProperties,
+    type DatabaseRow,
 } from "../database-model";
 import { useDatabase, type DatabaseBlockOptions, type NewEntryValue } from "../hooks/useDatabase";
 import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
@@ -26,6 +29,7 @@ import { FormulaEditor } from "./FormulaEditor";
 import { RollupEditor } from "./RollupEditor";
 import { TemplatesMenu, type TemplateActions } from "./TemplatesMenu";
 import { GalleryView } from "./GalleryView";
+import { GroupedRows } from "./GroupedRows";
 import { ListView } from "./ListView";
 import { MapView } from "./MapView";
 import { TableView } from "./TableView";
@@ -224,6 +228,10 @@ export function DatabaseView({
         (property) => property.id === editedPropertyId && property.type === "rollup",
     );
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
+    const listGroup =
+        activeView?.type === "table" || activeView?.type === "list"
+            ? chosenGroupProperty(data.properties, activeView.config)
+            : undefined;
     const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
 
@@ -237,6 +245,45 @@ export function DatabaseView({
             report(err instanceof Error ? err.message : "Der Eintrag konnte nicht angelegt werden.");
         }
     }
+
+    // The table, whole or for one group (package 32c).
+    const renderTable = (tableRows: DatabaseRow[], createTableEntry: (() => Promise<string>) | undefined) =>
+        activeView && (
+            <TableView
+                rows={tableRows}
+                // Grouped too, the value stays editable here: changing it moves the entry to its group.
+                properties={columns}
+                editable={editable}
+                onOpenEntry={onOpenEntry}
+                onRenameEntry={onRenameEntry}
+                onCreateEntry={createTableEntry}
+                onSetValue={setValue}
+                onCreateOption={addOption}
+                relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
+                onAddRelation={(target) => addRelation(target, database.title)}
+                onAddProperty={async (type) => {
+                    const property = await addProperty(type);
+                    // A new formula needs its expression first, a rollup its settings.
+                    if (type === "formula" || type === "rollup") setEditedPropertyId(property.id);
+                }}
+                onEditFormula={setEditedPropertyId}
+                onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
+                onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
+                onChangePropertyType={(propertyId, type) =>
+                    updateProperty(propertyId, { type, options: defaultOptions(type) })
+                }
+                onHideProperty={(propertyId) =>
+                    updateView(activeView.id, {
+                        config: {
+                            ...activeView.config,
+                            hiddenPropertyIds: [...activeView.config.hiddenPropertyIds, propertyId],
+                        },
+                    })
+                }
+                onDeleteProperty={deleteProperty}
+                onError={report}
+            />
+        );
 
     return (
         <div className="space-y-2">
@@ -289,6 +336,21 @@ export function DatabaseView({
                                 emptyText="Keine Auswahl- oder Status-Eigenschaft."
                                 choices={data.properties.filter((property) => canGroupBy(property.type))}
                                 current={boardGroup}
+                                editable={viewsEditable}
+                                onChoose={(groupByPropertyId) =>
+                                    updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
+                                }
+                                onError={report}
+                            />
+                        )}
+                        {(activeView.type === "table" || activeView.type === "list") && (
+                            <PropertyChoicePanel
+                                label="Gruppieren"
+                                icon={Columns3}
+                                emptyText="Keine Auswahl- oder Status-Eigenschaft."
+                                noneLabel="Nicht gruppieren"
+                                choices={data.properties.filter((property) => canGroupBy(property.type))}
+                                current={listGroup}
                                 editable={viewsEditable}
                                 onChoose={(groupByPropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
@@ -399,15 +461,36 @@ export function DatabaseView({
                     onError={report}
                 />
             )}
-            {activeView?.type === "list" && (
-                <ListView
-                    rows={rows}
-                    properties={columns}
-                    editable={editable}
-                    onOpenEntry={onOpenEntry}
-                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
-                />
-            )}
+            {activeView?.type === "list" &&
+                (listGroup ? (
+                    <GroupedRows groups={groupRows(rows, listGroup)} property={listGroup}>
+                        {(group) => (
+                            <ListView
+                                rows={group.rows}
+                                properties={columns.filter((property) => property.id !== listGroup.id)}
+                                editable={editable}
+                                onOpenEntry={onOpenEntry}
+                                onCreateEntry={
+                                    onCreateEntry
+                                        ? () =>
+                                              createAndOpenEntry({
+                                                  propertyId: listGroup.id,
+                                                  value: group.option?.id ?? null,
+                                              })
+                                        : undefined
+                                }
+                            />
+                        )}
+                    </GroupedRows>
+                ) : (
+                    <ListView
+                        rows={rows}
+                        properties={columns}
+                        editable={editable}
+                        onOpenEntry={onOpenEntry}
+                        onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                    />
+                ))}
             {activeView?.type === "gallery" && (
                 <GalleryView
                     rows={rows}
@@ -459,41 +542,25 @@ export function DatabaseView({
                     onError={report}
                 />
             )}
-            {activeView?.type === "table" && (
-                <TableView
-                    rows={rows}
-                    properties={columns}
-                    editable={editable}
-                    onOpenEntry={onOpenEntry}
-                    onRenameEntry={onRenameEntry}
-                    onCreateEntry={onCreateEntry}
-                    onSetValue={setValue}
-                    onCreateOption={addOption}
-                    relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
-                    onAddRelation={(target) => addRelation(target, database.title)}
-                    onAddProperty={async (type) => {
-                        const property = await addProperty(type);
-                        // A new formula needs its expression first, a rollup its settings.
-                        if (type === "formula" || type === "rollup") setEditedPropertyId(property.id);
-                    }}
-                    onEditFormula={setEditedPropertyId}
-                    onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
-                    onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
-                    onChangePropertyType={(propertyId, type) =>
-                        updateProperty(propertyId, { type, options: defaultOptions(type) })
-                    }
-                    onHideProperty={(propertyId) =>
-                        updateView(activeView.id, {
-                            config: {
-                                ...activeView.config,
-                                hiddenPropertyIds: [...activeView.config.hiddenPropertyIds, propertyId],
-                            },
-                        })
-                    }
-                    onDeleteProperty={deleteProperty}
-                    onError={report}
-                />
-            )}
+            {activeView?.type === "table" &&
+                (listGroup ? (
+                    <GroupedRows groups={groupRows(rows, listGroup)} property={listGroup}>
+                        {(group) =>
+                            renderTable(
+                                group.rows,
+                                onCreateEntry
+                                    ? async () =>
+                                          (await createEntry({
+                                              propertyId: listGroup.id,
+                                              value: group.option?.id ?? null,
+                                          })) ?? ""
+                                    : undefined,
+                            )
+                        }
+                    </GroupedRows>
+                ) : (
+                    renderTable(rows, onCreateEntry)
+                ))}
 
             {formulaProperty && (
                 <FormulaEditor
