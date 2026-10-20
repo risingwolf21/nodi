@@ -387,6 +387,29 @@ describe("importNotionExport", () => {
         expect(summary.problems).toEqual([]);
     });
 
+    it("imports the subpages and databases of entries below them", async () => {
+        const archive = new Map<string, Uint8Array>([
+            [`Aufgaben ${ID_A}_all.csv`, strToU8("Name\nBericht\n")],
+            [`Aufgaben/Bericht ${ID_B}.md`, strToU8(`# Bericht\n\n[Entwurf](Bericht/Entwurf%20${ID_C}.md)`)],
+            [`Aufgaben/Bericht/Entwurf ${ID_C}.md`, strToU8("# Entwurf\n\nErster Teil.")],
+            [`Aufgaben/Bericht/Kosten ${ID_D}_all.csv`, strToU8("Name\nHotel\n")],
+        ]);
+        const { deps, created, saved } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id;
+        expect(created.map(({ title, parentId }) => [title, parentId])).toEqual([
+            [IMPORT_ROOT_TITLE, null],
+            ["Aufgaben", id(IMPORT_ROOT_TITLE)],
+            ["Bericht", id("Aufgaben")],
+            ["Entwurf", id("Bericht")],
+            ["Kosten", id("Bericht")],
+            ["Hotel", id("Kosten")],
+        ]);
+        expect(saved.get(id("Entwurf") ?? "")).toMatchObject([{ content: [{ text: "Erster Teil." }] }]);
+        expect(summary).toMatchObject({ pages: 1, databases: 2, entries: 2, problems: [], error: null });
+    });
+
     it("explains an archive without pages", async () => {
         const { deps } = dependencies();
         const summary = await importNotionExport(new Map([["foto.png", new Uint8Array([1])]]), deps);

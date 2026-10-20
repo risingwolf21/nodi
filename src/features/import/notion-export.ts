@@ -67,15 +67,13 @@ export type PlannedDatabase = {
     dataPath: string;
     title: string;
     parentPath: string | null;
-    /** Markdown files of the entries (their text); their subpages are not imported. */
+    /** Markdown files of the entries (their text); their subpages are items with the entry as parent. */
     entryPaths: string[];
 };
 
 export type ImportPlan = {
     /** Parents come before their subpages, siblings in Notion's order. */
     items: (PlannedPage | PlannedDatabase)[];
-    /** Pages and databases inside database entries; entries have no subpages in Nodi. */
-    skippedInEntries: number;
     /**
      * Copies of a database for a view embedded in a page (`Untitled 8fe7-1f36_all.csv`
      * next to the export's top): copy path → path of the database.
@@ -111,7 +109,10 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
     // Both folder names, older (`X <id>/`) and newer (`X/`).
     const foldersOf = (path: string) => [`${withoutExtension(path)}/`, `${withoutId(path)}/`];
     const databaseFolders = databasePaths.flatMap(foldersOf);
-    const insideDatabase = (path: string) => databaseFolders.some((folder) => path.startsWith(folder));
+    // An entry is a page right in a database's folder; deeper files are its subpages (package 23).
+    const isEntry = (path: string) =>
+        path.toLowerCase().endsWith(".md") &&
+        databaseFolders.some((folder) => path.startsWith(folder) && !path.slice(folder.length).includes("/"));
 
     // A full-page database has a page of the same id next to it: it is the database itself.
     const databaseById = new Map(databasePaths.flatMap((path) => (notionId(path) ? [[notionId(path), path]] : [])));
@@ -120,12 +121,12 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
         return database !== undefined && dirname(database) === dirname(path);
     };
 
-    const markdownPaths = [...files.keys()].filter((path) => !insideDatabase(path) && !isDatabasePage(path));
-    const topDatabases = databasePaths.filter((path) => !insideDatabase(path));
+    const markdownPaths = [...files.keys()].filter((path) => !isEntry(path) && !isDatabasePage(path));
+    const entryFiles = [...files.keys()].filter(isEntry);
 
     // A folder belongs to the page named like it, with or without the id.
     const pagesByFolder = new Map<string, string[]>();
-    for (const path of markdownPaths) {
+    for (const path of [...markdownPaths, ...entryFiles]) {
         for (const folder of new Set(foldersOf(path))) {
             pagesByFolder.set(folder, [...(pagesByFolder.get(folder) ?? []), path]);
         }
@@ -167,7 +168,7 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
     const itemTitle = (path: string) => (isDatabase(path) ? databaseTitle(path) : title(path));
 
     const childrenOf = new Map<string | null, string[]>();
-    for (const path of [...markdownPaths, ...topDatabases]) {
+    for (const path of [...markdownPaths, ...databasePaths]) {
         const parent = parentOf(path);
         childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), path]);
     }
@@ -196,7 +197,10 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
         });
         for (const path of children) {
             if (isDatabase(path)) {
-                items.push(database(path, parentPath));
+                const planned = database(path, parentPath);
+                items.push(planned);
+                // The database creates its entries; their subpages follow it.
+                for (const entry of planned.entryPaths) visit(entry);
             } else {
                 items.push({ kind: "page", path, title: title(path), parentPath });
                 visit(path);
@@ -204,11 +208,6 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
         }
     };
     visit(null);
-
-    const entryPaths = new Set(items.flatMap((item) => (item.kind === "database" ? item.entryPaths : [])));
-    const skippedInEntries =
-        [...files.keys()].filter((path) => insideDatabase(path) && !entryPaths.has(path)).length +
-        databasePaths.filter(insideDatabase).length;
 
     const databaseCopies = new Map<string, string>();
     for (const copy of copyPaths) {
@@ -220,7 +219,7 @@ export function planNotionImport(files: ReadonlyMap<string, string>, allPaths: I
         if (matches.length === 1) databaseCopies.set(copy, matches[0]);
     }
 
-    return { items, skippedInEntries, databaseCopies };
+    return { items, databaseCopies };
 }
 
 /** A sorting of a view embedded in a page, by property name ("Status: ascending"). */

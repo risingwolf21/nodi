@@ -4,8 +4,9 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageHeader } from "@/features/pages/components/PageHeader";
+import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
-import type { Page, PageSection, PageSettings } from "@/features/pages/types";
+import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -38,8 +39,10 @@ type PageViewProps = {
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
     userId: string | undefined;
-    /** For a database: its entries (subpages). */
+    /** The page's children: a database's entries, an entry's subpages. */
     entries: Page[];
+    /** For an entry: adds a subpage or database (package 23); undefined where that is not possible. */
+    onCreateSubpage?: (parentId: string, kind: PageKind) => void;
     /** For a database: adds an entry; undefined where that is not possible. */
     onCreateEntry?: (databaseId: string) => Promise<string>;
     /** Databases of the workspace, for new relations; undefined where that is not possible. */
@@ -81,6 +84,7 @@ export function PageView({
     userId,
     entries,
     onCreateEntry,
+    onCreateSubpage,
     databases,
     knownPages,
 }: PageViewProps) {
@@ -222,6 +226,15 @@ export function PageView({
                         />
                     </Suspense>
                 </LoadErrorBoundary>
+            )}
+            {database && (
+                <SubpageList
+                    subpages={entries}
+                    onOpen={onSelect}
+                    onCreate={
+                        onCreateSubpage && canEdit && !readOnly ? (kind) => onCreateSubpage(page.id, kind) : undefined
+                    }
+                />
             )}
         </>
     );

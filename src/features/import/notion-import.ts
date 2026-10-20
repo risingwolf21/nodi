@@ -182,11 +182,6 @@ export async function importNotionExport(
         summary.error = "Im Export wurden keine Seiten gefunden. Bitte in Notion „Markdown & CSV“ wählen.";
         return summary;
     }
-    if (plan.skippedInEntries > 0) {
-        summary.problems.push(
-            `${plan.skippedInEntries} Unterseiten oder Datenbanken in Datenbank-Einträgen nicht übernommen (Einträge haben in Nodi keine Unterseiten)`,
-        );
-    }
 
     /** Text, images and attachments of a Markdown page, saved to `pageId`. */
     const importText = async (path: string, pageId: string, body: string, title: string) => {
@@ -491,7 +486,10 @@ export async function importNotionExport(
             const report = (title: string) => dependencies.onProgress?.({ done: index, total, title });
             report(planned.title);
 
-            const parentId = (planned.parentPath && pageIds.get(planned.parentPath)) || root.id;
+            // The parent is a page or an entry of a database (its subpages, package 23).
+            const parentId =
+                (planned.parentPath && (pageIds.get(planned.parentPath) ?? pageIdOfEntry.get(planned.parentPath))) ||
+                root.id;
             if (planned.kind === "database") {
                 await importDatabase(planned, parentId, report);
                 summary.databases += 1;
