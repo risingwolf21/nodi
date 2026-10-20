@@ -4,6 +4,7 @@ import { buildRows } from "../database-model";
 import { useDatabase } from "../hooks/useDatabase";
 import { AddPropertyButton } from "./AddPropertyButton";
 import { FormulaEditor } from "./FormulaEditor";
+import { RecurrenceSetting } from "./RecurrenceSetting";
 import { RollupEditor } from "./RollupEditor";
 import { PropertyTypeIcon } from "./PropertyTypeIcon";
 import { PropertyValueEditor } from "./PropertyValueEditor";
@@ -76,6 +77,11 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
                     />
                 </div>
             ))}
+            <RecurrenceSetting
+                entryId={entry.id}
+                dateProperties={properties.filter((property) => property.type === "date")}
+                editable={editable}
+            />
             {editable && (
                 <AddPropertyButton
                     label="Eigenschaft hinzufügen"

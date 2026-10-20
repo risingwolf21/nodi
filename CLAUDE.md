@@ -307,6 +307,7 @@ src/
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
       rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
+      recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
@@ -393,7 +394,8 @@ supabase/
                             # Formeln (P14f), Datei-Speicher (P15a),
                             # Verknüpfungen (P17d), Verschieben (P18a),
                             # Ansichten je Block (P19b), Einträge mit
-                            # Unterseiten (P23), Rollups (P24)
+                            # Unterseiten (P23), Rollups (P24),
+                            # wiederkehrende Einträge (P25)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2091,7 +2093,42 @@ nicht gewünscht.
         Playwright `database-rollups.e2e.ts`.
 25. **Wiederkehrende Einträge:** Eintrag als Wiederholung („täglich“,
     „wöchentlich am …“), neue Einträge entstehen automatisch.
-    Offen: auf dem Server (zeitgesteuert) oder beim Öffnen der App.
+    - **Entschieden (Nutzer, 2026-10-20):** beim Öffnen der App (nicht
+      zeitgesteuert auf dem Server); der Server verhindert doppelte
+      Einträge.
+    - **Annahmen:** Der wiederholte Eintrag ist die Vorlage: Jede Kopie
+      bekommt Titel, Icon, Werte und Text, das Datum in einer gewählten
+      Datums-Eigenschaft. Verpasste Termine (App länger nicht geöffnet)
+      werden nachgeholt, höchstens 31 je Regel und Aufruf. Eine neue oder
+      geänderte Regel beginnt frühestens heute. Tage sind Server-Tage (UTC).
+    - **Umsetzung 25** (`20261020110000_entry_recurrences.sql`):
+      - Tabelle `entry_recurrences` (je Eintrag eine Regel: `frequency`
+        daily/weekly/monthly/yearly, `interval`, `weekdays` 1 = Montag,
+        `start_date`, `next_date`, `date_property_id`); der Trigger setzt
+        `database_id` (nur Einträge, `22023`), prüft die
+        Datums-Eigenschaft und berechnet `next_date`. RLS: lesen mit
+        `can_read_page`, ändern mit `can_edit_page` des Eintrags.
+      - `next_recurrence_date(…)`: nächster Termin nach einem Tag
+        (Monatsende bleibt Monatsende, jede n-te Woche ab der Startwoche).
+      - RPC `create_due_recurring_entries(workspace)` → Anzahl: alle
+        fälligen Regeln des Workspace mit Schreibrecht auf die Datenbank,
+        `for update skip locked` (zwei Geräte legen nichts doppelt an);
+        Kopie per `copy_recurring_entry` (Werte über `set_page_property`,
+        damit Verknüpfungen beidseitig bleiben; Text als neues Dokument).
+        pgTAP: `entry_recurrences.test.sql`.
+      - App: `usePages` ruft die RPC vor jedem Laden des Seitenbaums vom
+        Server (Start, `online`, App wieder sichtbar); scheitert sie, lädt
+        der Baum trotzdem (Fehler in der Konsole). Klein gehalten in
+        `services/recurring-entries.ts`, damit der Datenbank-Code im
+        eigenen Chunk bleibt.
+      - Eigenschaftsleiste eines Eintrags: Zeile „Wiederholen“ mit Regel
+        und nächstem Termin; Dialog mit Rhythmus, „Alle …“, Wochentagen,
+        Start, Datums-Eigenschaft, „Nicht mehr wiederholen“
+        (`recurrence.ts`: Texte und Validierung).
+      - Tests: Vitest `recurrence.test.ts`, Playwright
+        `entry-recurrence.e2e.ts`.
+      - Noch nicht: Wiederholung aus einer Vorlage (Paket 26), Uhrzeit des
+        Termins, Ende einer Wiederholung.
 26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
     Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
 27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
