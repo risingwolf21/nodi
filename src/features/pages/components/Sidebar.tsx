@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
+import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Search, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree, type TreeDragAndDrop } from "../PageTree";
@@ -28,10 +28,13 @@ type SidebarProps = {
     onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
     onOpenMembers: () => void;
     onImportNotion: () => void;
+    /** Opens the search (package 27). */
+    onSearch: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
+    onEmptyTrash: () => Promise<number>;
     /** "Verschieben nach …" for a page of the tree. */
     onMove: (page: Page) => void;
     /** A page dragged onto another page or a section title. */
@@ -69,10 +72,12 @@ export function Sidebar({
     onCreatePage,
     onOpenMembers,
     onImportNotion,
+    onSearch,
     onRename,
     onArchive,
     onRestore,
     onDelete,
+    onEmptyTrash,
     onMove,
     onDropPage,
 }: SidebarProps) {
@@ -178,6 +183,20 @@ export function Sidebar({
                 </Menu>
             </div>
 
+            <div className="px-2 pt-1">
+                <button
+                    type="button"
+                    onClick={onSearch}
+                    className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground pointer-coarse:h-10"
+                >
+                    <Search className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="flex-1">Suchen</span>
+                    <kbd className="text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
+                        Strg K
+                    </kbd>
+                </button>
+            </div>
+
             <div className="space-y-1 px-4 pt-1 pb-2">
                 {status}
                 {readOnly && (
@@ -190,7 +209,13 @@ export function Sidebar({
 
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Seiten">
                 {trashOpen ? (
-                    <TrashView pages={archivedPages} userId={userId} onRestore={onRestore} onDelete={onDelete} />
+                    <TrashView
+                        pages={archivedPages}
+                        userId={userId}
+                        onRestore={onRestore}
+                        onDelete={onDelete}
+                        onEmpty={onEmptyTrash}
+                    />
                 ) : (
                     <>
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (

@@ -54,6 +54,7 @@ export function parseStoredPages(value: unknown): StoredPage[] | null {
                   kind,
                   position,
                   created_at,
+                  is_template,
               }: StoredPage) => ({
                   id,
                   title,
@@ -68,6 +69,8 @@ export function parseStoredPages(value: unknown): StoredPage[] | null {
                   kind: kind === "database" ? "database" : "page",
                   position: typeof position === "number" ? position : null,
                   created_at: typeof created_at === "string" ? created_at : "",
+                  // Before package 26 there were no templates.
+                  ...(is_template === true ? { is_template: true } : {}),
               }),
           )
         : null;

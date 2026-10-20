@@ -68,6 +68,7 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
                     )}
                     <PropertyValueEditor
                         property={property}
+                        pageId={entry.id}
                         value={row?.values[property.id] ?? null}
                         editable={editable}
                         onChange={(value) => setValue(entry.id, property.id, value)}

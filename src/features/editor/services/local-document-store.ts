@@ -71,6 +71,14 @@ export class LocalDocumentStore {
         return record;
     }
 
+    /** Every document stored on this device (offline search, package 27). */
+    async listAll(): Promise<LocalDocument[]> {
+        const database = await this.open();
+        const stored: unknown[] = await promisify(database.transaction(DOCUMENTS).objectStore(DOCUMENTS).getAll());
+
+        return stored.map(parseLocalDocument).filter((record): record is LocalDocument => record !== null);
+    }
+
     /** Every document with a local edit the server has not confirmed yet. */
     async listUnsynced(): Promise<LocalDocument[]> {
         const database = await this.open();

@@ -274,6 +274,7 @@ src/
     editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c) + „Callout“ (22)
     editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
+    editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -309,7 +310,8 @@ src/
       rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
       recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
-      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
+      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e), auch Personen (29)
+      components/FilesPicker.tsx     # Dateien & Medien: öffnen, entfernen, hochladen (29)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -328,6 +330,7 @@ src/
       services/page-files.ts        # Storage: hochladen, signierte URL
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
+    search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -348,6 +351,7 @@ src/
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
       components/SubpageList.tsx       # Unterseiten eines Datenbank-Eintrags (23)
+      components/Backlinks.tsx         # „Verlinkt von“ (28); services/page-links.ts: RPC page_backlinks
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -395,7 +399,9 @@ supabase/
                             # Verknüpfungen (P17d), Verschieben (P18a),
                             # Ansichten je Block (P19b), Einträge mit
                             # Unterseiten (P23), Rollups (P24),
-                            # wiederkehrende Einträge (P25)
+                            # wiederkehrende Einträge (P25), Vorlagen (P26),
+                            # Suche (P27), Rückverweise (P28),
+                            # Person und Dateien (P29)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2127,17 +2133,114 @@ nicht gewünscht.
         (`recurrence.ts`: Texte und Validierung).
       - Tests: Vitest `recurrence.test.ts`, Playwright
         `entry-recurrence.e2e.ts`.
-      - Noch nicht: Wiederholung aus einer Vorlage (Paket 26), Uhrzeit des
-        Termins, Ende einer Wiederholung.
+      - Noch nicht: Uhrzeit des Termins, Ende einer Wiederholung
+        (eine Vorlage kann sich seit Paket 26 wiederholen).
 26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
     Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
+    - **Annahme:** Vorlagen gibt es je Datenbank (wie in Notion); eine
+      Vorlage ist ein markierter Eintrag mit Text und Werten. Seitenvorlagen
+      außerhalb von Datenbanken vorerst nicht.
+    - **Umsetzung 26** (`20261020120000_entry_templates.sql`):
+      - `pages.is_template` (Standard `false`); nur Einträge einer
+        Datenbank (Trigger, `22023`). RPC
+        `create_entry_from_template(template)` → ID des neuen Eintrags:
+        lesbar, Vorlage, nicht im Papierkorb (`22023`), Schreibrecht auf die
+        Datenbank (`42501`); kopiert mit `copy_recurring_entry` (Titel,
+        Icon, Werte, Text). pgTAP: `entry_templates.test.sql`.
+      - App: `Page.is_template` (alte Caches: keine Vorlage). Die Ansichten
+        lassen Vorlagen aus (`DatabaseView` trennt sie), Verknüpfungen
+        bieten sie nicht an. Leiste der Datenbank: „Vorlagen“ (nur mit
+        Schreibrecht, online, eigener Workspace): neuer Eintrag aus einer
+        Vorlage (öffnet ihn), Vorlage bearbeiten, „Neue Vorlage“.
+        `usePages.createEntryFromTemplate`: Eintrag sofort im Baum, danach
+        neu laden; `createPage(…, { id, isTemplate })`.
+      - Eine Vorlage zeigt den Hinweis „Vorlage in „…““; sie kann sich
+        wiederholen (Paket 25) und macht dann Einträge aus sich.
+      - Achtung: App-Versionen vor 26 zeigen Vorlagen als normale Einträge.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `entry-templates.e2e.ts`.
+      - Noch nicht: Standardvorlage für „Neu“, Vorlagen in Datenbank-Blöcken,
+        Seitenvorlagen ohne Datenbank.
 27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
     lokal; Suchfeld in der Seitenleiste und Tastenkürzel.
+    - **Umsetzung 27** (`20261020130000_page_search.sql`):
+      - `page_documents.search_text`: generierte Spalte mit dem Klartext
+        des Dokuments (`document_plain_text`: alle `text`-Werte der Blöcke,
+        höchstens 200 000 Zeichen); für bestehende Zeilen berechnet, ohne
+        `updated_at` zu ändern. Trigramm-Indizes (`pg_trgm`) auf Text und
+        `pages.title`.
+      - RPC `search_pages(query, limit)` mit den Rechten des Aufrufers (RLS
+        entscheidet): Teilstring in Titel oder Text, Groß/klein egal,
+        mindestens zwei Zeichen, `%`/`_` sind Zeichen; Titel-Treffer zuerst,
+        mit Textausschnitt um den ersten Treffer; höchstens 100 (App: 30).
+        pgTAP: `page_search.test.sql`.
+      - App (`features/search/`): „Suchen“ oben in der Seitenleiste und
+        Strg/⌘+K öffnen `SearchDialog` (kurze Tipp-Pause, Pfeiltasten,
+        Enter öffnet, Treffer hervorgehoben, Pfad und Ausschnitt). Gezeigt
+        werden nur Seiten, die die App öffnen kann (Workspace und „Mit mir
+        geteilt“).
+      - Offline oder ohne Server: Titel der bekannten Seiten und Text der auf
+        dem Gerät gespeicherten Dokumente (`LocalDocumentStore.listAll`,
+        `documentText`), mit Hinweis.
+      - Tests: Vitest `search-text.test.ts`, Playwright `search.e2e.ts`.
+      - Noch nicht: Suche in Datenbank-Werten (Eigenschaften), Filter nach
+        Workspace oder Typ, Rangfolge nach Relevanz.
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
     Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
     exportierte Seiten echte Seitenlinks.
+    - **Umsetzung 28** (`20261020140000_page_backlinks.sql`):
+      - Inline-Inhalt `pageLink` (`props.pageId`, `props.title` = Titel beim
+        Verlinken) im Editor-Schema. „@“ im Text öffnet eine Auswahl der
+        bekannten Seiten und Datenbanken (ohne Vorlagen und die Seite selbst,
+        höchstens 12, Tippen filtert); der Link zeigt den aktuellen Titel aus
+        dem Seitenbaum (folgt Umbenennen), Klick öffnet die Seite. Unbekannte
+        Seiten (gelöscht, nicht freigegeben) und die öffentliche Ansicht zeigen
+        den gespeicherten Titel als grauen Text.
+      - RPC `page_backlinks(page)` (SQL mit den Rechten des Aufrufers, RLS
+        entscheidet): aktive Seiten, deren Dokument einen `pageLink` auf die
+        Seite enthält (`jsonb_path_exists`), höchstens 100. Liest jedes
+        lesbare Dokument; ein Index kann später folgen. pgTAP:
+        `page_backlinks.test.sql`.
+      - Unter dem Seitenkopf „Verlinkt von“ mit den verlinkenden Seiten (nur
+        online, nur Seiten, die die App öffnen kann).
+      - Import: Seiten, Datenbanken und Einträge des Exports bekommen ihre ID
+        vorab; ein Link auf eine importierte Seite wird ein `pageLink` (vorher
+        Text). Links auf nicht importierte Seiten bleiben Text.
+      - Tests: Vitest (`import-blocks`, `notion-import`), Playwright
+        `page-links.e2e.ts`.
+      - Noch nicht: Erwähnungen von Personen und Daten, Seitenlinks in der
+        Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
 29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
     Dateien & Medien im Datei-Speicher (Paket 15).
+    - **Umsetzung 29** (`20261020150000_person_and_files_properties.sql`):
+      - Typ `person`: Wert = JSON-Array von Nutzer-IDs (UUIDs, höchstens
+        100). Der Server prüft nur die Form, nicht die Mitgliedschaft (eine
+        ID verrät nichts; die App zeigt nur bekannte Mitglieder).
+      - Typ `files` („Dateien & Medien“): Wert = JSON-Array von
+        Storage-Pfaden `<seite>/<id>-<name>` im Bucket `page-files`
+        (höchstens 100). Ein fremder Pfad verrät nichts: Storage prüft beim
+        Lesen die Seite im Pfad.
+      - Nur die erlaubten Werte wachsen (rückwärtskompatibel; Apps ab 14e
+        lassen die Typen aus). pgTAP: `database_person_files.test.sql`.
+      - App: Die Mitglieder des Workspace der Datenbank
+        (`list_workspace_members`) lädt `databaseRepository.load` mit und
+        hängt sie an Person-Eigenschaften (auch an das Ziel eines Rollups),
+        wie die Einträge einer Verknüpfung; so stehen sie im Cache. Wer kein
+        Mitglied ist (geteilte Datenbank), sieht keine Namen. Anzeige per
+        E-Mail-Adresse, Auswahl mit Suche (`RelationPicker` mit eigenen
+        Texten).
+      - Dateien: `FilesPicker` öffnet eine Datei per signierter URL in einem
+        neuen Tab, entfernt sie aus dem Wert und lädt neue in den Ordner des
+        Eintrags hoch (`uploadPageFile`, 10 MB, nur online und mit
+        Schreibrecht). Angezeigt wird der Dateiname aus dem Pfad
+        (`fileNameOfPath`, so wie Storage ihn speichert).
+      - Filter „enthält/leer“ und Sortieren nach E-Mail bzw. Dateinamen;
+        Formeln sehen den Text.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-person-files.e2e.ts`.
+      - Noch nicht: Dateien beim Entfernen aus dem Wert löschen, Bilder als
+        Titelbild der Galerie, Personen aus dem Notion-Import (die CSV
+        enthält nur Namen; bleibt Text), Benachrichtigungen.
 30. **Favoriten, Titelbilder, Emoji-Suche.**
 31. **Kommentare** an Seiten und Textstellen.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
@@ -2188,6 +2291,13 @@ Noch nicht abschließend geprüft:
   gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
   löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
   filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
+- (Umgesetzt, Nutzerwunsch 2026-10-20) „Papierkorb leeren“ oben im
+  Papierkorb, mit Rückfrage (Anzahl, Seiten anderer bleiben): ein Request
+  `delete … where workspace_id, is_archived, owner_id = Nutzer` (keine
+  ID-Liste in der URL, vgl. 19a), Unterseiten gehen per Kaskade mit, danach
+  lädt der Baum neu (`usePages.emptyTrash`). Ohne eigene Seiten im
+  Papierkorb gibt es den Knopf nicht. Keine Migration (Delete-Policy wie
+  bisher). Test: `trash.e2e.ts`.
 - (Umgesetzt in Paket 18a) Verschieben nur über `move_page`, die
   Rechte, Workspace, Bereichsregel und Zyklen prüft; `parent_id` bleibt
   für API-Clients gesperrt.

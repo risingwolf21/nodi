@@ -157,11 +157,19 @@ export async function importNotionExport(
     // Pages link the databases shown in them; their ids are fixed in advance,
     // as a page's text is saved before the databases below it exist.
     const databaseIds = new Map<string, string>();
+    // Links to pages become page links (package 28): the ids of pages and entries are fixed in advance too.
+    const linkedPageIds = new Map<string, string>();
     for (const item of plan.items) {
-        if (item.kind !== "database") continue;
         const id = crypto.randomUUID();
+        if (item.kind === "page") {
+            linkedPageIds.set(item.path, id);
+            continue;
+        }
         databaseIds.set(item.path, id);
         databaseIds.set(item.dataPath, id);
+        // The page of a full-page database (newer exports) is the database.
+        linkedPageIds.set(item.path.replace(/\.csv$/i, ".md"), id);
+        for (const entry of item.entryPaths) linkedPageIds.set(entry, crypto.randomUUID());
     }
     // "Datenbank" blocks made from those links; they get the database's views at the end.
     const databaseBlocks: (DatabaseBlockRef & DatabaseBlockLink)[] = [];
@@ -192,7 +200,7 @@ export async function importNotionExport(
             const target = resolveExportPath(path, href)?.normalize("NFC");
             if (!target) return { kind: "web" };
             const lower = target.toLowerCase();
-            if (lower.endsWith(".md")) return { kind: "page" };
+            if (lower.endsWith(".md")) return { kind: "page", pageId: linkedPageIds.get(target) ?? null };
             if (lower.endsWith(".csv")) {
                 // A view embedded in a page is a copy of the database's CSV: the block shows the database.
                 const databaseId = databaseIds.get(plan.databaseCopies.get(target) ?? target) ?? null;
@@ -425,7 +433,12 @@ export async function importNotionExport(
         for (const [index, entry] of entries.entries()) {
             if (dependencies.signal?.aborted) return;
             report(`${planned.title}: Eintrag ${index + 1} von ${entries.length}`);
-            const page = await dependencies.createPage(entry.title, database.id);
+            const page = await dependencies.createPage(
+                entry.title,
+                database.id,
+                undefined,
+                entry.path ? linkedPageIds.get(entry.path) : undefined,
+            );
             // In order: relations find their entries by index.
             imported.entryPageIds.push(page.id);
             if (entry.path) pageIdOfEntry.set(entry.path, page.id);
@@ -501,7 +514,12 @@ export async function importNotionExport(
                 continue;
             }
 
-            const page = await dependencies.createPage(planned.title, parentId);
+            const page = await dependencies.createPage(
+                planned.title,
+                parentId,
+                undefined,
+                linkedPageIds.get(planned.path),
+            );
             pageIds.set(planned.path, page.id);
             await importText(planned.path, page.id, splitTitle(markdown.get(planned.path) ?? "").body, planned.title);
             summary.pages += 1;

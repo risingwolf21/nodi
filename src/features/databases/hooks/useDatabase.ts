@@ -209,6 +209,8 @@ export function useDatabase(
                 position: nextPosition(current.properties),
             });
             change((latest) => ({ ...latest, properties: [...latest.properties, property] }));
+            // The members a person property offers come with the database.
+            if (type === "person") setManualReloads((count) => count + 1);
             return property;
         },
         [databaseId, requireEditable],
@@ -227,9 +229,13 @@ export function useDatabase(
                     ? { ...updated, relation: { ...updated.relation, entries: before.relation.entries } }
                     : updated.rollup && sameTarget
                       ? { ...updated, rollup: { ...updated.rollup, target: sameTarget } }
-                      : updated;
-            // A rollup reading something new needs its target's values.
-            if (changes.rollup && !sameTarget) setManualReloads((count) => count + 1);
+                      : updated.type === "person" && before?.people
+                        ? { ...updated, people: before.people }
+                        : updated;
+            // A rollup reading something new needs its target's values, a new person property the members.
+            if ((changes.rollup && !sameTarget) || (property.type === "person" && !property.people)) {
+                setManualReloads((count) => count + 1);
+            }
             // The server clears the values when the type changes.
             const typeChanged = before !== undefined && before.type !== property.type;
             change((latest) => ({

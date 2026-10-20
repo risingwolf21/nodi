@@ -85,6 +85,28 @@ describe("PageTreeCache", () => {
         ]);
     });
 
+    it("keeps templates of databases (package 26)", async () => {
+        const template = {
+            id: "t1",
+            title: "Wochentreffen",
+            parent_id: "db",
+            owner_id: "u1",
+            visibility: "private" as const,
+            is_archived: false,
+            icon: null,
+            full_width: false,
+            kind: "page" as const,
+            position: 1,
+            created_at: "",
+            is_template: true,
+        };
+        await cache.putPages("w1", [template, { ...template, id: "e1", is_template: false }]);
+        expect((await cache.getPages("w1"))?.map((page) => [page.id, page.is_template])).toEqual([
+            ["t1", true],
+            ["e1", undefined],
+        ]);
+    });
+
     it("keeps shared pages apart from the workspace trees", async () => {
         const shared: StoredPage = {
             id: "s1",

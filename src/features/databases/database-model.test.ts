@@ -479,6 +479,69 @@ describe("relations", () => {
     });
 });
 
+describe("person and files", () => {
+    const KIM = "22222222-2222-4222-8222-222222222222";
+    const ALEX = "33333333-3333-4333-8333-333333333333";
+    const PAGE = "e0000000-0000-4000-8000-000000000001";
+    const PLAN = `${PAGE}/c0000000-0000-4000-8000-000000000001-Plan.pdf`;
+    const person: DatabaseProperty = {
+        id: "person",
+        databaseId: "db",
+        name: "Zuständig",
+        type: "person",
+        options: [],
+        position: 6,
+        people: [
+            { id: KIM, email: "kim@nodi.test" },
+            { id: ALEX, email: "alex@nodi.test" },
+        ],
+    };
+    const files: DatabaseProperty = {
+        id: "files",
+        databaseId: "db",
+        name: "Anhänge",
+        type: "files",
+        options: [],
+        position: 7,
+    };
+
+    it("reads user ids and storage paths only", () => {
+        expect(readValue(person, [KIM, "kim@nodi.test", 3])).toEqual([KIM]);
+        expect(readValue(person, "kim")).toBeNull();
+        expect(readValue(files, [PLAN, "https://example.com/plan.pdf", `${PAGE}/../x`])).toEqual([PLAN]);
+        expect(readValue(files, [])).toBeNull();
+    });
+
+    it("shows known members by e-mail and files by name, and is found by them", () => {
+        // A former member is left out.
+        expect(formatValue(person, [ALEX, "44444444-4444-4444-8444-444444444444", KIM])).toBe(
+            "alex@nodi.test, kim@nodi.test",
+        );
+        expect(formatValue(files, [PLAN])).toBe("Plan.pdf");
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [person, files],
+            values: [
+                { pageId: "a", propertyId: "person", value: [KIM], updatedAt: "" },
+                { pageId: "b", propertyId: "files", value: [PLAN], updatedAt: "" },
+            ],
+        });
+        const found = (property: DatabaseProperty, operator: "contains" | "isEmpty", value = "") =>
+            rows
+                .filter((row) => matchesFilter(row, { propertyId: property.id, operator, value }, property))
+                .map((row) => row.page.id);
+        expect(found(person, "contains", "kim")).toEqual(["a"]);
+        expect(found(files, "contains", "plan")).toEqual(["b"]);
+        expect(found(files, "isEmpty")).toEqual(["a", "c"]);
+    });
+
+    it("keeps the loaded members in the cache, not from server rows", () => {
+        expect(parseProperties([{ ...person }])[0].people).toEqual(person.people);
+        const [fromServer] = parseProperties([{ id: "p", databaseId: "db", name: "P", type: "person", options: {} }]);
+        expect(fromServer.people).toBeUndefined();
+    });
+});
+
 describe("rollups", () => {
     const hours: DatabaseProperty = {
         id: "hours",

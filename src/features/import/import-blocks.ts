@@ -7,7 +7,8 @@ type JsonObject = Record<string, unknown>;
 /** Where a link or file URL of a Markdown page points to. */
 export type LinkTarget =
     | { kind: "web" }
-    | { kind: "page" }
+    /** `pageId` of the imported page; null when it is not imported (the link becomes text). */
+    | { kind: "page"; pageId?: string | null }
     /** `databaseId` of the imported database; null when it is not imported. `sort`: of an embedded view. */
     | { kind: "database"; databaseId: string | null; sort?: NotionSort[] }
     | { kind: "file"; path: string }
@@ -39,8 +40,9 @@ function note(text: string): JsonObject {
  * Turns the parsed Markdown of an exported page into Nodi blocks: images
  * and attachments of the export are uploaded and referenced, a link to an
  * imported database on its own becomes a "Datenbank" block (as Notion shows
- * a database in a page), links to other exported pages become plain text
- * (their pages exist in the tree), links to the web stay. Problems are
+ * a database in a page), links to imported pages become page links
+ * (package 28), other links of the export become plain text, links to the
+ * web stay. Problems are
  * reported, nothing is dropped silently.
  */
 export async function rewriteImportedBlocks(
@@ -73,10 +75,19 @@ export async function rewriteImportedBlocks(
             if (!isObject(item) || item.type !== "link" || typeof item.href !== "string") return [item];
             const target = classify(item.href);
             if (target.kind === "web") return [item];
+            const content = Array.isArray(item.content) ? item.content : [];
+            if (target.kind === "page" && target.pageId) {
+                // A link to an imported page (package 28); the title as the text showed it.
+                const title = content
+                    .map((part) => (isObject(part) && typeof part.text === "string" ? part.text : ""))
+                    .join("")
+                    .trim();
+                return [{ type: "pageLink", props: { pageId: target.pageId, title } }];
+            }
             if (target.kind === "file") {
                 problems.push(`${fileName(target.path)}: Anhang im Fließtext, als Text übernommen`);
             }
-            return Array.isArray(item.content) ? item.content : [];
+            return content;
         });
 
     const rewriteContent = (content: unknown): unknown => {
