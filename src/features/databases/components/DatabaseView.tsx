@@ -1,5 +1,16 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { CalendarDays, Columns3, LayoutGrid, List, Map as MapIcon, MapPin, Plus, Rss, Table2 } from "lucide-react";
+import {
+    CalendarDays,
+    ChartGantt,
+    Columns3,
+    LayoutGrid,
+    List,
+    Map as MapIcon,
+    MapPin,
+    Plus,
+    Rss,
+    Table2,
+} from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { placeBefore, type PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page } from "@/features/pages/types";
@@ -28,6 +39,7 @@ import { FeedView } from "./FeedView";
 import { FormulaEditor } from "./FormulaEditor";
 import { RollupEditor } from "./RollupEditor";
 import { TemplatesMenu, type TemplateActions } from "./TemplatesMenu";
+import { TimelineView } from "./TimelineView";
 import { GalleryView } from "./GalleryView";
 import { GroupedRows } from "./GroupedRows";
 import { ListView } from "./ListView";
@@ -43,6 +55,7 @@ const VIEW_ICONS = {
     feed: Rss,
     calendar: CalendarDays,
     map: MapIcon,
+    timeline: ChartGantt,
 } satisfies Record<ViewType, unknown>;
 
 type DatabaseViewProps = {
@@ -232,7 +245,11 @@ export function DatabaseView({
         activeView?.type === "table" || activeView?.type === "list"
             ? chosenGroupProperty(data.properties, activeView.config)
             : undefined;
-    const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
+    // The calendar and the timeline (package 32d) are built on a date property.
+    const calendarDate =
+        activeView?.type === "calendar" || activeView?.type === "timeline"
+            ? dateProperty(data.properties, activeView.config)
+            : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
 
     // Views other than the table open a new entry at once (like Notion); a
@@ -372,7 +389,7 @@ export function DatabaseView({
                                 onError={report}
                             />
                         )}
-                        {activeView.type === "calendar" && (
+                        {(activeView.type === "calendar" || activeView.type === "timeline") && (
                             <PropertyChoicePanel
                                 label="Datum"
                                 icon={CalendarDays}
@@ -523,6 +540,19 @@ export function DatabaseView({
                             : undefined
                     }
                     onMoveEntry={(pageId, value) => setValue(pageId, calendarDate?.id ?? "", value)}
+                    onAddDateProperty={async () => {
+                        await addProperty("date");
+                    }}
+                    onError={report}
+                />
+            )}
+            {activeView?.type === "timeline" && (
+                <TimelineView
+                    rows={rows}
+                    dateProperty={calendarDate}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
                     onAddDateProperty={async () => {
                         await addProperty("date");
                     }}

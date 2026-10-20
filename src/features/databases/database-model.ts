@@ -71,7 +71,16 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
 };
 
 /** All view types of the server (packages 14a, 14e). */
-export const VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery", "feed", "calendar", "map"];
+export const VIEW_TYPES: readonly ViewType[] = [
+    "table",
+    "board",
+    "list",
+    "gallery",
+    "feed",
+    "calendar",
+    "map",
+    "timeline",
+];
 
 export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     table: "Tabelle",
@@ -81,6 +90,7 @@ export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     feed: "Feed",
     calendar: "Kalender",
     map: "Landkarte",
+    timeline: "Zeitleiste",
 };
 
 export const OPTION_COLORS: readonly OptionColor[] = [
@@ -1245,6 +1255,36 @@ export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<
         }
     }
     return days;
+}
+
+// ---------------------------------------------------------------------------
+// Timeline (package 32d).
+
+/** A bar of the timeline: from the first to the last shown day of an entry's date (indexes into the days). */
+export type TimelineBar = { row: DatabaseRow; first: number; last: number; startsBefore: boolean; endsAfter: boolean };
+
+/**
+ * The bars for `days` consecutive days from `firstDay`: one per entry with a
+ * date that touches them, clipped to the window; rows keep their order.
+ */
+export function timelineBars(rows: DatabaseRow[], property: DatabaseProperty, firstDay: string, days: number) {
+    const lastDay = addDays(firstDay, days - 1);
+    return rows.flatMap((row): TimelineBar[] => {
+        const value = row.values[property.id];
+        if (!isDateValue(value)) return [];
+        const start = dayOf(value.start);
+        const end = value.end && dayOf(value.end) >= start ? dayOf(value.end) : start;
+        if (end < firstDay || start > lastDay) return [];
+        return [
+            {
+                row,
+                first: Math.max(0, daysBetween(firstDay, start)),
+                last: Math.min(days - 1, daysBetween(firstDay, end)),
+                startsBefore: start < firstDay,
+                endsAfter: end > lastDay,
+            },
+        ];
+    });
 }
 
 // ---------------------------------------------------------------------------
