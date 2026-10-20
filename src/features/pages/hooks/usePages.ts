@@ -48,7 +48,9 @@ export function parseServerPages(data: unknown): StoredPage[] {
 
 // Columns of a page in the tree (StoredPage).
 export const PAGE_COLUMNS =
-    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at,is_template";
+    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at,is_template," +
+    // Only the user's own favorites (RLS), package 30b.
+    "favorites:page_favorites(created_at)";
 
 export const toPage = ({
     id,
@@ -62,6 +64,7 @@ export const toPage = ({
     position,
     created_at,
     is_template,
+    favorite,
 }: StoredPage): Page => ({
     id,
     title,
@@ -74,6 +77,7 @@ export const toPage = ({
     position,
     created_at,
     ...(is_template ? { is_template } : {}),
+    ...(favorite ? { favorite } : {}),
 });
 
 export type NewPageOptions = {
@@ -107,6 +111,8 @@ type UsePagesResult = {
     movePage: (pageId: string, target: MoveTarget) => Promise<void>;
     renamePage: (pageId: string, title: string) => Promise<void>;
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
+    /** Adds the page to the user's favorites or removes it (package 30b). */
+    setFavorite: (pageId: string, favorite: boolean) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
     /** Deletes the user's pages in the trash for good (with their subpages); how many. */
     emptyTrash: () => Promise<number>;
@@ -506,6 +512,28 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         [workspaceId, requireOnline, switchedSince],
     );
 
+    const setFavorite = useCallback(
+        async (pageId: string, favorite: boolean) => {
+            requireOnline();
+            setError("");
+
+            const response = favorite
+                ? await supabase.from("page_favorites").insert({ page_id: pageId })
+                : await supabase.from("page_favorites").delete().eq("page_id", pageId);
+            const failure = pageChangeError(
+                response,
+                favorite
+                    ? "Die Seite konnte nicht zu den Favoriten hinzugefügt werden."
+                    : "Der Favorit konnte nicht entfernt werden.",
+            );
+            if (failure) throw failure;
+            if (switchedSince(workspaceId)) return;
+
+            setPages((current) => current.map((page) => (page.id === pageId ? { ...page, favorite } : page)));
+        },
+        [workspaceId, requireOnline, switchedSince],
+    );
+
     const archivePage = useCallback(
         async (pageId: string): Promise<string[]> => {
             requireOnline();
@@ -645,6 +673,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         movePage,
         renamePage,
         updatePage,
+        setFavorite,
         archivePage,
         restorePage,
         permanentlyDeletePage,

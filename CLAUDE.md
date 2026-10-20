@@ -402,7 +402,7 @@ supabase/
                             # Unterseiten (P23), Rollups (P24),
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
                             # Suche (P27), Rückverweise (P28),
-                            # Person und Dateien (P29)
+                            # Person und Dateien (P29), Favoriten (P30b)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2253,6 +2253,24 @@ nicht gewünscht.
       - `IconGrid` (Suchfeld mit Fokus, Enter wählt das erste) für das
         Seiten-Icon (`PageHeader`) und das Callout-Icon.
       - Tests: Vitest `page-icons.test.ts`, Playwright `page-icon.e2e.ts`.
+    - **Umsetzung 30b** (`20261020160000_page_favorites.sql`):
+      - Tabelle `page_favorites (user_id, page_id, created_at)`, je Nutzer;
+        RLS: nur eigene Zeilen lesen und löschen, anlegen nur für lesbare
+        Seiten und nur für sich selbst (`42501`). Löschen der Seite oder
+        des Kontos löscht die Favoriten mit. pgTAP: `page_favorites.test.sql`.
+      - Geladen mit dem Seitenbaum: `PAGE_COLUMNS` bettet
+        `favorites:page_favorites(created_at)` ein (RLS lässt nur die eigenen
+        Zeilen); `parseStoredPages` macht daraus `Page.favorite`, so steht es
+        auch im Cache (offline sichtbar, nicht änderbar). Gegen die lokale
+        Supabase geprüft (Einbettung, Anlegen, Löschen).
+      - Seitenmenü „Zu Favoriten hinzufügen“/„Aus Favoriten entfernen“
+        (`usePages.setFavorite`, nur online). Seitenleiste: Abschnitt
+        „Favoriten“ über „Workspace“, nach Titel sortiert, auch Einträge von
+        Datenbanken.
+      - Noch nicht: Favoriten geteilter Seiten anderer Workspaces,
+        Reihenfolge per Ziehen.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `page-favorites.e2e.ts`.
 31. **Kommentare** an Seiten und Textstellen.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
@@ -2332,8 +2350,8 @@ Noch nicht abschließend geprüft:
   antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs
   (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
   Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
-- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
-  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
+- Paket 10 nicht umgesetzt (bewusst): Titelbilder (Suche seit 27,
+  Favoriten seit 30b, Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
   Suche (feste Liste plus eingefügte Emojis). Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts

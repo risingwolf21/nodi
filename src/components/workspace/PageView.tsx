@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, MoreHorizontal, Star, Table2 } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
@@ -34,6 +34,8 @@ type PageViewProps = {
     onRename: (pageId: string, title: string) => Promise<void>;
     onUpdate: (pageId: string, settings: PageSettings) => Promise<void>;
     onArchive: (page: Page) => void;
+    /** Adds the page to the favorites or removes it (package 30b); undefined where that is not possible. */
+    onSetFavorite?: (pageId: string, favorite: boolean) => Promise<void>;
     /** Only for the page owner. */
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
@@ -82,6 +84,7 @@ export function PageView({
     onRename,
     onUpdate,
     onArchive,
+    onSetFavorite,
     onShare,
     onMoveSection,
     onMove,
@@ -103,6 +106,14 @@ export function PageView({
         setMenuError("");
         onUpdate(page.id, { full_width: !page.full_width }).catch((err: unknown) => {
             setMenuError(err instanceof Error ? err.message : "Die Breite konnte nicht gespeichert werden.");
+        });
+    }
+
+    function toggleFavorite(setFavorite: (pageId: string, favorite: boolean) => Promise<void>) {
+        setMenuOpen(false);
+        setMenuError("");
+        setFavorite(page.id, !page.favorite).catch((err: unknown) => {
+            setMenuError(err instanceof Error ? err.message : "Die Favoriten konnten nicht geändert werden.");
         });
     }
 
@@ -151,6 +162,12 @@ export function PageView({
                     <MoreHorizontal className="size-5" />
                 </button>
                 <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                    {onSetFavorite && (
+                        <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
+                            <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
+                            {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+                        </MenuItem>
+                    )}
                     {onShare && (
                         <MenuItem
                             onSelect={() => {

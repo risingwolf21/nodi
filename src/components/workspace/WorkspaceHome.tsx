@@ -78,6 +78,7 @@ export default function WorkspaceHome() {
         movePage,
         renamePage,
         updatePage,
+        setFavorite,
         archivePage,
         restorePage,
         permanentlyDeletePage,
@@ -329,6 +330,8 @@ export default function WorkspaceHome() {
                                 onRename={sharedPage ? renameSharedPage : renamePage}
                                 onUpdate={sharedPage ? updateSharedPage : updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
+                                // Favorites of pages from other workspaces: later.
+                                onSetFavorite={sharedPage ? undefined : setFavorite}
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                                 // Moving stays within the page's own workspace.
                                 onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}

@@ -91,6 +91,8 @@ export type FakeBackend = {
     recurrences: Record<string, unknown>[];
     /** Workspaces create_due_recurring_entries was called for, oldest first. */
     recurrenceRuns: string[];
+    /** Page ids in the user's favorites (package 30b). */
+    favorites: string[];
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -137,6 +139,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         publicPages: new Map(),
         recurrences: [],
         recurrenceRuns: [],
+        favorites: [],
         ...initial,
     };
 }
@@ -381,8 +384,24 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
                     .map(({ id, title, icon, parent_id }) => ({ id, title, icon, parentId: parent_id })),
             );
         }
-        // Own workspace; nothing is shared from other workspaces.
-        return json(query.get("workspace_id") === `eq.${WORKSPACE}` ? backend.pages : []);
+        // Own workspace; nothing is shared from other workspaces. Favorites are embedded like PostgREST does.
+        return json(
+            query.get("workspace_id") === `eq.${WORKSPACE}`
+                ? backend.pages.map((item) => ({
+                      ...item,
+                      favorites: backend.favorites.includes(item.id) ? [{ created_at: "2026-10-20T10:00:00Z" }] : [],
+                  }))
+                : [],
+        );
+    }
+
+    if (path === "/rest/v1/page_favorites") {
+        if (method === "POST") backend.favorites.push(text(requestBody(route), "page_id"));
+        if (method === "DELETE") {
+            const id = query.get("page_id")?.replace("eq.", "");
+            backend.favorites = backend.favorites.filter((item) => item !== id);
+        }
+        return route.fulfill({ status: method === "POST" ? 201 : 204, headers: CORS });
     }
 
     // Databases
