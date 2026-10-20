@@ -1186,6 +1186,43 @@ export function monthGrid(year: number, month: number): string[][] {
     );
 }
 
+/** The week (Monday first) of a "YYYY-MM-DD" day, package 32b. */
+export function weekDays(day: string): string[] {
+    const time = utcDay(day);
+    const monday = time - ((new Date(time).getUTCDay() + 6) % 7) * DAY_MS;
+    return Array.from({ length: 7 }, (_, weekday) => dayString(monday + weekday * DAY_MS));
+}
+
+/** A day moved by whole days ("YYYY-MM-DD"). */
+export function addDays(day: string, days: number): string {
+    return dayString(utcDay(day) + days * DAY_MS);
+}
+
+/** Days between two "YYYY-MM-DD" days. */
+function daysBetween(from: string, to: string): number {
+    return Math.round((utcDay(to) - utcDay(from)) / DAY_MS);
+}
+
+/** A day or a point in time moved by whole days; a time keeps its local time of day (summer time too). */
+function shiftDate(value: string, days: number): string {
+    if (isDay(value)) return addDays(value, days);
+    const date = toDate(value);
+    if (!date) return value;
+    date.setDate(date.getDate() + days);
+    return date.toISOString();
+}
+
+/**
+ * A date dragged in the calendar from one day to another (package 32b):
+ * start and end move by the same number of days, so a range keeps its length
+ * and a time its time of day.
+ */
+export function moveDate(value: DateValue, fromDay: string, toDay: string): DateValue {
+    const days = daysBetween(fromDay, toDay);
+    if (days === 0) return value;
+    return { start: shiftDate(value.start, days), end: value.end ? shiftDate(value.end, days) : null };
+}
+
 /** Entries per day ("YYYY-MM-DD"); a range appears on each of its days. Rows keep their order. */
 export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<string, DatabaseRow[]> {
     const days = new Map<string, DatabaseRow[]>();

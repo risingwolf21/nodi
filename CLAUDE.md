@@ -2380,6 +2380,20 @@ nicht gewünscht.
         Ziehen in Tabelle und Liste, auf Touch-Geräten.
       - Tests: Vitest `page-hierarchy.test.ts`, Playwright
         `page-order.e2e.ts`.
+    - **Umsetzung 32b** (nur Frontend, keine Migration):
+      - Kalender: Umschalter „Monat | Woche“ (wie der Monat nur im Tab, nicht
+        gespeichert). Die Woche ist eine Zeile mit sieben Tagen ab Montag
+        (`weekDays`), Vor/Zurück springt um eine Woche, „Heute“ zur
+        aktuellen.
+      - Einträge per Ziehen (Maus) auf einen anderen Tag: `moveDate` schiebt
+        Start und Ende um dieselbe Zahl Tage (vom Tag, an dem man den Eintrag
+        greift, z. B. am zweiten Tag eines Zeitraums); ein Zeitraum behält
+        seine Länge, eine Uhrzeit ihre Ortszeit, auch über die Zeitumstellung.
+        Gespeichert per `set_page_property`; nur mit Schreibrecht und online.
+      - Noch nicht: Uhrzeiten als Raster in der Woche, Ziehen auf
+        Touch-Geräten, Länge eines Zeitraums per Ziehen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-views.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

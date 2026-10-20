@@ -178,6 +178,35 @@ test.describe("Feed und Kalender", () => {
         });
     });
 
+    test("Kalender: Woche zeigen; Ziehen auf einen anderen Tag verschiebt den Zeitraum", async ({ page, context }) => {
+        const backend = calendarDatabase();
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+        await page.getByRole("button", { name: "Ansicht hinzufügen" }).click();
+        await page.getByRole("menuitem", { name: "Kalender" }).click();
+        const calendar = page.getByRole("region", { name: "Kalender" });
+        const day = (label: string) => calendar.getByRole("group", { name: label, exact: true });
+
+        // Dragged from its first day (10 Oct) to 13 Oct: 10–12 becomes 13–15.
+        await day("10. Oktober").getByRole("button", { name: "Bericht" }).dragTo(day("13. Oktober"));
+        await expect
+            .poll(() => backend.propertyCalls.at(-1))
+            .toMatchObject({
+                p_page_id: "e1",
+                p_property_id: "due",
+                p_value: { start: "2026-10-13", end: "2026-10-15" },
+            });
+        await expect(day("15. Oktober").getByRole("button", { name: "Bericht" })).toBeVisible();
+
+        // The week of today (19 Oct); back one week shows 13–15 Oct.
+        await page.getByRole("button", { name: "Woche", exact: true }).click();
+        await expect(page.getByRole("heading", { name: /19\. Okt\. 2026 – 25\. Okt\. 2026/ })).toBeVisible();
+        await expect(calendar.getByRole("group")).toHaveCount(7);
+        await expect(calendar.getByRole("button", { name: "Bericht" })).toHaveCount(0);
+        await page.getByRole("button", { name: "Vorherige Woche" }).click();
+        await expect(calendar.getByRole("button", { name: "Bericht" })).toHaveCount(3);
+    });
+
     test("Kalender ohne Datums-Eigenschaft bietet an, eine anzulegen; mobil ohne seitliches Scrollen", async ({
         page,
         context,
