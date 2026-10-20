@@ -14,7 +14,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { FileText, MessageSquareText, Table2 } from "lucide-react";
+import { Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -246,6 +246,19 @@ function EditorContent({
     }, editor);
 
     // Pages to link: known pages (not templates), title matches first, a few at a time.
+    // Columns (package 32e): each column starts with an empty paragraph, the cursor in the first.
+    const insertColumns = (count: number) => {
+        const paragraphIds = Array.from({ length: count }, () => crypto.randomUUID());
+        insertOrUpdateBlockForSlashMenu(editor, {
+            type: "columns",
+            children: paragraphIds.map((id) => ({
+                type: "column",
+                children: [{ id, type: "paragraph" }],
+            })),
+        });
+        editor.setTextCursorPosition(paragraphIds[0], "start");
+    };
+
     // A stable component: a new one on each render would remount the toolbar.
     const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
 
@@ -364,6 +377,14 @@ function EditorContent({
                                                 insertOrUpdateBlockForSlashMenu(editor, { type: "callout" });
                                             },
                                         },
+                                        ...[2, 3].map((count) => ({
+                                            title: `${count} Spalten`,
+                                            subtext: "Blöcke nebeneinander (auf dem Handy untereinander)",
+                                            aliases: ["spalten", "columns", "nebeneinander", `${count}`],
+                                            group: "Einfache Blöcke",
+                                            icon: <Columns2 size={18} />,
+                                            onItemClick: () => insertColumns(count),
+                                        })),
                                         {
                                             title: "Datenbank",
                                             subtext: "Ansicht einer bestehenden Datenbank",
