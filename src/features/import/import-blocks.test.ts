@@ -83,7 +83,7 @@ describe("rewriteImportedBlocks", () => {
             upload,
         );
         const [block] = result.databaseBlocks;
-        expect(result.databaseBlocks).toEqual([{ blockId: expect.any(String), databaseId: "db1" }]);
+        expect(result.databaseBlocks).toEqual([{ blockId: expect.any(String), databaseId: "db1", sort: [] }]);
         expect(result.blocks).toEqual([
             { id: block.blockId, type: "database", props: { databaseId: "db1" }, children: [] },
             { type: "paragraph", content: [text("Fremd")], children: [] },

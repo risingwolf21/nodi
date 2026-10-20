@@ -199,6 +199,64 @@ describe("importNotionExport", () => {
         expect(summary.problems).toEqual([]);
     });
 
+    it("imports a newer export: entries in a folder without id, an embedded view with its sorting", async () => {
+        // Copies of embedded views sit at the top of the export; pages link them from their folder.
+        const copy = `Untitled ${ID_C.slice(0, 4)}-${ID_C.slice(-4)}_all.csv`;
+        const archive = new Map<string, Uint8Array>([
+            [
+                `Bereich/Projekt ${ID_A}.md`,
+                strToU8(
+                    `# Projekt\n\n[Aufgaben](Projekt/Aufgaben%20${ID_C}.md)\n\n[Heute](../${encodeURIComponent(copy)})\n\nfilters:\nxx\nsort:\nStatus: descending\nName: ascending\n\nEnde\n\n[Woanders](../Woanders%20${ID_B}_all.csv)`,
+                ),
+            ],
+            [`Bereich/Projekt/Aufgaben ${ID_C}.md`, strToU8(`# Aufgaben\n\n[Aufgaben](Aufgaben%20${ID_C}_all.csv)`)],
+            [`Bereich/Projekt/Aufgaben ${ID_C}_all.csv`, strToU8("Name,Status\nBericht,Offen\nAngebot,Erledigt")],
+            [`Bereich/Projekt/Aufgaben/Bericht ${ID_D}.md`, strToU8("# Bericht\n\nStatus: Offen\n\nEntwurf.")],
+            [copy, strToU8("Name,Status\nBericht,Offen")],
+        ]);
+        const { deps, created, saved, properties, views } = dependencies();
+        const summary = await importNotionExport(archive, deps);
+
+        const id = (title: string) => created.find((page) => page.title === title)?.id ?? "";
+        expect(created.map(({ title, parentId }) => [title, parentId])).toEqual([
+            [IMPORT_ROOT_TITLE, null],
+            ["Projekt", id(IMPORT_ROOT_TITLE)],
+            ["Aufgaben", id("Projekt")],
+            ["Bericht", id("Aufgaben")],
+            ["Angebot", id("Aufgaben")],
+        ]);
+        expect(saved.get(id("Bericht"))).toEqual([
+            { type: "paragraph", content: [{ type: "text", text: "Entwurf.", styles: {} }], children: [] },
+        ]);
+        // The view is a block on the real database; its settings are not text.
+        const document = saved.get(id("Projekt")) ?? [];
+        expect(document.map((block) => block.type)).toEqual(["paragraph", "database", "paragraph", "paragraph"]);
+        expect(document[1]).toMatchObject({ props: { databaseId: id("Aufgaben") } });
+        expect(document[2]).toMatchObject({ content: [{ text: "Ende" }] });
+
+        // Only `_all.csv`: nothing hidden. The block's views are sorted like the embedded view.
+        const status = properties.find((property) => property.name === "Status")?.id;
+        expect(views.filter((view) => !view.block).map((view) => view.config)).toEqual([
+            EMPTY_VIEW_CONFIG,
+            { ...EMPTY_VIEW_CONFIG, groupByPropertyId: status },
+        ]);
+        const sort = [
+            { propertyId: status, direction: "desc" },
+            { propertyId: "title", direction: "asc" },
+        ];
+        expect(views.filter((view) => view.block).map((view) => [view.type, view.config.sort])).toEqual([
+            ["table", sort],
+            ["board", sort],
+        ]);
+        expect(summary).toMatchObject({
+            pages: 1,
+            databases: 1,
+            entries: 2,
+            problems: ["Projekt: Datenbank „Woanders“ fehlt im Export, nur ihr Name wurde übernommen"],
+            error: null,
+        });
+    });
+
     it("stops at the first failure and keeps what was imported", async () => {
         const { deps, created } = dependencies({
             createPage: vi.fn(async (title: string) => {
