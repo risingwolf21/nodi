@@ -108,6 +108,8 @@ type UsePagesResult = {
     renamePage: (pageId: string, title: string) => Promise<void>;
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
+    /** Deletes the user's pages in the trash for good (with their subpages); how many. */
+    emptyTrash: () => Promise<number>;
     restorePage: (pageId: string) => Promise<string[]>;
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
 };
@@ -602,6 +604,35 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         [archivedPages, workspaceId, requireOnline, switchedSince],
     );
 
+    /**
+     * Deletes every page of the trash that belongs to the user, in one
+     * request (no id list in the URL: large trees, 19a); their subpages go
+     * with them. Pages of others stay. Returns how many were deleted.
+     */
+    const emptyTrash = useCallback(async (): Promise<number> => {
+        if (!userId) throw new Error("Bitte melde dich an.");
+        requireOnline();
+        setError("");
+
+        const response = await supabase
+            .from("pages")
+            .delete()
+            .eq("workspace_id", workspaceId)
+            .eq("is_archived", true)
+            .eq("owner_id", userId)
+            .select("id");
+        const failure = pageChangeError(response, "Der Papierkorb konnte nicht geleert werden.");
+        if (failure) throw failure;
+        const deleted = response.data ?? [];
+        if (switchedSince(workspaceId)) return deleted.length;
+
+        const deletedIds = new Set(deleted.flatMap((row) => collectDescendantIds(row.id, archivedPages)));
+        setArchivedPages((current) => current.filter((page) => !deletedIds.has(page.id)));
+        // Cascades the answer does not list (subpages of others) come with the reload.
+        setMovesToLoad((count) => count + 1);
+        return deleted.length;
+    }, [archivedPages, userId, workspaceId, requireOnline, switchedSince]);
+
     return {
         pages: showsCurrentWorkspace ? pages : [],
         archivedPages: showsCurrentWorkspace ? archivedPages : [],
@@ -617,5 +648,6 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         archivePage,
         restorePage,
         permanentlyDeletePage,
+        emptyTrash,
     };
 }

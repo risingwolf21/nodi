@@ -32,6 +32,7 @@ type SidebarProps = {
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
+    onEmptyTrash: () => Promise<number>;
     /** "Verschieben nach …" for a page of the tree. */
     onMove: (page: Page) => void;
     /** A page dragged onto another page or a section title. */
@@ -73,6 +74,7 @@ export function Sidebar({
     onArchive,
     onRestore,
     onDelete,
+    onEmptyTrash,
     onMove,
     onDropPage,
 }: SidebarProps) {
@@ -190,7 +192,13 @@ export function Sidebar({
 
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Seiten">
                 {trashOpen ? (
-                    <TrashView pages={archivedPages} userId={userId} onRestore={onRestore} onDelete={onDelete} />
+                    <TrashView
+                        pages={archivedPages}
+                        userId={userId}
+                        onRestore={onRestore}
+                        onDelete={onDelete}
+                        onEmpty={onEmptyTrash}
+                    />
                 ) : (
                     <>
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
