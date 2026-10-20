@@ -83,7 +83,8 @@ export type ImportPlan = {
     databaseCopies: Map<string, string>;
 };
 
-const MARKDOWN_LINK = /\]\(([^)\s]+)\)/g;
+// Targets may keep parentheses ("Notizen%20(2)%20<id>.md").
+const MARKDOWN_LINK = /\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g;
 const ID_IN_NAME = /\s([0-9a-f]{32})(?:_all)?\.(?:md|csv)$/i;
 // A view's copy names its database by the first and last four characters of its id.
 const DATABASE_COPY = /\s([0-9a-f]{4})-([0-9a-f]{4})(?:_all)?\.csv$/i;

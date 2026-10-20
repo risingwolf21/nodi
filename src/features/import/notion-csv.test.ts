@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { cleanCell, columnValue, inferColumn, parseCsv, parseNotionDate, stripPropertyLines } from "./notion-csv";
+import {
+    cleanCell,
+    columnValue,
+    inferColumn,
+    parseCsv,
+    parseNotionDate,
+    readPropertyLines,
+    relationLinks,
+    stripPropertyLines,
+} from "./notion-csv";
 
 describe("parseCsv", () => {
     it("reads quoted fields, quotes, line breaks and a byte order mark", () => {
@@ -31,6 +40,22 @@ describe("parseNotionDate", () => {
         });
         expect(parseNotionDate("19.10.2026 14:30")?.start).toBe(new Date(2026, 9, 19, 14, 30).toISOString());
         expect(parseNotionDate("October 19, 2026 12:15 AM")?.start).toBe(new Date(2026, 9, 19, 0, 15).toISOString());
+    });
+
+    it("reads times with Notion's zone, and ranges on one day that end with a time", () => {
+        expect(parseNotionDate("September 20, 2026 8:30 (GMT+2)")).toEqual({
+            start: "2026-09-20T06:30:00.000Z",
+            end: null,
+        });
+        expect(parseNotionDate("09/09/2026 8:00 PM (GMT-5:30)")?.start).toBe("2026-09-10T01:30:00.000Z");
+        expect(parseNotionDate("August 6, 2026 7:20 (GMT+2) → 16:00")).toEqual({
+            start: "2026-08-06T05:20:00.000Z",
+            end: "2026-08-06T14:00:00.000Z",
+        });
+        // Without a zone: the time this device shows.
+        expect(parseNotionDate("August 6, 2026 7:20 → 16:00")?.end).toBe(new Date(2026, 7, 6, 16, 0).toISOString());
+        // A day has no time to end with.
+        expect(parseNotionDate("August 6, 2026 → 16:00")).toBeNull();
     });
 
     it("rejects anything else", () => {
@@ -124,6 +149,21 @@ describe("columnValue", () => {
 });
 
 describe("helpers", () => {
+    it("reads links whose path keeps parentheses", () => {
+        const cell = "Notizen (2) (../Notizen/Notizen%20(2)%20abc.md), Plan (../Plan%20def.md)";
+        expect(relationLinks(cell, "Projekte/Aufgaben_all.csv")).toEqual(["Notizen/Notizen (2) abc.md", "Plan def.md"]);
+        expect(cleanCell(cell)).toBe("Notizen (2), Plan");
+    });
+
+    it("reads the property lines below an entry's title", () => {
+        expect(readPropertyLines("\nStatus: Offen\nLeer:\nLink: https://x.de/a?b=c\n\nFazit: gut")).toEqual([
+            { name: "Status", value: "Offen" },
+            { name: "Leer", value: "" },
+            { name: "Link", value: "https://x.de/a?b=c" },
+        ]);
+        expect(readPropertyLines("Erster Absatz.\nStatus: Offen")).toEqual([]);
+    });
+
     it("removes links to pages from relation cells", () => {
         expect(cleanCell("Bericht (Aufgaben%20abc/Bericht%20def.md), Angebot (Aufgaben/Angebot.md)")).toBe(
             "Bericht, Angebot",

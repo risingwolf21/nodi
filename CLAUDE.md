@@ -1985,6 +1985,26 @@ nicht gewünscht.
         Repository): 20 Seiten, 20 Datenbanken, 374 Einträge, 63
         Datenbank-Blöcke, keine Fehler. Tests: Vitest (`notion-export`,
         `notion-import`), Playwright „Ein neuerer Notion-Export …“.
+    - **Umsetzung 21b** (nur Frontend, keine Migration):
+      - `readPropertyLines`: die Zeilen „Name: Wert“ direkt unter dem Titel
+        eines Eintrags (bis zur ersten anderen Zeile). Namen, die die CSV
+        nicht hat, werden Eigenschaften, wenn sie in mindestens zwei
+        Einträgen stehen oder neben einer CSV-Eigenschaft (sonst könnte es
+        Text sein, „Fazit: gut“). Der CSV-Wert hat Vorrang; Einträge ohne
+        CSV-Zeile bekommen alle Werte ihrer Seite.
+      - Diese Werte laufen durch dieselbe Typerkennung wie CSV-Spalten.
+        Links auf Einträge **einer** Datenbank werden Verknüpfungen
+        (aufgelöst vom Ordner der Eintragsseite); Rollup- und Formelwerte
+        werden feste Zahlen, Texte usw. Ein Rollup, das verknüpfte Seiten
+        zeigt, sieht aus wie eine Verknüpfung und wird eine.
+      - Daten: Zeitzone aus „(GMT+2)“/„(GMT-5:30)“ wird berücksichtigt
+        (ohne Zone: Ortszeit des Geräts); ein Zeitraum, dessen Ende nur eine
+        Uhrzeit ist („… 7:20 (GMT+2) → 16:00“), endet am selben Tag.
+      - Links und Relationszellen, deren Pfad Klammern enthält
+        („Notizen%20(2)%20….md“), werden erkannt.
+      - Titel mit führendem Zeilenumbruch: schon durch `trim` abgedeckt.
+      - Echter Export (nur lokal): 113 Eigenschaften (vorher 74), davon 15
+        Verknüpfungen, 1747 Werte (vorher 1041), keine Fehler.
 22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
     „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
 23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
