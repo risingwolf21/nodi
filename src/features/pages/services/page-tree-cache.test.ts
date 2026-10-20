@@ -129,6 +129,21 @@ describe("PageTreeCache", () => {
         ]);
     });
 
+    it("keeps covers (package 30c); trees cached before have none", () => {
+        const row = { id: "p1", title: "Reise", parent_id: null, is_archived: false };
+        expect(
+            parseStoredPages([
+                { ...row, cover: "gradient:ocean" },
+                { ...row, id: "p2", cover: null },
+                { ...row, id: "p3" },
+            ])?.map((page) => [page.id, page.cover]),
+        ).toEqual([
+            ["p1", "gradient:ocean"],
+            ["p2", undefined],
+            ["p3", undefined],
+        ]);
+    });
+
     it("keeps shared pages apart from the workspace trees", async () => {
         const shared: StoredPage = {
             id: "s1",

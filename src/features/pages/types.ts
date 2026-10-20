@@ -23,12 +23,14 @@ export type Page = {
     created_at: string;
     /** An entry that is a template of its database (package 26); missing means no. */
     is_template?: boolean;
+    /** Cover above the title (package 30c): "gradient:<name>" or a `nodi-file:` image; missing or null means none. */
+    cover?: string | null;
     /** In the user's favorites (package 30b); missing means no. */
     favorite?: boolean;
 };
 
 /** Page settings that can be changed after creation. */
-export type PageSettings = Partial<Pick<Page, "icon" | "full_width">>;
+export type PageSettings = Partial<Pick<Page, "icon" | "full_width" | "cover">>;
 
 export type StoredPage = Page & {
     is_archived: boolean;

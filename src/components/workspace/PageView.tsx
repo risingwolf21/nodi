@@ -4,6 +4,7 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { Backlinks } from "@/features/pages/components/Backlinks";
+import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
@@ -216,8 +217,19 @@ export function PageView({
             </div>
         );
 
+    const setCover = (cover: string | null) => onUpdate(page.id, { cover });
+
     const renderHeader = (canEdit: boolean) => (
         <>
+            {page.cover && (
+                <PageCover
+                    pageId={page.id}
+                    cover={page.cover}
+                    userId={userId}
+                    editable={canEdit && !readOnly}
+                    onSetCover={setCover}
+                />
+            )}
             {menuError && (
                 <p className="mb-4 px-[var(--page-gutter)] text-sm text-destructive" role="alert">
                     {menuError}
@@ -229,6 +241,16 @@ export function PageView({
                 focusTitle={focusTitle}
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
+                actions={
+                    !page.cover && (
+                        <CoverPicker
+                            pageId={page.id}
+                            label="Titelbild hinzufügen"
+                            hasCover={false}
+                            onSetCover={setCover}
+                        />
+                    )
+                }
             />
             <Backlinks pageId={page.id} knownPages={knownPages} online={!readOnly} onOpen={onSelect} />
             {database && (

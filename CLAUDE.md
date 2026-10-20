@@ -347,6 +347,7 @@ src/
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite/Datenbank, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
       components/IconGrid.tsx       # Emoji suchen/einfügen (30a); Liste in page-icons.ts
+      components/PageCover.tsx      # Titelbild und Auswahl (30c); Farbverläufe in page-cover.ts
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
@@ -402,7 +403,8 @@ supabase/
                             # Unterseiten (P23), Rollups (P24),
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
                             # Suche (P27), Rückverweise (P28),
-                            # Person und Dateien (P29), Favoriten (P30b)
+                            # Person und Dateien (P29), Favoriten (P30b),
+                            # Titelbilder (P30c)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2271,6 +2273,26 @@ nicht gewünscht.
         Reihenfolge per Ziehen.
       - Tests: Vitest `page-tree-cache.test.ts`, Playwright
         `page-favorites.e2e.ts`.
+    - **Umsetzung 30c** (`20261020170000_page_cover.sql`):
+      - `pages.cover`: `null`, ein Farbverlauf der App (`gradient:<name>`,
+        nur Buchstaben) oder ein Bild aus dem Datei-Speicher
+        (`nodi-file:<seite>/<id>-<name>`); Check-Constraint (`23514`). Ändern
+        darf, wer die Seite bearbeiten darf (RLS wie beim Icon). pgTAP:
+        `page_cover.test.sql`.
+      - App: `Page.cover` (mit dem Seitenbaum geladen und gecacht; alte
+        Caches: keins). Im Seitenkopf „Titelbild hinzufügen“ neben „Icon
+        hinzufügen“; Auswahl (`CoverPicker`): sechs Farbverläufe
+        (`page-cover.ts`), „Bild hochladen“ (nur Bilder, 10 MB, in den Ordner
+        der Seite) und „Titelbild entfernen“. Das Bild steht über dem Titel
+        (`PageCover`, „Titelbild ändern“ beim Überfahren, Touch: immer) und
+        kommt zuerst aus dem Bild-Cache, ist also nach einmaligem Ansehen
+        offline sichtbar. Nur online und mit Schreibrecht änderbar.
+      - Noch nicht: Titelbilder in der öffentlichen Ansicht (die RPC
+        `get_public_page` liefert sie nicht) und in der Galerie, Position des
+        Bildes verschieben, Bilder aus dem Web, Titelbilder aus dem
+        Notion-Import (nicht im Export).
+      - Tests: Vitest `page-cover.test.ts`, `page-tree-cache.test.ts`,
+        Playwright `page-cover.e2e.ts`.
 31. **Kommentare** an Seiten und Textstellen.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
@@ -2350,8 +2372,9 @@ Noch nicht abschließend geprüft:
   antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs
   (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
   Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
-- Paket 10 nicht umgesetzt (bewusst): Titelbilder (Suche seit 27,
-  Favoriten seit 30b, Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
+- Paket 10 nicht umgesetzt (bewusst): nichts mehr (Suche seit 27,
+  Favoriten seit 30b, Titelbilder seit 30c, Verschieben per Drag & Drop
+  seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
   Suche (feste Liste plus eingefügte Emojis). Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
