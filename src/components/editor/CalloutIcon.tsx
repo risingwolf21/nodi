@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Menu } from "@/components/ui/menu";
-import { PAGE_ICONS } from "@/features/pages/page-icons";
+import { IconGrid } from "@/features/pages/components/IconGrid";
 import { CALLOUT_COLORS, type CalloutColor } from "./callout";
 
 /** The emoji of a callout; when editable, a menu to choose the emoji and the background. */
@@ -41,20 +41,7 @@ export function CalloutIcon({
                 {emoji}
             </button>
             <Menu open={open} onClose={() => setOpen(false)} align="start" detached className="w-72 p-2">
-                <div className="grid grid-cols-8 gap-0.5" role="group" aria-label="Icons">
-                    {PAGE_ICONS.map((icon) => (
-                        <button
-                            key={icon}
-                            type="button"
-                            role="menuitem"
-                            aria-label={`Icon ${icon}`}
-                            onClick={() => choose({ emoji: icon })}
-                            className="flex size-8 items-center justify-center rounded text-xl hover:bg-accent"
-                        >
-                            {icon}
-                        </button>
-                    ))}
-                </div>
+                <IconGrid onChoose={(icon) => choose({ emoji: icon })} />
                 <div className="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Hintergrund">
                     {CALLOUT_COLORS.map(({ value, label }) => (
                         <button
