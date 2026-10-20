@@ -10,10 +10,12 @@ import {
     Link,
     List,
     MapPin,
+    Paperclip,
     SearchCheck,
     Sigma,
     Tags,
     Type,
+    User,
 } from "lucide-react";
 import type { PropertyType } from "../types";
 
@@ -31,6 +33,8 @@ const ICONS = {
     formula: Sigma,
     relation: ArrowUpRight,
     rollup: SearchCheck,
+    person: User,
+    files: Paperclip,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

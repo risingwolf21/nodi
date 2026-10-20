@@ -1,5 +1,6 @@
 import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
+import { fileNameOfPath, pageIdOfFilePath } from "@/features/files/file-reference";
 import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
 import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
 import { computeRollup, isPercentRollup, keepsTargetFormat, ROLLUP_FUNCTIONS } from "./rollup";
@@ -21,6 +22,7 @@ import {
     type RollupFunction,
     type RollupSettings,
     type RelationSettings,
+    type WorkspacePerson,
     type SortRule,
     type StoredPropertyValue,
     type ViewConfig,
@@ -41,6 +43,8 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "formula",
     "relation",
     "rollup",
+    "person",
+    "files",
     "created_time",
     "last_edited_time",
 ];
@@ -59,6 +63,8 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     formula: "Formel",
     relation: "Verknüpfung",
     rollup: "Rollup",
+    person: "Person",
+    files: "Dateien & Medien",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
@@ -188,6 +194,16 @@ function parseRelation(row: Record<string, unknown>): RelationSettings | null {
     };
 }
 
+/** The cache keeps the members loaded with a person property (package 29). */
+function parsePeople(value: unknown): WorkspacePerson[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((person: unknown) =>
+        isObject(person) && typeof person.id === "string" && typeof person.email === "string"
+            ? [{ id: person.id, email: person.email }]
+            : [],
+    );
+}
+
 function isRollupFunction(value: unknown): value is RollupFunction {
     return typeof value === "string" && (ROLLUP_FUNCTIONS as readonly string[]).includes(value);
 }
@@ -259,6 +275,8 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
                 ...(relation ? { relation } : {}),
                 ...(rollup ? { rollup } : {}),
+                // Server rows have none; the repository adds them (and the cache keeps them).
+                ...(row.type === "person" && Array.isArray(row.people) ? { people: parsePeople(row.people) } : {}),
             },
         ];
     });
@@ -450,12 +468,35 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
             const ids = raw.filter((id: unknown): id is string => typeof id === "string");
             return ids.length > 0 ? ids : null;
         }
+        case "person": {
+            // User ids; ones that are no (known) members are skipped when shown.
+            if (!Array.isArray(raw)) return null;
+            const ids = raw.filter((id: unknown): id is string => typeof id === "string" && UUID.test(id));
+            return ids.length > 0 ? ids : null;
+        }
+        case "files": {
+            // Storage paths of the bucket (package 15), as the server checks them.
+            if (!Array.isArray(raw)) return null;
+            const paths = raw.filter(
+                (path: unknown): path is string => typeof path === "string" && pageIdOfFilePath(path) !== null,
+            );
+            return paths.length > 0 ? paths : null;
+        }
         case "formula":
         case "rollup":
         case "created_time":
         case "last_edited_time":
             return null;
     }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The known members of a person value, in its order. */
+export function chosenPeople(property: DatabaseProperty, value: PropertyValue): WorkspacePerson[] {
+    if (!Array.isArray(value)) return [];
+    const byId = new Map((property.people ?? []).map((person) => [person.id, person]));
+    return value.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** One entry of a database with its values, as views show it. */
@@ -816,6 +857,12 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return relatedEntries(property, value)
                 .map((entry) => displayTitle(entry))
                 .join(", ");
+        case "person":
+            return chosenPeople(property, value)
+                .map((person) => person.email)
+                .join(", ");
+        case "files":
+            return Array.isArray(value) ? value.map(fileNameOfPath).join(", ") : "";
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" && !Number.isNaN(Date.parse(value))
@@ -856,6 +903,8 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
         case "multi_select":
         case "place":
         case "relation":
+        case "person":
+        case "files":
             return ["contains", "isEmpty", "isNotEmpty"];
         case "formula":
         case "rollup":
@@ -953,9 +1002,10 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
     }
 
     // A place is found by its address (or coordinates), a formula by its shown result, a relation by
-    // the titles, like text.
+    // the titles, people by their e-mail addresses, files by their names, like text.
     const shown =
-        (type === "place" || type === "formula" || type === "relation") && property
+        (type === "place" || type === "formula" || type === "relation" || type === "person" || type === "files") &&
+        property
             ? formatValue(property, value)
             : typeof value === "string"
               ? value

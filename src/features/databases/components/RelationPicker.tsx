@@ -12,10 +12,25 @@ type RelationPickerProps = {
     onClose: () => void;
     onToggle: (entryId: string) => void;
     onClear: () => void;
+    /** Texts for other lists than entries (people, package 29). */
+    searchLabel?: string;
+    emptyText?: string;
+    noMatchText?: string;
 };
 
-/** Linking entries of the related database: type to filter, click to link or unlink. */
-export function RelationPicker({ open, entries, selectedIds, label, onClose, onToggle, onClear }: RelationPickerProps) {
+/** Linking entries of the related database: type to filter, click to link or unlink. Also picks people. */
+export function RelationPicker({
+    open,
+    entries,
+    selectedIds,
+    label,
+    onClose,
+    onToggle,
+    onClear,
+    searchLabel = "Eintrag suchen",
+    emptyText = "Die verknüpfte Datenbank hat keine Einträge.",
+    noMatchText = "Kein Eintrag gefunden.",
+}: RelationPickerProps) {
     const [query, setQuery] = useState("");
     const needle = query.trim().toLocaleLowerCase("de");
     const matching = entries.filter((entry) => displayTitle(entry).toLocaleLowerCase("de").includes(needle));
@@ -27,8 +42,8 @@ export function RelationPicker({ open, entries, selectedIds, label, onClose, onT
                     autoFocus
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Eintrag suchen"
-                    aria-label="Eintrag suchen"
+                    placeholder={searchLabel}
+                    aria-label={searchLabel}
                     className="h-7 w-full rounded border bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 />
             </div>
@@ -51,9 +66,7 @@ export function RelationPicker({ open, entries, selectedIds, label, onClose, onT
                 ))}
                 {matching.length === 0 && (
                     <li className="px-2 py-1 text-xs text-muted-foreground">
-                        {entries.length === 0
-                            ? "Die verknüpfte Datenbank hat keine Einträge."
-                            : "Kein Eintrag gefunden."}
+                        {entries.length === 0 ? emptyText : noMatchText}
                     </li>
                 )}
             </ul>

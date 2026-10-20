@@ -1,5 +1,6 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
+import { parseMembers } from "@/features/pages/services/workspace-members";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
 import { canRollUp } from "../rollup";
 import {
@@ -10,6 +11,7 @@ import {
     type DatabaseView,
     type PropertyOption,
     type RelatedEntry,
+    type WorkspacePerson,
 } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
@@ -166,6 +168,43 @@ async function withRollupTargets(properties: DatabaseProperty[]): Promise<Databa
     });
 }
 
+const isPersonProperty = (property: DatabaseProperty | null | undefined) => property?.type === "person";
+
+/**
+ * Person properties (package 29) offer the members of the database's
+ * workspace, loaded with the database like the entries of a relation (also
+ * for a rollup that shows people). Only members may list them: for a
+ * database shared from another workspace the list stays empty.
+ */
+async function withPeople(databaseId: string, properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const needed = properties.some(
+        (property) => isPersonProperty(property) || isPersonProperty(property.rollup?.target?.property),
+    );
+    if (!needed) return properties;
+
+    const page = await supabase.from("pages").select("workspace_id").eq("id", databaseId).maybeSingle();
+    const pageFailure = toRequestError(page);
+    if (pageFailure) throw pageFailure;
+    const workspaceId: unknown = page.data?.workspace_id;
+    let people: WorkspacePerson[] = [];
+    if (typeof workspaceId === "string") {
+        const response = await supabase.rpc("list_workspace_members", { p_workspace_id: workspaceId });
+        if (response.error?.code !== "42501") {
+            const failure = toRequestError(response);
+            if (failure) throw failure;
+            people = parseMembers(response.data).map((member) => ({ id: member.userId, email: member.email }));
+        }
+    }
+    return properties.map((property) => {
+        const target = property.rollup?.target;
+        if (property.rollup && target && isPersonProperty(target.property) && target.property) {
+            const rollup = { ...property.rollup, target: { ...target, property: { ...target.property, people } } };
+            return { ...property, rollup };
+        }
+        return isPersonProperty(property) ? { ...property, people } : property;
+    });
+}
+
 /** Whether a value write was taken or lost against a newer one (LWW). */
 export type ValueWriteResult = "saved" | "superseded";
 
@@ -237,7 +276,10 @@ export const databaseRepository = {
         }
 
         return {
-            properties: await withRollupTargets(await withRelatedEntries(parseProperties(properties.data))),
+            properties: await withPeople(
+                databaseId,
+                await withRollupTargets(await withRelatedEntries(parseProperties(properties.data))),
+            ),
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,

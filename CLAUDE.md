@@ -310,7 +310,8 @@ src/
       rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
       recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
-      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
+      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e), auch Personen (29)
+      components/FilesPicker.tsx     # Dateien & Medien: öffnen, entfernen, hochladen (29)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -399,7 +400,8 @@ supabase/
                             # Ansichten je Block (P19b), Einträge mit
                             # Unterseiten (P23), Rollups (P24),
                             # wiederkehrende Einträge (P25), Vorlagen (P26),
-                            # Suche (P27), Rückverweise (P28)
+                            # Suche (P27), Rückverweise (P28),
+                            # Person und Dateien (P29)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2210,6 +2212,35 @@ nicht gewünscht.
         Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
 29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
     Dateien & Medien im Datei-Speicher (Paket 15).
+    - **Umsetzung 29** (`20261020150000_person_and_files_properties.sql`):
+      - Typ `person`: Wert = JSON-Array von Nutzer-IDs (UUIDs, höchstens
+        100). Der Server prüft nur die Form, nicht die Mitgliedschaft (eine
+        ID verrät nichts; die App zeigt nur bekannte Mitglieder).
+      - Typ `files` („Dateien & Medien“): Wert = JSON-Array von
+        Storage-Pfaden `<seite>/<id>-<name>` im Bucket `page-files`
+        (höchstens 100). Ein fremder Pfad verrät nichts: Storage prüft beim
+        Lesen die Seite im Pfad.
+      - Nur die erlaubten Werte wachsen (rückwärtskompatibel; Apps ab 14e
+        lassen die Typen aus). pgTAP: `database_person_files.test.sql`.
+      - App: Die Mitglieder des Workspace der Datenbank
+        (`list_workspace_members`) lädt `databaseRepository.load` mit und
+        hängt sie an Person-Eigenschaften (auch an das Ziel eines Rollups),
+        wie die Einträge einer Verknüpfung; so stehen sie im Cache. Wer kein
+        Mitglied ist (geteilte Datenbank), sieht keine Namen. Anzeige per
+        E-Mail-Adresse, Auswahl mit Suche (`RelationPicker` mit eigenen
+        Texten).
+      - Dateien: `FilesPicker` öffnet eine Datei per signierter URL in einem
+        neuen Tab, entfernt sie aus dem Wert und lädt neue in den Ordner des
+        Eintrags hoch (`uploadPageFile`, 10 MB, nur online und mit
+        Schreibrecht). Angezeigt wird der Dateiname aus dem Pfad
+        (`fileNameOfPath`, so wie Storage ihn speichert).
+      - Filter „enthält/leer“ und Sortieren nach E-Mail bzw. Dateinamen;
+        Formeln sehen den Text.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-person-files.e2e.ts`.
+      - Noch nicht: Dateien beim Entfernen aus dem Wert löschen, Bilder als
+        Titelbild der Galerie, Personen aus dem Notion-Import (die CSV
+        enthält nur Namen; bleibt Text), Benachrichtigungen.
 30. **Favoriten, Titelbilder, Emoji-Suche.**
 31. **Kommentare** an Seiten und Textstellen.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,

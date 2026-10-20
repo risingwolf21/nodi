@@ -6,6 +6,8 @@ import type { BrowserContext, Route } from "@playwright/test";
 /** Must match VITE_SUPABASE_URL of the test build (playwright.config.ts). */
 export const SUPABASE_URL = "http://fake.localhost:54321";
 export const OWNER = "11111111-1111-4111-8111-111111111111";
+/** A second member of the workspace (person properties). */
+export const MEMBER = "22222222-2222-4222-8222-222222222222";
 // A local Supabase refuses requests from about 300 ids in the URL (414).
 const MAX_URL_LENGTH = 8000;
 const WORKSPACE = "w1";
@@ -363,6 +365,8 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             backend.pages = backend.pages.filter((item) => !gone.has(item.id));
             return json(deleted.map((item) => ({ id: item.id })));
         }
+        // The workspace of a database, for the members of person properties (package 29).
+        if (query.get("select") === "workspace_id") return json([{ workspace_id: WORKSPACE }]);
         // Readable page ids, for deleting local copies of revoked pages.
         if (query.get("select") === "id") {
             const ids = backend.pages.map(({ id }) => ({ id }));
@@ -617,6 +621,12 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         });
         hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle));
         return json(hits.map(({ id, title, snippet }) => ({ id, title, snippet })));
+    }
+    if (path === "/rest/v1/rpc/list_workspace_members") {
+        return json([
+            { user_id: OWNER, email: "owner@nodi.test", role: "owner", joined_at: "2026-10-01T10:00:00Z" },
+            { user_id: MEMBER, email: "kim@nodi.test", role: "member", joined_at: "2026-10-02T10:00:00Z" },
+        ]);
     }
     if (path === "/rest/v1/rpc/page_backlinks") {
         // Like the server: active pages whose saved text has a page link to the page.

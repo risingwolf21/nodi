@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
-import { Clock } from "lucide-react";
+import { Clock, Paperclip } from "lucide-react";
+import { fileNameOfPath } from "@/features/files/file-reference";
 import { displayTitle } from "@/features/pages/page-display";
 import {
     dateFromInput,
@@ -10,12 +11,14 @@ import {
     isComputed,
     isDateValue,
     isPlaceValue,
+    chosenPeople,
     relatedEntries,
     setDateTime,
 } from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
+import { FilesPicker } from "./FilesPicker";
 import { FormulaErrorText } from "./FormulaErrorText";
 import { PlacePicker } from "./PlacePicker";
 import { RelationPicker } from "./RelationPicker";
@@ -24,6 +27,8 @@ const OSM_ZOOM = 16;
 
 type PropertyValueEditorProps = {
     property: DatabaseProperty;
+    /** The entry; files are uploaded into its folder. */
+    pageId: string;
     value: PropertyValue;
     editable: boolean;
     onChange: (value: PropertyValue) => Promise<void>;
@@ -49,6 +54,7 @@ function parseNumber(text: string): number | null | "invalid" {
 /** Shows a value and lets the user change it in place, per property type. */
 export function PropertyValueEditor({
     property,
+    pageId,
     value,
     editable,
     onChange,
@@ -118,6 +124,85 @@ export function PropertyValueEditor({
                                 : [...selectedIds, entryId];
                             save(next.length > 0 ? next : null);
                         }}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    if (property.type === "person") {
+        const selectedIds = Array.isArray(value) ? value : [];
+        const people = property.people ?? [];
+        return (
+            <div className="relative min-w-0">
+                <button
+                    type="button"
+                    disabled={!canChange}
+                    aria-label={`${property.name} wählen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} flex-wrap gap-1 hover:bg-accent/60 disabled:hover:bg-transparent`}
+                >
+                    {chosenPeople(property, value).map((person) => (
+                        <span key={person.id} className="max-w-full truncate rounded-full border px-1.5 py-0.5 text-xs">
+                            {person.email}
+                        </span>
+                    ))}
+                </button>
+                {pickerOpen && (
+                    <RelationPicker
+                        open
+                        entries={people.map((person) => ({ id: person.id, title: person.email, icon: null }))}
+                        selectedIds={selectedIds}
+                        label={property.name}
+                        searchLabel="Person suchen"
+                        emptyText="Nur Mitglieder des Workspace sehen die Personen."
+                        noMatchText="Keine Person gefunden."
+                        onClose={() => setPickerOpen(false)}
+                        onClear={() => save(null)}
+                        onToggle={(personId) => {
+                            const next = selectedIds.includes(personId)
+                                ? selectedIds.filter((id) => id !== personId)
+                                : [...selectedIds, personId];
+                            save(next.length > 0 ? next : null);
+                        }}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    if (property.type === "files") {
+        const paths = Array.isArray(value) ? value : [];
+        return (
+            <div className="relative min-w-0">
+                {/* Opening files works without the right to edit. */}
+                <button
+                    type="button"
+                    aria-label={`${property.name} anzeigen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} flex-wrap gap-1 hover:bg-accent/60`}
+                >
+                    {paths.map((path) => (
+                        <span
+                            key={path}
+                            className="flex max-w-full items-center gap-1 truncate rounded border px-1.5 py-0.5 text-xs"
+                        >
+                            <Paperclip className="size-3 shrink-0" aria-hidden="true" />
+                            {fileNameOfPath(path)}
+                        </span>
+                    ))}
+                </button>
+                {pickerOpen && (
+                    <FilesPicker
+                        label={property.name}
+                        pageId={pageId}
+                        paths={paths}
+                        editable={canChange}
+                        onClose={() => setPickerOpen(false)}
+                        onChange={(next) => save(next.length > 0 ? next : null)}
+                        onError={onError}
                     />
                 )}
             </div>

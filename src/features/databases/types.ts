@@ -1,4 +1,4 @@
-/** Property types of the server (packages 14a, 14e, 14f, 17d, 24); formula, rollup and the last two are computed. */
+/** Property types of the server (packages 14a, 14e, 14f, 17d, 24, 29); formula, rollup and the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -13,6 +13,8 @@ export type PropertyType =
     | "formula"
     | "relation"
     | "rollup"
+    | "person"
+    | "files"
     | "created_time"
     | "last_edited_time";
 
@@ -41,6 +43,12 @@ export type RelationSettings = {
     pairedPropertyId: string;
     /** The readable entries of that database, loaded with this one (like the options of a select). */
     entries: RelatedEntry[];
+};
+
+/** A member of the database's workspace, as person properties show and pick them (package 29). */
+export type WorkspacePerson = {
+    id: string;
+    email: string;
 };
 
 /** What a rollup computes from the related entries (package 24, Notion's functions). */
@@ -90,6 +98,8 @@ export type DatabaseProperty = {
     relation?: RelationSettings;
     /** Rollup properties (server: options.relationPropertyId, …). */
     rollup?: RollupSettings;
+    /** Person properties: the members of the workspace, loaded with the database (empty for non-members). */
+    people?: WorkspacePerson[];
     position: number;
 };
 

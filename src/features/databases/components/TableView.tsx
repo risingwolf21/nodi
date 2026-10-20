@@ -207,6 +207,7 @@ export function TableView({
                                 <td key={property.id} className="max-w-48 border-r p-0 align-top">
                                     <PropertyValueEditor
                                         property={property}
+                                        pageId={row.page.id}
                                         value={row.values[property.id] ?? null}
                                         editable={editable}
                                         onChange={(value) => onSetValue(row.page.id, property.id, value)}
