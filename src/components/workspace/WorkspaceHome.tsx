@@ -26,6 +26,7 @@ import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
+import { SearchDialog } from "@/features/search/components/SearchDialog";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
@@ -125,6 +126,19 @@ export default function WorkspaceHome() {
 
     // On phones the app fits the area above the keyboard (package 20).
     useEffect(() => trackVirtualKeyboard(), []);
+
+    // Ctrl/⌘+K opens the search (package 27), as in Notion.
+    const [searchOpen, setSearchOpen] = useState(false);
+    useEffect(() => {
+        function openSearch(event: KeyboardEvent) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+                event.preventDefault();
+                setSearchOpen(true);
+            }
+        }
+        window.addEventListener("keydown", openSearch);
+        return () => window.removeEventListener("keydown", openSearch);
+    }, []);
 
     // Revoked shares: the local copies go at the next contact with the server.
     useEffect(() => {
@@ -289,6 +303,7 @@ export default function WorkspaceHome() {
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
                             onImportNotion={() => setImportOpen(true)}
+                            onSearch={() => setSearchOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
@@ -451,6 +466,16 @@ export default function WorkspaceHome() {
                         />
                     </Suspense>
                 </LoadErrorBoundary>
+            )}
+
+            {searchOpen && user && (
+                <SearchDialog
+                    knownPages={knownPages}
+                    userId={user.id}
+                    offline={readOnly || authOffline}
+                    onOpen={(id) => openPage(id)}
+                    onClose={() => setSearchOpen(false)}
+                />
             )}
 
             {sharingPage && user && (

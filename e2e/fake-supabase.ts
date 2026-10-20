@@ -599,6 +599,25 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
+    if (path === "/rest/v1/rpc/search_pages") {
+        // Like the server: titles and texts (the "text" values of the saved documents), title hits first.
+        const needle = text(requestBody(route), "p_query").trim().toLowerCase();
+        const texts = (document: unknown) =>
+            [...JSON.stringify(document ?? []).matchAll(/"text":"((?:[^"\\]|\\.)*)"/g)]
+                .map((match) => match[1])
+                .join(" ");
+        const hits = backend.pages.flatMap((item) => {
+            if (item.is_archived || needle.length < 2) return [];
+            const body = texts(backend.savedDocuments.get(item.id));
+            const inTitle = item.title.toLowerCase().includes(needle);
+            const at = body.toLowerCase().indexOf(needle);
+            if (!inTitle && at === -1) return [];
+            const snippet = at === -1 ? null : body.slice(Math.max(at - 40, 0), Math.max(at - 40, 0) + 160);
+            return [{ id: item.id, title: item.title, inTitle, snippet }];
+        });
+        hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle));
+        return json(hits.map(({ id, title, snippet }) => ({ id, title, snippet })));
+    }
     if (path === "/rest/v1/rpc/create_entry_from_template") {
         // Like the server: a copy of the template (title, icon, values) at the end of its database.
         const template = backend.pages.find((item) => item.id === text(requestBody(route), "p_template_id"));
