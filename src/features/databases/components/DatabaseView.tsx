@@ -439,6 +439,7 @@ export function DatabaseView({
                                   createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
                             : undefined
                     }
+                    onMoveEntry={(pageId, value) => setValue(pageId, calendarDate?.id ?? "", value)}
                     onAddDateProperty={async () => {
                         await addProperty("date");
                     }}
