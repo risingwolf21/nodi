@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
+import { markdownToImportedBlocks, rewriteImportedBlocks, type LinkTarget, type UploadResult } from "./import-blocks";
 
 const text = (value: string) => ({ type: "text", text: value, styles: {} });
 const link = (href: string, label: string) => ({ type: "link", href, content: [text(label)] });
@@ -139,5 +139,39 @@ describe("rewriteImportedBlocks", () => {
             type: "tableContent",
             rows: [{ cells: [[text("Tag 1")], [text("x")]] }],
         });
+    });
+});
+
+describe("markdownToImportedBlocks", () => {
+    // One paragraph per line; a line that is a link on its own is a link.
+    const parse = (markdown: string) =>
+        markdown
+            .split("\n")
+            .filter((line) => line.trim())
+            .map((line) => {
+                const only = /^\[(.*)\]\((.*)\)$/.exec(line);
+                return { type: "paragraph", content: [only ? link(only[2], only[1]) : text(line)], children: [] };
+            });
+
+    it("turns Notion's asides into callouts with their emoji and nested blocks", () => {
+        const markdown =
+            "Vorher\n<aside>\n💡 Tipp: früh anfangen\n\nZweiter Absatz\n</aside>\n<aside>\n[Aufgaben](Aufgaben.csv)\n</aside>\nDanach";
+        expect(markdownToImportedBlocks(markdown, parse)).toEqual([
+            { type: "paragraph", content: [text("Vorher")], children: [] },
+            {
+                type: "callout",
+                props: { emoji: "💡" },
+                content: [text("Tipp: früh anfangen")],
+                children: [{ type: "paragraph", content: [text("Zweiter Absatz")], children: [] }],
+            },
+            // A link on its own stays a block below an empty callout (it may become a database).
+            {
+                type: "callout",
+                props: {},
+                content: [],
+                children: [{ type: "paragraph", content: [link("Aufgaben.csv", "Aufgaben")], children: [] }],
+            },
+            { type: "paragraph", content: [text("Danach")], children: [] },
+        ]);
     });
 });

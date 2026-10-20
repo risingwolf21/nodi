@@ -3,7 +3,13 @@ import type { DocumentContent } from "@/features/editor/types";
 import { EMPTY_VIEW_CONFIG } from "@/features/databases/database-model";
 import type { NewProperty, NewView, ViewChanges } from "@/features/databases/services/database-repository";
 import { TITLE_FIELD, type DatabaseBlockRef, type DatabaseView, type SortRule } from "@/features/databases/types";
-import { rewriteImportedBlocks, type DatabaseBlockLink, type LinkTarget, type UploadResult } from "./import-blocks";
+import {
+    markdownToImportedBlocks,
+    rewriteImportedBlocks,
+    type DatabaseBlockLink,
+    type LinkTarget,
+    type UploadResult,
+} from "./import-blocks";
 import {
     cleanCell,
     columnValue,
@@ -211,7 +217,11 @@ export async function importNotionExport(
             }
         };
 
-        const result = await rewriteImportedBlocks(dependencies.markdownToBlocks(text), classify, upload);
+        const result = await rewriteImportedBlocks(
+            markdownToImportedBlocks(text, dependencies.markdownToBlocks),
+            classify,
+            upload,
+        );
         databaseBlocks.push(...result.databaseBlocks.map((block) => ({ ...block, pageId })));
         summary.files += result.files;
         summary.problems.push(...result.problems.map((problem) => `${title}: ${problem}`));

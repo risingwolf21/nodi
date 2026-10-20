@@ -273,6 +273,45 @@ test("Ein neuerer Notion-Export (Ordner ohne ID, eingebettete Ansicht mit Sortie
     ]);
 });
 
+test("Notion-Callouts werden Callout-Blöcke", async ({ page, context }) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    await chooseArchive(
+        page,
+        zipSync({
+            [`Tipps ${ROME}.md`]: strToU8(
+                [
+                    "# Tipps",
+                    "",
+                    "<aside>",
+                    "🧭 Früh **losgehen**",
+                    "",
+                    "Wasser mitnehmen",
+                    "",
+                    "</aside>",
+                    "",
+                    "Ende",
+                ].join("\n"),
+            ),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText(/1 von 1 Seite/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+
+    await page.getByRole("button", { name: "Tipps", exact: true }).click();
+    const callout = page.locator('.bn-editor [data-content-type="callout"]');
+    await expect(callout).toContainText("🧭");
+    await expect(callout).toContainText("Früh losgehen");
+    await expect(callout.locator("strong")).toHaveText("losgehen");
+    // The rest of the aside is nested in the callout.
+    await expect(page.locator(".bn-block:has(> * > [data-content-type=callout]) .bn-block-group")).toContainText(
+        "Wasser mitnehmen",
+    );
+    await expect(page.locator(".bn-editor")).not.toContainText("aside");
+});
+
 test("Notion-Relationen zwischen zwei Datenbanken werden zur Verknüpfung", async ({ page, context }) => {
     const backend = createBackend();
     await openApp(page, context, backend);
