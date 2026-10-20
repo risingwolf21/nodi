@@ -332,3 +332,10 @@ body .bn-mobile-formatting-toolbar {
 .nodi-callout-swatch {
     background-color: var(--callout-background);
 }
+
+/* Text with an open comment (package 31b). */
+.nodi-comment-mark {
+    cursor: pointer;
+    border-bottom: 2px solid rgb(234 179 8 / 0.8);
+    background-color: rgb(250 204 21 / 0.25);
+}

@@ -1,7 +1,8 @@
-import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from "@blocknote/core";
-import { createReactBlockSpec, createReactInlineContentSpec } from "@blocknote/react";
+import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, defaultStyleSpecs } from "@blocknote/core";
+import { createReactBlockSpec, createReactInlineContentSpec, createReactStyleSpec } from "@blocknote/react";
 import { DEFAULT_CALLOUT_EMOJI, isCalloutColor } from "./callout";
 import { CalloutIcon } from "./CalloutIcon";
+import { CommentMark } from "./CommentMark";
 import { DatabaseBlock } from "./DatabaseBlock";
 import { PageLink } from "./PageLink";
 
@@ -70,8 +71,18 @@ const pageLink = createReactInlineContentSpec(
     },
 );
 
-/** The blocks of Nodi's documents: BlockNote's own, the database block and the callout; page links in the text. */
+/** Text with a comment (package 31b): the value is the id of its thread in page_comments. */
+const commentStyle = createReactStyleSpec(
+    { type: "comment", propSchema: "string" },
+    { render: ({ value, contentRef }) => <CommentMark threadId={value} contentRef={contentRef} /> },
+);
+
+/**
+ * The blocks of Nodi's documents: BlockNote's own, the database block and the callout; page links in the
+ * text; comments on text.
+ */
 export const editorSchema = BlockNoteSchema.create({
     blockSpecs: { ...defaultBlockSpecs, database: databaseBlock(), callout: calloutBlock() },
     inlineContentSpecs: { ...defaultInlineContentSpecs, pageLink },
+    styleSpecs: { ...defaultStyleSpecs, comment: commentStyle },
 });
