@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { ChevronRight, FileText, MoreHorizontal, Plus, Table2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { displayTitle } from "./page-display";
+import { compareByPosition } from "./page-hierarchy";
 import type { TreeDragAndDrop } from "./PageTree";
 import type { Page } from "./types";
 
@@ -39,14 +40,20 @@ export function PageTreeItem({
     onMove,
     dragAndDrop,
 }: PageTreeItemProps) {
-    const children = pages.filter((item) => item.parent_id === page.id);
+    const children = pages.filter((item) => item.parent_id === page.id).sort(compareByPosition);
     const [expanded, setExpanded] = useState(true);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [dropHere, setDropHere] = useState(false);
-    const accepts = () =>
-        dragAndDrop?.draggedId !== null &&
-        dragAndDrop?.draggedId !== page.id &&
-        dragAndDrop?.canDrop({ parentId: page.id }) === true;
+    // Where a dragged page would land: before or after this one, or below it.
+    const [dropHere, setDropHere] = useState<"before" | "into" | "after" | null>(null);
+    const dragging = () => dragAndDrop?.draggedId !== null && dragAndDrop?.draggedId !== page.id;
+    const zone = (event: DragEvent<HTMLElement>): "before" | "into" | "after" | null => {
+        if (!dragAndDrop || !dragging()) return null;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const offset = (event.clientY - rect.top) / rect.height;
+        const edge = offset < 0.25 ? "before" : offset > 0.75 ? "after" : null;
+        if (edge && dragAndDrop.canPlace(page)) return edge;
+        return dragAndDrop.canDrop({ parentId: page.id }) ? "into" : null;
+    };
     const hasChildren = children.length > 0;
     const selected = selectedPageId === page.id;
 
@@ -61,23 +68,28 @@ export function PageTreeItem({
                 }}
                 onDragEnd={() => dragAndDrop?.end()}
                 onDragOver={(event) => {
-                    if (!accepts()) return;
+                    const where = zone(event);
+                    setDropHere(where);
+                    if (!where) return;
                     event.preventDefault();
                     event.dataTransfer.dropEffect = "move";
-                    setDropHere(true);
                 }}
-                onDragLeave={() => setDropHere(false)}
+                onDragLeave={() => setDropHere(null)}
                 onDrop={(event) => {
                     event.preventDefault();
-                    setDropHere(false);
-                    if (accepts()) dragAndDrop?.drop({ parentId: page.id });
+                    const where = zone(event);
+                    setDropHere(null);
+                    if (where === "into") dragAndDrop?.drop({ parentId: page.id });
+                    else if (where) dragAndDrop?.place(page, where);
                 }}
                 className={cn(
                     "group flex h-7 items-center gap-0.5 rounded-md pr-1 text-sm pointer-coarse:h-10",
                     selected
                         ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/70",
-                    dropHere && "ring-2 ring-brand",
+                    dropHere === "into" && "ring-2 ring-brand",
+                    dropHere === "before" && "shadow-[inset_0_2px_0_var(--brand)]",
+                    dropHere === "after" && "shadow-[inset_0_-2px_0_var(--brand)]",
                     dragAndDrop?.draggedId === page.id && "opacity-50",
                 )}
                 style={{ paddingLeft: 4 + depth * INDENT }}

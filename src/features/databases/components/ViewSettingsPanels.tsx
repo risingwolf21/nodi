@@ -384,6 +384,7 @@ export function PropertyChoicePanel({
     editable,
     onChoose,
     onError,
+    noneLabel,
 }: {
     label: string;
     icon: LucideIcon;
@@ -391,12 +392,14 @@ export function PropertyChoicePanel({
     choices: DatabaseProperty[];
     current: DatabaseProperty | undefined;
     editable: boolean;
-    onChoose: (propertyId: string) => Promise<void>;
+    onChoose: (propertyId: string | null) => Promise<void>;
     onError: (message: string) => void;
+    /** A first choice for "none", e.g. "Nicht gruppieren" (package 32c). */
+    noneLabel?: string;
 }) {
     const [open, setOpen] = useState(false);
 
-    function choose(propertyId: string) {
+    function choose(propertyId: string | null) {
         setOpen(false);
         onChoose(propertyId).catch((err: unknown) =>
             onError(err instanceof Error ? err.message : "Die Ansicht konnte nicht gespeichert werden."),
@@ -420,6 +423,18 @@ export function PropertyChoicePanel({
             </button>
             <Menu detached open={open} onClose={() => setOpen(false)} role="dialog" label={label} className="w-60 p-1">
                 {choices.length === 0 && <p className="px-2 py-1 text-xs text-muted-foreground">{emptyText}</p>}
+                {noneLabel && choices.length > 0 && (
+                    <button
+                        type="button"
+                        disabled={!editable}
+                        aria-pressed={current === undefined}
+                        onClick={() => choose(null)}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-60 pointer-coarse:py-2.5"
+                    >
+                        <span className="min-w-0 flex-1 truncate">{noneLabel}</span>
+                        {current === undefined && <Check className="size-4" aria-hidden="true" />}
+                    </button>
+                )}
                 {[...choices]
                     .sort((a, b) => a.position - b.position)
                     .map((property) => (
