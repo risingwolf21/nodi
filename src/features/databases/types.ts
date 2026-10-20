@@ -15,6 +15,7 @@ export type PropertyType =
     | "rollup"
     | "person"
     | "files"
+    | "button"
     | "created_time"
     | "last_edited_time";
 
@@ -44,6 +45,12 @@ export type RelationSettings = {
     /** The readable entries of that database, loaded with this one (like the options of a select). */
     entries: RelatedEntry[];
 };
+
+/** What a button does to its entry (package 32f): set a value, or today's date. */
+export type ButtonAction = { propertyId: string; value: unknown } | { propertyId: string; today: true };
+
+/** A button property: its label and actions (server: options). */
+export type ButtonSettings = { label: string; actions: ButtonAction[] };
 
 /** A member of the database's workspace, as person properties show and pick them (package 29). */
 export type WorkspacePerson = {
@@ -98,6 +105,8 @@ export type DatabaseProperty = {
     relation?: RelationSettings;
     /** Rollup properties (server: options.relationPropertyId, …). */
     rollup?: RollupSettings;
+    /** Button properties (package 32f). */
+    button?: ButtonSettings;
     /** Person properties: the members of the workspace, loaded with the database (empty for non-members). */
     people?: WorkspacePerson[];
     position: number;

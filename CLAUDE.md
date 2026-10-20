@@ -311,6 +311,7 @@ src/
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
       rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
+      components/ButtonEditor.tsx    # Button-Eigenschaft: Beschriftung, Aktionen (32f)
       recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e), auch Personen (29)
@@ -409,7 +410,7 @@ supabase/
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
-                            # Zeitleiste (P32d)
+                            # Zeitleiste (P32d), Buttons (P32f)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2446,6 +2447,30 @@ nicht gewünscht.
         nur als Folge von Blöcken).
       - Tests: Playwright `columns.e2e.ts` (nebeneinander, gespeicherte
         Struktur, schmal untereinander).
+    - **Umsetzung 32f** (`20261020210000_button_property.sql`):
+      - Eigenschaftstyp `button` (wie Notions Button „Seiten bearbeiten“);
+        `options` = `{label, actions}`, `label` bis 100 Zeichen, `actions`
+        höchstens 10 Objekte mit Text `propertyId` und `value` (beliebiges
+        JSON) oder `today: true`; geprüft nur die Form
+        (`is_valid_button_options`, Check-Constraint, `23514`). Ein Button hat
+        keinen Wert (`set_page_property` → `22023`). Nur die erlaubten Werte
+        wachsen (rückwärtskompatibel; Apps ab 14e lassen den Typ aus). pgTAP:
+        `database_buttons.test.sql`.
+      - Klick in Tabelle oder Eigenschaftsleiste setzt die Werte nacheinander
+        per `set_page_property` (`useDatabase.runButton`, `buttonChanges`):
+        gleiche Rechte, LWW und Rücknahme wie bei jedem Wert. Aktionen auf
+        gelöschte Eigenschaften oder nicht mehr passende Werte (gelöschte
+        Option) entfallen; „Heute“ ist der lokale Tag. Nur mit Schreibrecht
+        und online.
+      - `ButtonEditor` (Dialog): Beschriftung, Aktionen für Checkbox
+        (angehakt/nicht), Auswahl und Status (Option oder „Leeren“), Datum
+        („Heute“/„Leeren“). Öffnet sich nach dem Anlegen, über „Button
+        bearbeiten“ im Spaltenkopf und über den Namen in der
+        Eigenschaftsleiste.
+      - Noch nicht: Buttons in Board, Liste, Galerie und Feed; Aktionen
+        „Seite anlegen“, „Seite öffnen“, Werte anderer Typen.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-buttons.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

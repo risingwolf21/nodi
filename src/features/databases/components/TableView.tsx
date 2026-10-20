@@ -36,6 +36,8 @@ export type TableViewProps = {
     onEditFormula: (propertyId: string) => void;
     onChangeNumberFormat: (propertyId: string, format: NumberFormat) => Promise<void>;
     onError: (message: string) => void;
+    /** A click on a button property of an entry (package 32f). */
+    onRunButton?: (pageId: string, property: DatabaseProperty) => Promise<void>;
 };
 
 function TitleCell({
@@ -132,6 +134,7 @@ export function TableView({
     onEditFormula,
     onChangeNumberFormat,
     onError,
+    onRunButton,
 }: TableViewProps) {
     const [newEntryId, setNewEntryId] = useState("");
     const [creating, setCreating] = useState(false);
@@ -215,6 +218,7 @@ export function TableView({
                                         onError={onError}
                                         alignNumbersRight
                                         error={row.errors[property.id]}
+                                        onRunButton={onRunButton ? () => onRunButton(row.page.id, property) : undefined}
                                     />
                                 </td>
                             ))}
