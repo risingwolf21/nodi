@@ -395,7 +395,7 @@ supabase/
                             # Verknüpfungen (P17d), Verschieben (P18a),
                             # Ansichten je Block (P19b), Einträge mit
                             # Unterseiten (P23), Rollups (P24),
-                            # wiederkehrende Einträge (P25)
+                            # wiederkehrende Einträge (P25), Vorlagen (P26)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2127,10 +2127,34 @@ nicht gewünscht.
         (`recurrence.ts`: Texte und Validierung).
       - Tests: Vitest `recurrence.test.ts`, Playwright
         `entry-recurrence.e2e.ts`.
-      - Noch nicht: Wiederholung aus einer Vorlage (Paket 26), Uhrzeit des
-        Termins, Ende einer Wiederholung.
+      - Noch nicht: Uhrzeit des Termins, Ende einer Wiederholung
+        (eine Vorlage kann sich seit Paket 26 wiederholen).
 26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
     Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
+    - **Annahme:** Vorlagen gibt es je Datenbank (wie in Notion); eine
+      Vorlage ist ein markierter Eintrag mit Text und Werten. Seitenvorlagen
+      außerhalb von Datenbanken vorerst nicht.
+    - **Umsetzung 26** (`20261020120000_entry_templates.sql`):
+      - `pages.is_template` (Standard `false`); nur Einträge einer
+        Datenbank (Trigger, `22023`). RPC
+        `create_entry_from_template(template)` → ID des neuen Eintrags:
+        lesbar, Vorlage, nicht im Papierkorb (`22023`), Schreibrecht auf die
+        Datenbank (`42501`); kopiert mit `copy_recurring_entry` (Titel,
+        Icon, Werte, Text). pgTAP: `entry_templates.test.sql`.
+      - App: `Page.is_template` (alte Caches: keine Vorlage). Die Ansichten
+        lassen Vorlagen aus (`DatabaseView` trennt sie), Verknüpfungen
+        bieten sie nicht an. Leiste der Datenbank: „Vorlagen“ (nur mit
+        Schreibrecht, online, eigener Workspace): neuer Eintrag aus einer
+        Vorlage (öffnet ihn), Vorlage bearbeiten, „Neue Vorlage“.
+        `usePages.createEntryFromTemplate`: Eintrag sofort im Baum, danach
+        neu laden; `createPage(…, { id, isTemplate })`.
+      - Eine Vorlage zeigt den Hinweis „Vorlage in „…““; sie kann sich
+        wiederholen (Paket 25) und macht dann Einträge aus sich.
+      - Achtung: App-Versionen vor 26 zeigen Vorlagen als normale Einträge.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `entry-templates.e2e.ts`.
+      - Noch nicht: Standardvorlage für „Neu“, Vorlagen in Datenbank-Blöcken,
+        Seitenvorlagen ohne Datenbank.
 27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
     lokal; Suchfeld in der Seitenleiste und Tastenkürzel.
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),

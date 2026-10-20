@@ -48,7 +48,7 @@ export function parseServerPages(data: unknown): StoredPage[] {
 
 // Columns of a page in the tree (StoredPage).
 export const PAGE_COLUMNS =
-    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at";
+    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at,is_template";
 
 export const toPage = ({
     id,
@@ -61,6 +61,7 @@ export const toPage = ({
     kind,
     position,
     created_at,
+    is_template,
 }: StoredPage): Page => ({
     id,
     title,
@@ -72,7 +73,15 @@ export const toPage = ({
     kind,
     position,
     created_at,
+    ...(is_template ? { is_template } : {}),
 });
+
+export type NewPageOptions = {
+    /** Known before the page exists, e.g. for links to it (Notion import). */
+    id?: string;
+    /** A template of its database (package 26). */
+    isTemplate?: boolean;
+};
 
 type UsePagesResult = {
     pages: Page[];
@@ -88,8 +97,10 @@ type UsePagesResult = {
         parentId: string | null,
         section: PageSection,
         kind?: PageKind,
-        id?: string,
+        options?: NewPageOptions,
     ) => Promise<Page>;
+    /** A new entry from a template of its database (RPC create_entry_from_template, package 26). */
+    createEntryFromTemplate: (templateId: string) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
@@ -259,9 +270,10 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             parentId: string | null,
             section: PageSection,
             kind: PageKind = "page",
-            // Known before the page exists, e.g. for links to it (Notion import).
-            id: string = crypto.randomUUID(),
+            options: NewPageOptions = {},
         ): Promise<Page> => {
+            const id = options.id ?? crypto.randomUUID();
+            const isTemplate = options.isTemplate === true;
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
@@ -294,6 +306,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 kind,
                 position,
                 created_at: new Date().toISOString(),
+                ...(isTemplate ? { is_template: true } : {}),
             };
 
             setError("");
@@ -308,6 +321,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 parent_id: parentId,
                 kind,
                 position,
+                ...(isTemplate ? { is_template: true } : {}),
             });
 
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
@@ -319,6 +333,38 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             }
 
             return createdPage;
+        },
+        [userId, workspaceId, requireOnline, switchedSince],
+    );
+
+    const createEntryFromTemplate = useCallback(
+        async (templateId: string): Promise<Page> => {
+            if (!userId) throw new Error("Bitte melde dich an.");
+            requireOnline();
+            const template = latestPages.current.find((page) => page.id === templateId);
+            if (!template?.parent_id) throw new Error("Diese Vorlage gibt es nicht mehr.");
+            setError("");
+
+            const response = await supabase.rpc("create_entry_from_template", { p_template_id: templateId });
+            const failure = pageChangeError(response, "Der Eintrag konnte nicht angelegt werden.");
+            if (failure) throw failure;
+            if (typeof response.data !== "string") throw new Error("Unerwartete Antwort beim Anlegen des Eintrags.");
+
+            // At once in the database; values and text come from the server with the reload.
+            const created: Page = {
+                ...template,
+                id: response.data,
+                owner_id: userId,
+                position: nextPosition(latestPages.current.filter((page) => page.parent_id === template.parent_id)),
+                created_at: new Date().toISOString(),
+                is_template: false,
+            };
+            if (!switchedSince(workspaceId)) {
+                latestPages.current = [...latestPages.current, created];
+                setPages((current) => [...current, created]);
+                setMovesToLoad((count) => count + 1);
+            }
+            return created;
         },
         [userId, workspaceId, requireOnline, switchedSince],
     );
@@ -563,6 +609,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         error,
         fromCache,
         createPage,
+        createEntryFromTemplate,
         setPageSection,
         movePage,
         renamePage,

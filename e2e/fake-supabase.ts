@@ -24,6 +24,7 @@ export type FakePage = {
     kind: "page" | "database";
     position: number | null;
     created_at: string;
+    is_template?: boolean;
 };
 
 export type FakeProperty = {
@@ -318,6 +319,7 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
                     kind: body.kind === "database" ? "database" : "page",
                     position: typeof body.position === "number" ? body.position : null,
                     created_at: new Date().toISOString(),
+                    ...(body.is_template === true ? { is_template: true } : {}),
                 }),
             );
             if (body.kind === "database") {
@@ -576,6 +578,23 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
+    if (path === "/rest/v1/rpc/create_entry_from_template") {
+        // Like the server: a copy of the template (title, icon, values) at the end of its database.
+        const template = backend.pages.find((item) => item.id === text(requestBody(route), "p_template_id"));
+        if (!template?.is_template) return json({ code: "22023", message: "not a template" }, 400);
+        const id = crypto.randomUUID();
+        const siblings = backend.pages.filter((item) => item.parent_id === template.parent_id);
+        backend.pages.push({
+            ...template,
+            id,
+            is_template: false,
+            position: Math.max(0, ...siblings.map((item) => item.position ?? 0)) + 1,
+        });
+        for (const value of backend.values.filter((item) => item.pageId === template.id)) {
+            backend.values.push({ ...value, pageId: id });
+        }
+        return json(id);
+    }
     if (path === "/rest/v1/rpc/create_due_recurring_entries") {
         backend.recurrenceRuns.push(text(requestBody(route), "p_workspace_id"));
         return json(0);

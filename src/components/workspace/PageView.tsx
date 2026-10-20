@@ -7,6 +7,7 @@ import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
+import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -41,6 +42,8 @@ type PageViewProps = {
     userId: string | undefined;
     /** The page's children: a database's entries, an entry's subpages. */
     entries: Page[];
+    /** For a database: its templates (package 26); undefined where they cannot be used. */
+    templateActions?: TemplateActions;
     /** For an entry: adds a subpage or database (package 23); undefined where that is not possible. */
     onCreateSubpage?: (parentId: string, kind: PageKind) => void;
     /** For a database: adds an entry; undefined where that is not possible. */
@@ -85,6 +88,7 @@ export function PageView({
     entries,
     onCreateEntry,
     onCreateSubpage,
+    templateActions,
     databases,
     knownPages,
 }: PageViewProps) {
@@ -227,6 +231,12 @@ export function PageView({
                     </Suspense>
                 </LoadErrorBoundary>
             )}
+            {database && page.is_template && (
+                <p className="mb-4 px-[var(--page-gutter)] text-sm text-muted-foreground" role="note">
+                    Vorlage in „{displayTitle(database)}“: Neue Einträge aus dieser Vorlage bekommen ihren Text und ihre
+                    Eigenschaften.
+                </p>
+            )}
             {database && (
                 <SubpageList
                     subpages={entries}
@@ -266,6 +276,7 @@ export function PageView({
                             onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
                             onRenameEntry={onRename}
                             databases={databases}
+                            templateActions={templateActions}
                         />
                     </Suspense>
                 </LoadErrorBoundary>

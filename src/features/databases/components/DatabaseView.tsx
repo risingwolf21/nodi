@@ -23,6 +23,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
 import { FormulaEditor } from "./FormulaEditor";
 import { RollupEditor } from "./RollupEditor";
+import { TemplatesMenu, type TemplateActions } from "./TemplatesMenu";
 import { GalleryView } from "./GalleryView";
 import { ListView } from "./ListView";
 import { MapView } from "./MapView";
@@ -41,7 +42,7 @@ const VIEW_ICONS = {
 
 type DatabaseViewProps = {
     database: Page;
-    /** Pages below the database, from the page tree. */
+    /** Pages below the database, from the page tree (templates included, package 26). */
     entries: Page[];
     userId: string | undefined;
     /** The page tree is a cached copy (offline). */
@@ -54,6 +55,8 @@ type DatabaseViewProps = {
     databases?: Page[];
     /** Shown as a block in a page: the block's own views (package 19c). */
     block?: DatabaseBlockOptions;
+    /** Templates of the database; undefined where they cannot be used (blocks, other workspaces). */
+    templateActions?: TemplateActions;
 };
 
 function ViewTab({
@@ -141,7 +144,7 @@ function ViewTab({
  */
 export function DatabaseView({
     database,
-    entries,
+    entries: pagesBelow,
     userId,
     readOnly,
     onOpenEntry,
@@ -149,7 +152,11 @@ export function DatabaseView({
     onRenameEntry,
     databases,
     block,
+    templateActions,
 }: DatabaseViewProps) {
+    // Templates are entries the views leave out; "Vorlagen" offers them.
+    const entries = useMemo(() => pagesBelow.filter((page) => !page.is_template), [pagesBelow]);
+    const templates = useMemo(() => pagesBelow.filter((page) => page.is_template), [pagesBelow]);
     const {
         data,
         loading,
@@ -310,6 +317,14 @@ export function DatabaseView({
                                 onChoose={(datePropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, datePropertyId } })
                                 }
+                                onError={report}
+                            />
+                        )}
+                        {templateActions && editable && (
+                            <TemplatesMenu
+                                templates={templates}
+                                actions={templateActions}
+                                onOpen={onOpenEntry}
                                 onError={report}
                             />
                         )}
