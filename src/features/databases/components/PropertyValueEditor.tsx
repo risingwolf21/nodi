@@ -39,6 +39,8 @@ type PropertyValueEditorProps = {
     alignNumbersRight?: boolean;
     /** A formula that could not be computed. */
     error?: string;
+    /** Button properties: what a click does (package 32f). */
+    onRunButton?: () => Promise<void>;
 };
 
 const fieldClass =
@@ -62,6 +64,7 @@ export function PropertyValueEditor({
     onError,
     alignNumbersRight = false,
     error,
+    onRunButton,
 }: PropertyValueEditorProps) {
     const [draft, setDraft] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -73,6 +76,25 @@ export function PropertyValueEditor({
         onChange(next).catch((err: unknown) => {
             onError(err instanceof Error ? err.message : "Der Wert konnte nicht gespeichert werden.");
         });
+    }
+
+    if (property.type === "button") {
+        return (
+            <div className={fieldClass}>
+                <button
+                    type="button"
+                    disabled={!editable || !onRunButton}
+                    onClick={() =>
+                        void onRunButton?.().catch((err: unknown) =>
+                            onError(err instanceof Error ? err.message : "Der Button hat nicht funktioniert."),
+                        )
+                    }
+                    className="max-w-full truncate rounded border px-2 py-0.5 text-xs font-medium hover:bg-accent disabled:opacity-60 pointer-coarse:py-1.5"
+                >
+                    {property.button?.label || property.name}
+                </button>
+            </div>
+        );
     }
 
     if (property.type === "checkbox") {

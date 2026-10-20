@@ -3,6 +3,7 @@ import type { Page } from "@/features/pages/types";
 import {
     applyView,
     buildRows,
+    buttonChanges,
     dateFromInput,
     dateHasTime,
     dateInputValue,
@@ -752,7 +753,7 @@ describe("parsing", () => {
 
     it("rejects broken server rows, but leaves out types of a newer app version", () => {
         expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
-        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "button" }])).toEqual([]);
+        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "unique_id" }])).toEqual([]);
         expect(parseViews([{ id: "v", databaseId: "db", name: "Gantt", type: "gantt" }])).toEqual([]);
     });
 
@@ -785,6 +786,54 @@ describe("helpers", () => {
     it("hides properties of a view and keeps the order", () => {
         expect(visibleProperties([due, status], config({ hiddenPropertyIds: ["due"] })).map((p) => p.id)).toEqual([
             "status",
+        ]);
+    });
+});
+
+describe("buttons (package 32f)", () => {
+    it("reads label and actions from the server's options, invalid actions left out", () => {
+        const [button] = parseProperties([
+            {
+                id: "b",
+                databaseId: "db",
+                name: "Fertig",
+                type: "button",
+                options: {
+                    label: "Abhaken",
+                    actions: [{ propertyId: "done", value: true }, { propertyId: "due", today: true }, { value: 1 }],
+                },
+            },
+        ]);
+        expect(button.button).toEqual({
+            label: "Abhaken",
+            actions: [
+                { propertyId: "done", value: true },
+                { propertyId: "due", today: true },
+            ],
+        });
+        expect(
+            parseProperties([{ id: "b", databaseId: "db", name: "Neu", type: "button", options: {} }])[0].button,
+        ).toEqual({ label: "", actions: [] });
+    });
+
+    it("sets the values of its actions; today on a date, gone or computed properties skipped", () => {
+        expect(
+            buttonChanges(
+                {
+                    label: "Abhaken",
+                    actions: [
+                        { propertyId: "done", value: true },
+                        { propertyId: "due", today: true },
+                        { propertyId: "edited", value: "x" },
+                        { propertyId: "gone", value: 1 },
+                    ],
+                },
+                [done, due, edited],
+                "2026-10-20",
+            ),
+        ).toEqual([
+            { propertyId: "done", value: true },
+            { propertyId: "due", value: { start: "2026-10-20", end: null } },
         ]);
     });
 });
