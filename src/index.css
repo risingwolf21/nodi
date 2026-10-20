@@ -339,3 +339,40 @@ body .bn-mobile-formatting-toolbar {
     border-bottom: 2px solid rgb(234 179 8 / 0.8);
     background-color: rgb(250 204 21 / 0.25);
 }
+
+/*
+ * Columns (package 32e): the children of a "columns" block stand side by
+ * side from `md` on; each "column" holds its blocks. Without the usual
+ * indentation of nested blocks. Below `md` they stack.
+ */
+.nodi-columns-handle,
+.nodi-column-handle {
+    height: 0;
+}
+.bn-block:has(> .bn-block-content[data-content-type="columns"], > * > .bn-block-content[data-content-type="columns"])
+    > .bn-block-group,
+.bn-block:has(> .bn-block-content[data-content-type="column"], > * > .bn-block-content[data-content-type="column"])
+    > .bn-block-group {
+    margin-left: 0;
+}
+/* No nesting line: the columns are the structure. */
+.bn-block:has(> .bn-block-content[data-content-type="columns"], > * > .bn-block-content[data-content-type="columns"])
+    > .bn-block-group
+    > .bn-block-outer::before,
+.bn-block:has(> .bn-block-content[data-content-type="column"], > * > .bn-block-content[data-content-type="column"])
+    > .bn-block-group
+    > .bn-block-outer::before {
+    display: none;
+}
+@media (min-width: 48rem) {
+    .bn-block:has(
+            > .bn-block-content[data-content-type="columns"],
+            > * > .bn-block-content[data-content-type="columns"]
+        )
+        > .bn-block-group {
+        display: grid;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-auto-flow: column;
+        gap: 1.5rem;
+    }
+}

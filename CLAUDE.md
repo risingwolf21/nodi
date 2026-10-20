@@ -276,6 +276,7 @@ src/
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
+                            # editor-schema.tsx auch: Spalten (columns/column, 32e)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -2427,6 +2428,24 @@ nicht gewünscht.
         (Monate, Quartale), Abhängigkeiten.
       - Tests: Vitest `database-model.test.ts`, Playwright
         `database-views.e2e.ts`.
+    - **Umsetzung 32e** (nur Frontend, keine Migration):
+      - Blöcke `columns` und `column` im Editor-Schema (ohne Inhalt): Die
+        Kinder eines `columns`-Blocks (je ein `column`) stehen ab `md`
+        nebeneinander, gleich breit; die Kinder eines `column` sind ihr
+        Inhalt. Die Anordnung ist nur CSS (`index.css`, Grid, ohne
+        Einrückung und Linie verschachtelter Blöcke); das Dokument bleibt
+        gewöhnliches BlockNote-JSON. Unter `md` stehen die Spalten
+        untereinander. BlockNotes eigenes Spalten-Paket ist nicht genutzt
+        (Lizenz GPL bzw. kommerziell).
+      - Slash-Menü „2 Spalten“ / „3 Spalten“: je Spalte ein leerer Absatz, der
+        Cursor steht in der ersten.
+      - Achtung: App-Versionen vor 32e kennen die Blöcke nicht und können
+        solche Seiten nicht öffnen (wie 19c/22).
+      - Noch nicht: Breite der Spalten ziehen, Blöcke per Ziehen in eine
+        Spalte legen, Spalten aus dem Notion-Import (der Export enthält sie
+        nur als Folge von Blöcken).
+      - Tests: Playwright `columns.e2e.ts` (nebeneinander, gespeicherte
+        Struktur, schmal untereinander).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
