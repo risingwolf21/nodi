@@ -2,6 +2,7 @@ import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
 import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
 import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
+import { computeRollup, isPercentRollup, keepsTargetFormat, ROLLUP_FUNCTIONS } from "./rollup";
 import {
     TITLE_FIELD,
     type DatabaseData,
@@ -17,6 +18,8 @@ import {
     type PropertyType,
     type PropertyValue,
     type RelatedEntry,
+    type RollupFunction,
+    type RollupSettings,
     type RelationSettings,
     type SortRule,
     type StoredPropertyValue,
@@ -37,6 +40,7 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "place",
     "formula",
     "relation",
+    "rollup",
     "created_time",
     "last_edited_time",
 ];
@@ -54,6 +58,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     place: "Ort",
     formula: "Formel",
     relation: "Verknüpfung",
+    rollup: "Rollup",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
@@ -90,7 +95,7 @@ export function hasOptions(type: PropertyType): boolean {
 
 /** Computed by the app, not set by hand. */
 export function isComputed(type: PropertyType): boolean {
-    return type === "created_time" || type === "last_edited_time" || type === "formula";
+    return type === "created_time" || type === "last_edited_time" || type === "formula" || type === "rollup";
 }
 
 /** A new status property starts like Notion's. */
@@ -183,6 +188,35 @@ function parseRelation(row: Record<string, unknown>): RelationSettings | null {
     };
 }
 
+function isRollupFunction(value: unknown): value is RollupFunction {
+    return typeof value === "string" && (ROLLUP_FUNCTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * The server keeps a rollup's settings in options; the cache keeps them, with
+ * the loaded target, as `rollup`. Null while the rollup is not set up.
+ */
+function parseRollup(row: Record<string, unknown>): RollupSettings | null {
+    const source = isObject(row.rollup) ? row.rollup : isObject(row.options) ? row.options : null;
+    if (
+        !source ||
+        typeof source.relationPropertyId !== "string" ||
+        typeof source.targetPropertyId !== "string" ||
+        !isRollupFunction(source.function)
+    ) {
+        return null;
+    }
+    const settings: RollupSettings = {
+        relationPropertyId: source.relationPropertyId,
+        targetPropertyId: source.targetPropertyId,
+        function: source.function,
+    };
+    const target = isObject(source.target) ? source.target : null;
+    if (!target) return settings;
+    const [property = null] = target.property === null ? [] : parseProperties([target.property]);
+    return { ...settings, target: { property, values: isObject(target.values) ? target.values : {} } };
+}
+
 export function parseProperties(rows: unknown): DatabaseProperty[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
     return rows.flatMap((row: unknown): DatabaseProperty[] => {
@@ -199,6 +233,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
         // A relation without a valid target cannot be shown or edited.
         const relation = row.type === "relation" ? parseRelation(row) : null;
         if (row.type === "relation" && !relation) return [];
+        const rollup = row.type === "rollup" ? parseRollup(row) : null;
         // The server keeps the number format in options.
         const numberFormat = isNumberFormat(row.numberFormat)
             ? row.numberFormat
@@ -223,6 +258,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 ...(row.type === "formula" ? { formula: expression } : {}),
                 ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
                 ...(relation ? { relation } : {}),
+                ...(rollup ? { rollup } : {}),
             },
         ];
     });
@@ -415,6 +451,7 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
             return ids.length > 0 ? ids : null;
         }
         case "formula":
+        case "rollup":
         case "created_time":
         case "last_edited_time":
             return null;
@@ -522,6 +559,9 @@ function formulaInput(property: DatabaseProperty, value: PropertyValue): Formula
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" ? toDate(value) : null;
+        case "rollup":
+            if (typeof value === "number") return value;
+            return isDateValue(value) ? toDate(value.start) : formatValue(property, value) || null;
         default:
             return formatValue(property, value) || null;
     }
@@ -610,6 +650,27 @@ function computeFormulas(page: Page, values: Record<string, PropertyValue>, setu
     return { values: output, errors };
 }
 
+/** The rollup of one entry: its relation's known entries, their target values, the function. */
+function rollupValue(
+    property: DatabaseProperty,
+    values: Record<string, PropertyValue>,
+    properties: DatabaseProperty[],
+): PropertyValue {
+    const settings = property.rollup;
+    const relation = properties.find((item) => item.id === settings?.relationPropertyId && item.type === "relation");
+    if (!settings || !relation) return null;
+    const target = settings.target?.property ?? null;
+    const titles = settings.targetPropertyId === TITLE_FIELD;
+    // A target that is not loaded (deleted, not readable) has no values.
+    if (!titles && !target) return null;
+    const targetValues = relatedEntries(relation, values[relation.id] ?? null).map((entry) =>
+        titles || !target ? entry.title || null : readValue(target, settings.target?.values[entry.id]),
+    );
+    return computeRollup(settings.function, targetValues, (value) =>
+        target ? formatValue(target, value) : typeof value === "string" ? value : "",
+    );
+}
+
 export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
     const formulaSetup = setUpFormulas(data.properties);
     const storedByEntry = new Map<string, StoredPropertyValue[]>();
@@ -636,6 +697,10 @@ export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
                 const raw = stored.find((value) => value.propertyId === property.id)?.value;
                 values[property.id] = readValue(property, raw);
             }
+        }
+        // Rollups read the relations of the entry; formulas may use them.
+        for (const property of data.properties) {
+            if (property.type === "rollup") values[property.id] = rollupValue(property, values, data.properties);
         }
         const formulas = computeFormulas(page, values, formulaSetup);
         return {
@@ -683,6 +748,23 @@ function formatFormulaResult(value: PropertyValue): string {
     return typeof value === "string" ? value : "";
 }
 
+const percentFormat = new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 1 });
+const rollupNumberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
+
+/** A rollup result: percentages as such, sums and the like in the target's number format. */
+function formatRollupResult(property: DatabaseProperty, value: PropertyValue): string {
+    const settings = property.rollup;
+    if (typeof value === "number" && settings) {
+        if (isPercentRollup(settings.function)) return percentFormat.format(value);
+        const target = settings.target?.property;
+        if (keepsTargetFormat(settings.function) && target?.type === "number" && target.numberFormat) {
+            return NUMBER_FORMATTERS[target.numberFormat].format(value);
+        }
+        return rollupNumberFormat.format(value);
+    }
+    return formatFormulaResult(value);
+}
+
 /** "48,13720; 11,57560"-style text for a point without an address. */
 function formatCoordinates(place: PlaceValue): string {
     return `${coordinateFormat.format(place.lat)}; ${coordinateFormat.format(place.lng)}`;
@@ -728,6 +810,8 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
         case "formula":
             return formatFormulaResult(value);
+        case "rollup":
+            return formatRollupResult(property, value);
         case "relation":
             return relatedEntries(property, value)
                 .map((entry) => displayTitle(entry))
@@ -774,6 +858,7 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
         case "relation":
             return ["contains", "isEmpty", "isNotEmpty"];
         case "formula":
+        case "rollup":
             return ["contains", "equals", "notEquals", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"];
         case "date":
         case "created_time":
@@ -816,7 +901,7 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
     const type =
         rule.propertyId === TITLE_FIELD
             ? "text"
-            : property?.type === "formula"
+            : property?.type === "formula" || property?.type === "rollup"
               ? formulaFilterType(value)
               : property?.type;
     // A rule for a deleted property does not hide anything.

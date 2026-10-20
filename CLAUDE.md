@@ -306,6 +306,7 @@ src/
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
+      rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
       components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
@@ -392,7 +393,7 @@ supabase/
                             # Formeln (P14f), Datei-Speicher (P15a),
                             # Verknüpfungen (P17d), Verschieben (P18a),
                             # Ansichten je Block (P19b), Einträge mit
-                            # Unterseiten (P23)
+                            # Unterseiten (P23), Rollups (P24)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2059,6 +2060,35 @@ nicht gewünscht.
     Ziel-Datenbank, Funktion: Anzahl, Summe, Durchschnitt, Min/Max,
     Anzeigen …), berechnet in der App wie Formeln. Import: Rollup- und
     Formelwerte bleiben feste Werte; die Rechnung legt man einmal neu an.
+    - **Umsetzung 24** (`20261020100000_rollup_property.sql`):
+      - Eigenschaftstyp `rollup`; Einstellungen in `options`:
+        `relationPropertyId`, `targetPropertyId` (Eigenschaft der
+        verknüpften Datenbank oder `title`), `function` (Check-Constraint,
+        `23514`; alle drei fehlen, solange das Rollup nicht eingerichtet
+        ist). Keine Werte: `set_page_property` lehnt ab (`22023`). pgTAP:
+        `database_rollups.test.sql`.
+      - Funktionen (`features/databases/rollup.ts`, wie Notion): Werte
+        anzeigen, Anzahl, Werte/Eindeutige/Leere/Nicht leere zählen, Prozent
+        leer/nicht leer; bei Zahlen Summe, Durchschnitt, Median, Minimum,
+        Maximum, Spanne; bei Daten frühestes/spätestes Datum und Spanne in
+        Tagen; bei Checkboxen angehakt/nicht angehakt zählen, Prozent
+        angehakt. Angeboten wird, was zum Typ passt.
+      - `databaseRepository.load` lädt zu jedem Rollup die Ziel-Eigenschaft
+        und ihre gespeicherten Werte (`withRollupTargets`, RLS entscheidet)
+        und hängt sie an die Eigenschaft (`rollup.target`, auch im Cache:
+        offline berechnet). Berechnet in `buildRows` vor den Formeln (Formeln
+        sehen Rollups als Zahl, Datum oder Text). Anzeige: Prozent als
+        Prozent, Summe & Co. im Zahlenformat des Ziels.
+      - Oberfläche: „+“ → „Rollup“ öffnet den `RollupEditor` (Verknüpfung,
+        Eigenschaft, Berechnung), ebenso „Rollup bearbeiten“ im Spaltenkopf
+        und der Name in der Eigenschaftsleiste. Nach einer Änderung wird neu
+        geladen. Filter und Sortierung wie bei Formeln.
+      - Noch nicht: Rollups über Formeln, Rollups, Verknüpfungen und die
+        Zeit-Eigenschaften der Ziel-Datenbank (dort gibt es keine
+        gespeicherten Werte); mehr als 1000 Werte je Ziel-Eigenschaft
+        (`max_rows`); der Import legt keine Rollups an (feste Werte, §24).
+      - Tests: Vitest `rollup.test.ts`, `database-model.test.ts`,
+        Playwright `database-rollups.e2e.ts`.
 25. **Wiederkehrende Einträge:** Eintrag als Wiederholung („täglich“,
     „wöchentlich am …“), neue Einträge entstehen automatisch.
     Offen: auf dem Server (zeitgesteuert) oder beim Öffnen der App.
