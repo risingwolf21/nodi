@@ -271,8 +271,12 @@ src/
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
-    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c)
+    editor/editor-schema.tsx # Blöcke: BlockNote + „Datenbank“ (19c) + „Callout“ (22)
+    editor/CalloutIcon.tsx  # Emoji und Farbe eines Callouts; Farben in callout.ts
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
+    editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
+    editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
+                            # editor-schema.tsx auch: Spalten (columns/column, 32e)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
                             # menu.tsx (schließt bei Klick außerhalb;
@@ -298,15 +302,20 @@ src/
       components/ListView.tsx        # Liste (14c)
       components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
-      components/CalendarView.tsx    # Monatskalender (14d)
+      components/CalendarView.tsx    # Kalender: Monat/Woche, Ziehen (14d, 32b)
+      components/TimelineView.tsx    # Zeitleiste (32d); GroupedRows.tsx: Gruppen in Tabelle/Liste (32c)
       components/MapView.tsx         # Landkarte (14e); MapCanvas.tsx: Leaflet, nachgeladen
       components/DatabaseBlockContent.tsx # Datenbank als Block im Text: Auswahl, eigene Ansichten (19c)
       components/PlacePicker.tsx     # Ort wählen: Adresssuche oder Klick auf die Karte (14e)
       services/geocoding.ts          # Nominatim, höchstens 1 Anfrage/s (14e)
       formula/formula-parser.ts      # Formeln: Tokenizer/Parser, Notion-Syntax, kein eval (14f)
       formula/formula-evaluator.ts   # Formeln: Auswertung, Funktionen, deutsche Fehler (14f)
+      rollup.ts                      # Rollups: Funktionen und Berechnung (24); RollupEditor.tsx
+      components/ButtonEditor.tsx    # Button-Eigenschaft: Beschriftung, Aktionen (32f)
+      recurrence.ts                  # Wiederholungen: Regel, Texte (25); services/recurring-entries.ts, RecurrenceSetting.tsx
       components/FormulaEditor.tsx   # Formel schreiben mit Vorschau (14f)
-      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e)
+      components/RelationPicker.tsx  # Einträge einer verknüpften Datenbank wählen (17e), auch Personen (29)
+      components/FilesPicker.tsx     # Dateien & Medien: öffnen, entfernen, hochladen (29)
       components/…          # Wert-Editor, Optionen, Spaltenkopf, Einstellungs-Panels
     editor/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
@@ -325,6 +334,8 @@ src/
       services/page-files.ts        # Storage: hochladen, signierte URL
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
+    search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
+    comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -340,10 +351,14 @@ src/
       page-display.ts       # „Ohne Titel“ für leere Namen (Einträge)
       components/Sidebar.tsx        # Workspace/Konto, Baum, Neue Seite/Datenbank, Papierkorb
       components/PageHeader.tsx     # Emoji-Auswahl, Titel direkt bearbeitbar
+      components/IconGrid.tsx       # Emoji suchen/einfügen (30a); Liste in page-icons.ts
+      components/PageCover.tsx      # Titelbild und Auswahl (30c); Farbverläufe in page-cover.ts
       components/PageActionsDialog.tsx
       components/MembersDialog.tsx  # Workspace-Mitglieder: einladen, entfernen, verlassen
       components/MoveSectionDialog.tsx # Rückfrage „In den Workspace/In Privat verschieben“
       components/MovePageDialog.tsx    # „Verschieben nach …“: Ziel suchen, Rückfrage bei Bereichswechsel (18b)
+      components/SubpageList.tsx       # Unterseiten eines Datenbank-Eintrags (23)
+      components/Backlinks.tsx         # „Verlinkt von“ (28); services/page-links.ts: RPC page_backlinks
       components/ShareDialog.tsx    # Teilen per E-Mail, Rolle, Entfernen, öffentlicher Link (nur Owner)
       components/TrashView.tsx
       hooks/usePages.ts     # Seitenbaum, Cache zuerst, offline nur lesend
@@ -389,7 +404,13 @@ supabase/
                             # Datenbanken (P14a), Orte und Landkarte (P14e),
                             # Formeln (P14f), Datei-Speicher (P15a),
                             # Verknüpfungen (P17d), Verschieben (P18a),
-                            # Ansichten je Block (P19b)
+                            # Ansichten je Block (P19b), Einträge mit
+                            # Unterseiten (P23), Rollups (P24),
+                            # wiederkehrende Einträge (P25), Vorlagen (P26),
+                            # Suche (P27), Rückverweise (P28),
+                            # Person und Dateien (P29), Favoriten (P30b),
+                            # Titelbilder (P30c), Kommentare (P31a/b),
+                            # Zeitleiste (P32d), Buttons (P32f)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -1911,6 +1932,546 @@ entries}`. Die lesbaren, nicht archivierten Einträge der
         `mobile-keyboard.e2e.ts` (Touch-Emulation, nachgebautes
         `visualViewport`). Auf einem echten iPhone noch nicht geprüft.
 
+### Plan ab Paket 21 (Nutzer, 2026-10-19)
+
+Ziel: Ein vollständiger Notion-Export soll nach dem Import so funktionieren
+wie in Notion. Grundlage ist der echte Export des Nutzers (465 Dateien,
+34 Datenbanken). Reihenfolge nach seiner Priorität; je Paket ein PR (bei
+Bedarf a/b für Datenbank und Oberfläche). Versionsverlauf ist vorerst
+nicht gewünscht.
+
+- **Entschieden (Nutzer, 2026-10-19):** (1) Suche online als Volltext auf
+  dem Server über alle Seiten, offline über Titel und die lokal
+  gespeicherten Seiten. (2) Callouts bekommen einen eigenen Block wie in
+  Notion (Emoji, farbiger Hintergrund). (3) Am wichtigsten: Rollups,
+  Unterseiten in Einträgen, wiederkehrende Einträge, Vorlagen.
+
+21. **Import: neues Notion-Exportformat** (Fehler: Datenbank-Einträge
+    kommen als einzelne Seiten an). Befund im Export des Nutzers:
+    - Ordner tragen **keine ID** mehr: Unterseiten von `Aufgaben <id>.md`
+      liegen in `Aufgaben/`, Einträge von `Tasks <id>_all.csv` in `Tasks/`.
+      Der Import sucht bisher `Aufgaben <id>/`, findet nichts, und der Baum
+      zerfällt in lose Seiten.
+    - Datenbanken gibt es nur als `…_all.csv` (keine Ansichts-CSV).
+    - Eine ganzseitige Datenbank hat zusätzlich `Name <id>.md` mit
+      derselben ID; das ist die Datenbank selbst, keine eigene Seite.
+    - Die CSV enthält **keine** Verknüpfungen, Rollups und Formeln. Sie
+      stehen nur in den Eigenschaftszeilen der Eintragsseiten
+      („Workout: Titel (../Workouts/….md)“, „Volume: 175“).
+    - Eingebettete Ansichten sind Kopien in der obersten Ebene
+      (`Untitled 8fe7-1f36_all.csv`: erste und letzte vier Zeichen der
+      Datenbank-ID); darunter stehen im Text „filters:“ (nicht lesbar) und
+      „sort:“ (lesbar, z. B. „Status: ascending“).
+    - Neue Datumsformate: „September 20, 2026 8:30 (GMT+2)“,
+      „09/09/2026 8:00 AM (GMT+2)“, Zeitraum „… 7:20 (GMT+2) → 16:00“.
+    - Kleinere Punkte: Titel mit Zeilenumbruch, Dateinamen mit Klammern,
+      Datenbanken in Einträgen (Paket 23), Callouts als `<aside>`
+      (Paket 22), Link-Ziele außerhalb des Exports (Hinweis).
+    - **Umfang:** Baum für beide Formate (Ordner mit und ohne ID),
+      Datenbank-Seite = Datenbank, Einträge aus `Name/`, Eigenschaften
+      aus CSV **und** Eintragsseiten (Verknüpfungen werden echte
+      Verknüpfungen, Rollup-/Formelwerte feste Werte), eingebettete
+      Ansichten werden Datenbank-Blöcke auf die echte Datenbank mit der
+      Sortierung, „filters:/sort:“-Zeilen verschwinden aus dem Text. Test
+      mit einem Ausschnitt des echten Formats (ohne persönliche Inhalte).
+    - **Nicht möglich:** Filter der Ansichten, Formel-Ausdrücke,
+      Seiten-Icons und Titelbilder (nicht im Export).
+    - **Aufteilung:** 21a Struktur (Baum, Datenbanken, Einträge,
+      eingebettete Ansichten), 21b Eigenschaften aus den Eintragsseiten
+      (Verknüpfungen, Rollup-/Formelwerte) und neue Datumsformate.
+    - **Umsetzung 21a** (nur Frontend, keine Migration):
+      - `planNotionImport` kennt beide Ordnerformen (`X <id>/` und `X/`).
+        Teilen sich gleichnamige Geschwister einen Ordner, gehört eine
+        Unterseite der Seite, die sie verlinkt (sonst der ersten).
+      - Datenbank = `X <id>.csv` und/oder `X <id>_all.csv`; Einträge im
+        Ordner `X <id>/` oder `X/`. Eine `.md` mit der ID einer Datenbank
+        im selben Ordner ist die Datenbank selbst (keine eigene Seite);
+        Links auf sie oder auf `_all.csv` ordnen die Datenbank ein.
+      - Gibt es nur `_all.csv`, blendet die Tabelle nichts aus (vorher
+        waren dann alle Eigenschaften ausgeblendet).
+      - Kopien eingebetteter Ansichten (`Untitled abcd-wxyz_all.csv`, ohne
+        volle ID) werden keine Datenbanken: `plan.databaseCopies` ordnet
+        sie der einen Datenbank zu, deren ID mit `abcd` beginnt und auf
+        `wxyz` endet. Der Link wird ein Datenbank-Block auf die echte
+        Datenbank.
+      - `takeViewSettings`: Unter dem Link stehende „filters:“/„sort:“-
+        Zeilen (bis zur nächsten Leerzeile oder einem HTML-Tag wie
+        `</aside>`) verschwinden aus dem Text; „Name: ascending/descending“
+        wird die Sortierung aller Ansichten des Blocks (Spaltenname →
+        Eigenschaft, Titelspalte → Titel; unbekannte Namen entfallen).
+        Filter sind nicht lesbar und entfallen.
+      - Fehlt eine verlinkte Datenbank im Export, bleibt ihr Name als Text
+        und es gibt einen Hinweis.
+      - Geprüft gegen den echten Export des Nutzers (nur lokal, nicht im
+        Repository): 20 Seiten, 20 Datenbanken, 374 Einträge, 63
+        Datenbank-Blöcke, keine Fehler. Tests: Vitest (`notion-export`,
+        `notion-import`), Playwright „Ein neuerer Notion-Export …“.
+    - **Umsetzung 21b** (nur Frontend, keine Migration):
+      - `readPropertyLines`: die Zeilen „Name: Wert“ direkt unter dem Titel
+        eines Eintrags (bis zur ersten anderen Zeile). Namen, die die CSV
+        nicht hat, werden Eigenschaften, wenn sie in mindestens zwei
+        Einträgen stehen oder neben einer CSV-Eigenschaft (sonst könnte es
+        Text sein, „Fazit: gut“). Der CSV-Wert hat Vorrang; Einträge ohne
+        CSV-Zeile bekommen alle Werte ihrer Seite.
+      - Diese Werte laufen durch dieselbe Typerkennung wie CSV-Spalten.
+        Links auf Einträge **einer** Datenbank werden Verknüpfungen
+        (aufgelöst vom Ordner der Eintragsseite); Rollup- und Formelwerte
+        werden feste Zahlen, Texte usw. Ein Rollup, das verknüpfte Seiten
+        zeigt, sieht aus wie eine Verknüpfung und wird eine.
+      - Daten: Zeitzone aus „(GMT+2)“/„(GMT-5:30)“ wird berücksichtigt
+        (ohne Zone: Ortszeit des Geräts); ein Zeitraum, dessen Ende nur eine
+        Uhrzeit ist („… 7:20 (GMT+2) → 16:00“), endet am selben Tag.
+      - Links und Relationszellen, deren Pfad Klammern enthält
+        („Notizen%20(2)%20….md“), werden erkannt.
+      - Titel mit führendem Zeilenumbruch: schon durch `trim` abgedeckt.
+      - Echter Export (nur lokal): 113 Eigenschaften (vorher 74), davon 15
+        Verknüpfungen, 1747 Werte (vorher 1041), keine Fehler.
+22. **Callout-Block:** eigener BlockNote-Block (Emoji, Farbe, Text),
+    „/Callout“, Anzeige in der öffentlichen Ansicht; Import aus `<aside>`.
+    - **Umsetzung 22** (nur Frontend, keine Migration):
+      - Block `callout` in `editor-schema.tsx`: Inline-Text, Props `emoji`
+        (Standard 💡) und `color` (BlockNotes Farbnamen, Standard grau;
+        `components/editor/callout.ts`). Verschachtelte Blöcke (Tab) stehen
+        mit im farbigen Kasten (`.nodi-callout`-Regeln in `index.css` per
+        `:has`, hell und dunkel).
+      - Klick auf das Emoji (nur mit Schreibrecht): Emoji-Auswahl (dieselbe
+        Liste wie Seiten-Icons, jetzt `features/pages/page-icons.ts`) und
+        Hintergrund. Slash-Menü „/Callout“ (auch „hinweis“, „info“).
+      - Öffentliche Ansicht: dasselbe Schema, Emoji nicht klickbar.
+      - Import: `markdownToImportedBlocks` macht aus `<aside>…</aside>`
+        einen Callout; der erste Absatz ist sein Text (ein führendes Emoji
+        wird das Icon), der Rest wird verschachtelt. Steht am Anfang nur
+        ein Link (Datenbank, Datei), bleibt er ein eigener Block im Callout.
+      - Achtung: App-Versionen vor 22 kennen den Block nicht und können
+        Seiten mit Callout nicht öffnen (wie 19c); installierte Apps nach
+        dem Update-Hinweis aktualisieren.
+      - Tests: Vitest `import-blocks.test.ts`, Playwright `callout.e2e.ts`
+        und „Notion-Callouts werden Callout-Blöcke“.
+23. **Unterseiten in Datenbank-Einträgen:** Einträge zeigen und haben
+    Unterseiten und Datenbanken (Seitenleiste, Eintrag, Verschieben;
+    `move_page` erlaubt dann Seiten mit Unterseiten als Eintrag). Import
+    übernimmt sie statt sie zu überspringen.
+    - **Annahme:** Einträge bleiben aus der Seitenleiste heraus (14b), ebenso
+      alles unter ihnen; ihre Unterseiten stehen im Eintrag (wie Notion sie im
+      Text zeigt). Der Pfad oben führt zurück.
+    - **Umsetzung 23** (`20261020090000_entries_with_subpages.sql`):
+      - `move_page` ohne die Regel „Seite mit Unterseiten wird kein Eintrag“
+        (sonst unverändert). Unterseiten und Datenbanken unter Einträgen
+        erlaubte der Server schon (Insert mit `can_edit_page(parent_id)`).
+        pgTAP: `entry_subpages.test.sql`, in `move_page.test.sql` entfällt
+        die alte Prüfung.
+      - `withoutDatabaseEntries` lässt Einträge **und alles darunter** aus
+        dem Baum (vorher wären Unterseiten von Einträgen als oberste Seiten
+        erschienen); `moveProblem` ohne die alte Regel.
+      - Ein Eintrag zeigt unter der Eigenschaftsleiste `SubpageList`:
+        Unterseiten und Datenbanken (Klick öffnet) und „+ Unterseite“ /
+        „+ Datenbank“ (nur mit Schreibrecht, online, eigener Workspace).
+      - Import: Eine `.md` direkt im Ordner einer Datenbank ist ein Eintrag;
+        alles tiefer (Seiten, Datenbanken, deren Einträge) wird mit dem
+        Eintrag als Elternseite übernommen, nach der Datenbank. Der Hinweis
+        „… nicht übernommen“ entfällt. Echter Export: 3 Datenbanken und 18
+        Einträge mehr, keine Fehler.
+      - Tests: Vitest (`page-hierarchy`, `notion-export`, `notion-import`),
+        Playwright `entry-subpages.e2e.ts`.
+24. **Rollups:** Eigenschaftstyp „Rollup“ (Verknüpfung, Eigenschaft der
+    Ziel-Datenbank, Funktion: Anzahl, Summe, Durchschnitt, Min/Max,
+    Anzeigen …), berechnet in der App wie Formeln. Import: Rollup- und
+    Formelwerte bleiben feste Werte; die Rechnung legt man einmal neu an.
+    - **Umsetzung 24** (`20261020100000_rollup_property.sql`):
+      - Eigenschaftstyp `rollup`; Einstellungen in `options`:
+        `relationPropertyId`, `targetPropertyId` (Eigenschaft der
+        verknüpften Datenbank oder `title`), `function` (Check-Constraint,
+        `23514`; alle drei fehlen, solange das Rollup nicht eingerichtet
+        ist). Keine Werte: `set_page_property` lehnt ab (`22023`). pgTAP:
+        `database_rollups.test.sql`.
+      - Funktionen (`features/databases/rollup.ts`, wie Notion): Werte
+        anzeigen, Anzahl, Werte/Eindeutige/Leere/Nicht leere zählen, Prozent
+        leer/nicht leer; bei Zahlen Summe, Durchschnitt, Median, Minimum,
+        Maximum, Spanne; bei Daten frühestes/spätestes Datum und Spanne in
+        Tagen; bei Checkboxen angehakt/nicht angehakt zählen, Prozent
+        angehakt. Angeboten wird, was zum Typ passt.
+      - `databaseRepository.load` lädt zu jedem Rollup die Ziel-Eigenschaft
+        und ihre gespeicherten Werte (`withRollupTargets`, RLS entscheidet)
+        und hängt sie an die Eigenschaft (`rollup.target`, auch im Cache:
+        offline berechnet). Berechnet in `buildRows` vor den Formeln (Formeln
+        sehen Rollups als Zahl, Datum oder Text). Anzeige: Prozent als
+        Prozent, Summe & Co. im Zahlenformat des Ziels.
+      - Oberfläche: „+“ → „Rollup“ öffnet den `RollupEditor` (Verknüpfung,
+        Eigenschaft, Berechnung), ebenso „Rollup bearbeiten“ im Spaltenkopf
+        und der Name in der Eigenschaftsleiste. Nach einer Änderung wird neu
+        geladen. Filter und Sortierung wie bei Formeln.
+      - Noch nicht: Rollups über Formeln, Rollups, Verknüpfungen und die
+        Zeit-Eigenschaften der Ziel-Datenbank (dort gibt es keine
+        gespeicherten Werte); mehr als 1000 Werte je Ziel-Eigenschaft
+        (`max_rows`); der Import legt keine Rollups an (feste Werte, §24).
+      - Tests: Vitest `rollup.test.ts`, `database-model.test.ts`,
+        Playwright `database-rollups.e2e.ts`.
+25. **Wiederkehrende Einträge:** Eintrag als Wiederholung („täglich“,
+    „wöchentlich am …“), neue Einträge entstehen automatisch.
+    - **Entschieden (Nutzer, 2026-10-20):** beim Öffnen der App (nicht
+      zeitgesteuert auf dem Server); der Server verhindert doppelte
+      Einträge.
+    - **Annahmen:** Der wiederholte Eintrag ist die Vorlage: Jede Kopie
+      bekommt Titel, Icon, Werte und Text, das Datum in einer gewählten
+      Datums-Eigenschaft. Verpasste Termine (App länger nicht geöffnet)
+      werden nachgeholt, höchstens 31 je Regel und Aufruf. Eine neue oder
+      geänderte Regel beginnt frühestens heute. Tage sind Server-Tage (UTC).
+    - **Umsetzung 25** (`20261020110000_entry_recurrences.sql`):
+      - Tabelle `entry_recurrences` (je Eintrag eine Regel: `frequency`
+        daily/weekly/monthly/yearly, `interval`, `weekdays` 1 = Montag,
+        `start_date`, `next_date`, `date_property_id`); der Trigger setzt
+        `database_id` (nur Einträge, `22023`), prüft die
+        Datums-Eigenschaft und berechnet `next_date`. RLS: lesen mit
+        `can_read_page`, ändern mit `can_edit_page` des Eintrags.
+      - `next_recurrence_date(…)`: nächster Termin nach einem Tag
+        (Monatsende bleibt Monatsende, jede n-te Woche ab der Startwoche).
+      - RPC `create_due_recurring_entries(workspace)` → Anzahl: alle
+        fälligen Regeln des Workspace mit Schreibrecht auf die Datenbank,
+        `for update skip locked` (zwei Geräte legen nichts doppelt an);
+        Kopie per `copy_recurring_entry` (Werte über `set_page_property`,
+        damit Verknüpfungen beidseitig bleiben; Text als neues Dokument).
+        pgTAP: `entry_recurrences.test.sql`.
+      - App: `usePages` ruft die RPC vor jedem Laden des Seitenbaums vom
+        Server (Start, `online`, App wieder sichtbar); scheitert sie, lädt
+        der Baum trotzdem (Fehler in der Konsole). Klein gehalten in
+        `services/recurring-entries.ts`, damit der Datenbank-Code im
+        eigenen Chunk bleibt.
+      - Eigenschaftsleiste eines Eintrags: Zeile „Wiederholen“ mit Regel
+        und nächstem Termin; Dialog mit Rhythmus, „Alle …“, Wochentagen,
+        Start, Datums-Eigenschaft, „Nicht mehr wiederholen“
+        (`recurrence.ts`: Texte und Validierung).
+      - Tests: Vitest `recurrence.test.ts`, Playwright
+        `entry-recurrence.e2e.ts`.
+      - Noch nicht: Uhrzeit des Termins, Ende einer Wiederholung
+        (eine Vorlage kann sich seit Paket 26 wiederholen).
+26. **Vorlagen:** Seiten- und Eintragsvorlagen mit Inhalt und
+    Eigenschaften (je Datenbank), „Neu“ mit Vorlagen-Auswahl.
+    - **Annahme:** Vorlagen gibt es je Datenbank (wie in Notion); eine
+      Vorlage ist ein markierter Eintrag mit Text und Werten. Seitenvorlagen
+      außerhalb von Datenbanken vorerst nicht.
+    - **Umsetzung 26** (`20261020120000_entry_templates.sql`):
+      - `pages.is_template` (Standard `false`); nur Einträge einer
+        Datenbank (Trigger, `22023`). RPC
+        `create_entry_from_template(template)` → ID des neuen Eintrags:
+        lesbar, Vorlage, nicht im Papierkorb (`22023`), Schreibrecht auf die
+        Datenbank (`42501`); kopiert mit `copy_recurring_entry` (Titel,
+        Icon, Werte, Text). pgTAP: `entry_templates.test.sql`.
+      - App: `Page.is_template` (alte Caches: keine Vorlage). Die Ansichten
+        lassen Vorlagen aus (`DatabaseView` trennt sie), Verknüpfungen
+        bieten sie nicht an. Leiste der Datenbank: „Vorlagen“ (nur mit
+        Schreibrecht, online, eigener Workspace): neuer Eintrag aus einer
+        Vorlage (öffnet ihn), Vorlage bearbeiten, „Neue Vorlage“.
+        `usePages.createEntryFromTemplate`: Eintrag sofort im Baum, danach
+        neu laden; `createPage(…, { id, isTemplate })`.
+      - Eine Vorlage zeigt den Hinweis „Vorlage in „…““; sie kann sich
+        wiederholen (Paket 25) und macht dann Einträge aus sich.
+      - Achtung: App-Versionen vor 26 zeigen Vorlagen als normale Einträge.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `entry-templates.e2e.ts`.
+      - Noch nicht: Standardvorlage für „Neu“, Vorlagen in Datenbank-Blöcken,
+        Seitenvorlagen ohne Datenbank.
+27. **Suche:** Volltext auf dem Server (Titel und Inhalt, RLS), offline
+    lokal; Suchfeld in der Seitenleiste und Tastenkürzel.
+    - **Umsetzung 27** (`20261020130000_page_search.sql`):
+      - `page_documents.search_text`: generierte Spalte mit dem Klartext
+        des Dokuments (`document_plain_text`: alle `text`-Werte der Blöcke,
+        höchstens 200 000 Zeichen); für bestehende Zeilen berechnet, ohne
+        `updated_at` zu ändern. Trigramm-Indizes (`pg_trgm`) auf Text und
+        `pages.title`.
+      - RPC `search_pages(query, limit)` mit den Rechten des Aufrufers (RLS
+        entscheidet): Teilstring in Titel oder Text, Groß/klein egal,
+        mindestens zwei Zeichen, `%`/`_` sind Zeichen; Titel-Treffer zuerst,
+        mit Textausschnitt um den ersten Treffer; höchstens 100 (App: 30).
+        pgTAP: `page_search.test.sql`.
+      - App (`features/search/`): „Suchen“ oben in der Seitenleiste und
+        Strg/⌘+K öffnen `SearchDialog` (kurze Tipp-Pause, Pfeiltasten,
+        Enter öffnet, Treffer hervorgehoben, Pfad und Ausschnitt). Gezeigt
+        werden nur Seiten, die die App öffnen kann (Workspace und „Mit mir
+        geteilt“).
+      - Offline oder ohne Server: Titel der bekannten Seiten und Text der auf
+        dem Gerät gespeicherten Dokumente (`LocalDocumentStore.listAll`,
+        `documentText`), mit Hinweis.
+      - Tests: Vitest `search-text.test.ts`, Playwright `search.e2e.ts`.
+      - Noch nicht: Suche in Datenbank-Werten (Eigenschaften), Filter nach
+        Workspace oder Typ, Rangfolge nach Relevanz.
+28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
+    Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
+    exportierte Seiten echte Seitenlinks.
+    - **Umsetzung 28** (`20261020140000_page_backlinks.sql`):
+      - Inline-Inhalt `pageLink` (`props.pageId`, `props.title` = Titel beim
+        Verlinken) im Editor-Schema. „@“ im Text öffnet eine Auswahl der
+        bekannten Seiten und Datenbanken (ohne Vorlagen und die Seite selbst,
+        höchstens 12, Tippen filtert); der Link zeigt den aktuellen Titel aus
+        dem Seitenbaum (folgt Umbenennen), Klick öffnet die Seite. Unbekannte
+        Seiten (gelöscht, nicht freigegeben) und die öffentliche Ansicht zeigen
+        den gespeicherten Titel als grauen Text.
+      - RPC `page_backlinks(page)` (SQL mit den Rechten des Aufrufers, RLS
+        entscheidet): aktive Seiten, deren Dokument einen `pageLink` auf die
+        Seite enthält (`jsonb_path_exists`), höchstens 100. Liest jedes
+        lesbare Dokument; ein Index kann später folgen. pgTAP:
+        `page_backlinks.test.sql`.
+      - Unter dem Seitenkopf „Verlinkt von“ mit den verlinkenden Seiten (nur
+        online, nur Seiten, die die App öffnen kann).
+      - Import: Seiten, Datenbanken und Einträge des Exports bekommen ihre ID
+        vorab; ein Link auf eine importierte Seite wird ein `pageLink` (vorher
+        Text). Links auf nicht importierte Seiten bleiben Text.
+      - Tests: Vitest (`import-blocks`, `notion-import`), Playwright
+        `page-links.e2e.ts`.
+      - Noch nicht: Erwähnungen von Personen und Daten, Seitenlinks in der
+        Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
+29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
+    Dateien & Medien im Datei-Speicher (Paket 15).
+    - **Umsetzung 29** (`20261020150000_person_and_files_properties.sql`):
+      - Typ `person`: Wert = JSON-Array von Nutzer-IDs (UUIDs, höchstens
+        100). Der Server prüft nur die Form, nicht die Mitgliedschaft (eine
+        ID verrät nichts; die App zeigt nur bekannte Mitglieder).
+      - Typ `files` („Dateien & Medien“): Wert = JSON-Array von
+        Storage-Pfaden `<seite>/<id>-<name>` im Bucket `page-files`
+        (höchstens 100). Ein fremder Pfad verrät nichts: Storage prüft beim
+        Lesen die Seite im Pfad.
+      - Nur die erlaubten Werte wachsen (rückwärtskompatibel; Apps ab 14e
+        lassen die Typen aus). pgTAP: `database_person_files.test.sql`.
+      - App: Die Mitglieder des Workspace der Datenbank
+        (`list_workspace_members`) lädt `databaseRepository.load` mit und
+        hängt sie an Person-Eigenschaften (auch an das Ziel eines Rollups),
+        wie die Einträge einer Verknüpfung; so stehen sie im Cache. Wer kein
+        Mitglied ist (geteilte Datenbank), sieht keine Namen. Anzeige per
+        E-Mail-Adresse, Auswahl mit Suche (`RelationPicker` mit eigenen
+        Texten).
+      - Dateien: `FilesPicker` öffnet eine Datei per signierter URL in einem
+        neuen Tab, entfernt sie aus dem Wert und lädt neue in den Ordner des
+        Eintrags hoch (`uploadPageFile`, 10 MB, nur online und mit
+        Schreibrecht). Angezeigt wird der Dateiname aus dem Pfad
+        (`fileNameOfPath`, so wie Storage ihn speichert).
+      - Filter „enthält/leer“ und Sortieren nach E-Mail bzw. Dateinamen;
+        Formeln sehen den Text.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-person-files.e2e.ts`.
+      - Noch nicht: Dateien beim Entfernen aus dem Wert löschen, Bilder als
+        Titelbild der Galerie, Personen aus dem Notion-Import (die CSV
+        enthält nur Namen; bleibt Text), Benachrichtigungen.
+30. **Favoriten, Titelbilder, Emoji-Suche.** Aufteilung: 30a Emoji-Suche,
+    30b Favoriten, 30c Titelbilder (je ein PR).
+    - **Umsetzung 30a** (nur Frontend, keine Migration):
+      - `page-icons.ts`: rund 140 Emojis mit deutschen Suchwörtern
+        (`searchIcons`: jedes Wort der Eingabe muss einen Wortanfang
+        treffen). Ein eingetipptes oder eingefügtes einzelnes Emoji
+        (`typedEmoji`, auch mit Hautton, ZWJ-Folgen und Flaggen) lässt sich
+        ebenfalls wählen, auch wenn es nicht in der Liste steht.
+      - `IconGrid` (Suchfeld mit Fokus, Enter wählt das erste) für das
+        Seiten-Icon (`PageHeader`) und das Callout-Icon.
+      - Tests: Vitest `page-icons.test.ts`, Playwright `page-icon.e2e.ts`.
+    - **Umsetzung 30b** (`20261020160000_page_favorites.sql`):
+      - Tabelle `page_favorites (user_id, page_id, created_at)`, je Nutzer;
+        RLS: nur eigene Zeilen lesen und löschen, anlegen nur für lesbare
+        Seiten und nur für sich selbst (`42501`). Löschen der Seite oder
+        des Kontos löscht die Favoriten mit. pgTAP: `page_favorites.test.sql`.
+      - Geladen mit dem Seitenbaum: `PAGE_COLUMNS` bettet
+        `favorites:page_favorites(created_at)` ein (RLS lässt nur die eigenen
+        Zeilen); `parseStoredPages` macht daraus `Page.favorite`, so steht es
+        auch im Cache (offline sichtbar, nicht änderbar). Gegen die lokale
+        Supabase geprüft (Einbettung, Anlegen, Löschen).
+      - Seitenmenü „Zu Favoriten hinzufügen“/„Aus Favoriten entfernen“
+        (`usePages.setFavorite`, nur online). Seitenleiste: Abschnitt
+        „Favoriten“ über „Workspace“, nach Titel sortiert, auch Einträge von
+        Datenbanken.
+      - Noch nicht: Favoriten geteilter Seiten anderer Workspaces,
+        Reihenfolge per Ziehen.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `page-favorites.e2e.ts`.
+    - **Umsetzung 30c** (`20261020170000_page_cover.sql`):
+      - `pages.cover`: `null`, ein Farbverlauf der App (`gradient:<name>`,
+        nur Buchstaben) oder ein Bild aus dem Datei-Speicher
+        (`nodi-file:<seite>/<id>-<name>`); Check-Constraint (`23514`). Ändern
+        darf, wer die Seite bearbeiten darf (RLS wie beim Icon). pgTAP:
+        `page_cover.test.sql`.
+      - App: `Page.cover` (mit dem Seitenbaum geladen und gecacht; alte
+        Caches: keins). Im Seitenkopf „Titelbild hinzufügen“ neben „Icon
+        hinzufügen“; Auswahl (`CoverPicker`): sechs Farbverläufe
+        (`page-cover.ts`), „Bild hochladen“ (nur Bilder, 10 MB, in den Ordner
+        der Seite) und „Titelbild entfernen“. Das Bild steht über dem Titel
+        (`PageCover`, „Titelbild ändern“ beim Überfahren, Touch: immer) und
+        kommt zuerst aus dem Bild-Cache, ist also nach einmaligem Ansehen
+        offline sichtbar. Nur online und mit Schreibrecht änderbar.
+      - Noch nicht: Titelbilder in der öffentlichen Ansicht (die RPC
+        `get_public_page` liefert sie nicht) und in der Galerie, Position des
+        Bildes verschieben, Bilder aus dem Web, Titelbilder aus dem
+        Notion-Import (nicht im Export).
+      - Tests: Vitest `page-cover.test.ts`, `page-tree-cache.test.ts`,
+        Playwright `page-cover.e2e.ts`.
+31. **Kommentare** an Seiten und Textstellen. Aufteilung: 31a Kommentare
+    zur Seite, 31b Kommentare an Textstellen.
+    - **Annahme:** Kommentieren, antworten und erledigen darf, wer die Seite
+      bearbeiten darf (es gibt keine eigene Rolle „Kann kommentieren“); wer
+      sie lesen darf, liest die Kommentare.
+    - **Umsetzung 31a** (`20261020180000_page_comments.sql`):
+      - Tabelle `page_comments`: Seite, `parent_id` (Antwort auf einen
+        Thread, eine Ebene wie Notion; sonst `22023`), Autor (Standard
+        `auth.uid()`), Text 1–5000 Zeichen, `created_at`, `edited_at`,
+        `resolved_at`/`resolved_by` (nur am Thread). RLS: lesen mit
+        `can_read_page`, schreiben mit `can_edit_page`, ändern nur Autor
+        (Text) bzw. Bearbeiter (erledigt), löschen nur der Autor; ein
+        gelöschter Thread nimmt seine Antworten mit. Der Trigger
+        `check_page_comment` setzt Zeiten und wer erledigt hat und hält den
+        Rest unveränderlich (`42501`).
+      - RPC `list_page_comments(page)` (security definer, prüft
+        `can_read_page`): Kommentare mit E-Mail der Autoren (wer die Seite
+        lesen darf, sieht, wer kommentiert hat). pgTAP:
+        `page_comments.test.sql`.
+      - App (`features/comments/`): unter dem Seitenkopf (bei Einträgen unter
+        den Eigenschaften) offene Threads mit Antworten, „Kommentar
+        hinzufügen“, „Antworten“, „Erledigt“/„Wieder öffnen“, eigene
+        Kommentare bearbeiten und löschen (Rückfrage per zweitem Klick);
+        Strg/⌘+Enter sendet. Erledigte Threads hinter „Erledigte Kommentare
+        (n)“. Nur online; nach jeder Änderung neu geladen (der Server setzt
+        Zeiten und Autoren).
+      - Noch nicht: Benachrichtigungen, @-Erwähnungen in Kommentaren,
+        Kommentare offline, Echtzeit-Aktualisierung.
+      - Tests: Vitest `comment-threads.test.ts`, Playwright
+        `page-comments.e2e.ts`.
+    - **Umsetzung 31b** (`20261020190000_comment_quotes.sql`):
+      - Im Text steht ein eigener Stil `comment` (Editor-Schema), dessen
+        Wert die ID des Threads ist; die App wählt die ID, damit Markierung
+        und Thread zusammenpassen. `page_comments.quote` (höchstens 500
+        Zeichen, nur am Thread, beim Anlegen gesetzt, danach unveränderlich)
+        hält den zitierten Text, falls der Text sich ändert oder die
+        Markierung gelöscht wird. `list_page_comments` liefert ihn mit (neu
+        angelegt, weil sich der Rückgabetyp ändert). pgTAP:
+        `comment_quotes.test.sql`.
+      - Editor: In der Formatierungsleiste (auch mobil) „Kommentieren“, solange
+        Text markiert ist und die Seite bearbeitbar ist (`CommentButton`): Der
+        Text bekommt die Markierung, unter dem Seitenkopf erscheint das Feld
+        für den ersten Kommentar mit dem Zitat. „Abbrechen“ entfernt die
+        Markierung wieder.
+      - `features/comments/comment-marks.ts` verbindet Editor und
+        Kommentarliste: Die Liste meldet, welche Threads offen sind; nur
+        diese Markierungen sind hervorgehoben (`CommentMark`, Klick springt
+        zum Thread und rahmt ihn ein). Erledigte, gelöschte oder unbekannte
+        Threads (auch in der öffentlichen Ansicht) lassen normalen Text.
+      - Achtung: App-Versionen vor 31b kennen den Stil nicht und können
+        Seiten mit Textkommentaren eventuell nicht öffnen (wie 19c/22);
+        installierte Apps nach dem Update-Hinweis aktualisieren.
+      - Noch nicht: Markierung beim Löschen eines Threads aus dem Text
+        entfernen (sie bleibt unsichtbar stehen), Kommentare am Rand neben
+        dem Text, Verlassen der Seite mit offenem Entwurf (die Markierung
+        bleibt ohne Thread, unsichtbar).
+      - Tests: Vitest `comment-threads.test.ts`, Playwright
+        `page-comments.e2e.ts` (Textstelle kommentieren, Abbrechen).
+32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
+    Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
+    und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,
+    Button-Eigenschaft. Aufteilung: 32a Reihenfolge, 32b Kalender, 32c
+    Gruppierung, 32d Zeitleiste, 32e Spalten im Text, 32f Button (je ein PR).
+    - **Umsetzung 32a** (nur Frontend, keine Migration; `pages.position` ist
+      für Bearbeiter schon änderbar):
+      - Geschwister in der Seitenleiste stehen nach `position`, dann nach
+        Erstellung (`compareByPosition`, jetzt in `page-hierarchy.ts`; die
+        Datenbank-Ansichten nutzen dieselbe Regel). `placeBefore` berechnet
+        die neue Reihenfolge: zwischen zwei Nachbarn mit Position genügt eine
+        Änderung (Mittelwert), sonst werden die Geschwister neu nummeriert
+        (Seiten ohne Position, gleiche Positionen).
+      - Seitenleiste: Ziehen auf den oberen oder unteren Rand einer Seite
+        (je ein Viertel) setzt sie davor bzw. dahinter (Linie als Hinweis),
+        nur unter Geschwistern desselben Bereichs; die Mitte macht wie bisher
+        eine Unterseite daraus.
+      - Board: Eine Karte auf eine andere ziehen setzt sie davor (in einer
+        anderen Spalte auch deren Wert); in eine leere Stelle einer anderen
+        Spalte ans Ende. Nur ohne Sortierregel der Ansicht (wie Notion); die
+        Reihenfolge gilt für alle Ansichten ohne Sortierung.
+      - `usePages.reorderPages`: sofort sichtbar, je Seite ein Update; lehnt
+        der Server ab, lädt der Baum neu und ein Hinweis erscheint.
+      - Noch nicht: Reihenfolge in geteilten Seiten anderer Workspaces,
+        Ziehen in Tabelle und Liste, auf Touch-Geräten.
+      - Tests: Vitest `page-hierarchy.test.ts`, Playwright
+        `page-order.e2e.ts`.
+    - **Umsetzung 32b** (nur Frontend, keine Migration):
+      - Kalender: Umschalter „Monat | Woche“ (wie der Monat nur im Tab, nicht
+        gespeichert). Die Woche ist eine Zeile mit sieben Tagen ab Montag
+        (`weekDays`), Vor/Zurück springt um eine Woche, „Heute“ zur
+        aktuellen.
+      - Einträge per Ziehen (Maus) auf einen anderen Tag: `moveDate` schiebt
+        Start und Ende um dieselbe Zahl Tage (vom Tag, an dem man den Eintrag
+        greift, z. B. am zweiten Tag eines Zeitraums); ein Zeitraum behält
+        seine Länge, eine Uhrzeit ihre Ortszeit, auch über die Zeitumstellung.
+        Gespeichert per `set_page_property`; nur mit Schreibrecht und online.
+      - Noch nicht: Uhrzeiten als Raster in der Woche, Ziehen auf
+        Touch-Geräten, Länge eines Zeitraums per Ziehen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-views.e2e.ts`.
+    - **Umsetzung 32c** (nur Frontend, keine Migration; `config.groupByPropertyId`
+      gibt es seit 14c):
+      - Tabelle und Liste: „Gruppieren“ in der Leiste mit „Nicht gruppieren“
+        und den Auswahl- und Status-Eigenschaften. Anders als das Board wird
+        nur gruppiert, wenn man es wählt (`chosenGroupProperty`).
+      - Je Option mit Einträgen ein einklappbarer Abschnitt (`GroupedRows`,
+        Option als Abzeichen, Anzahl; leere Gruppen fallen weg, „Ohne …“
+        zuerst), darin die Tabelle bzw. Liste. In der Tabelle bleibt die
+        Spalte sichtbar (ein neuer Wert verschiebt den Eintrag in seine
+        Gruppe); „Neu“ in einer Gruppe setzt deren Wert. Eingeklappt ist nur
+        im Tab, nicht gespeichert.
+      - Noch nicht: Gruppieren nach anderen Typen (Checkbox, Datum, Person),
+        Galerie und Feed gruppieren, Reihenfolge der Gruppen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-grouping.e2e.ts`.
+    - **Umsetzung 32d** (`20261020200000_timeline_view.sql`):
+      - Ansichtstyp `timeline` für Datenbanken und Datenbank-Blöcke (nur die
+        erlaubten Werte wachsen; Apps ab 14e lassen den Typ aus). pgTAP:
+        `timeline_view.test.sql`.
+      - „Zeitleiste“ (`TimelineView`): sechs Wochen ab dem Montag der
+        Vorwoche, „Früher“/„Später“ um zwei Wochen, „Heute“; Tage als Spalten
+        (Wochentag, Monatsanfang), heute hervorgehoben. Je Eintrag mit Datum
+        im Zeitraum ein Balken vom Start bis zum Ende (`timelineBars`, an den
+        Rändern abgeschnitten und markiert); Klick öffnet den Eintrag. Die
+        Datums-Eigenschaft wählt „Datum“ in der Leiste wie beim Kalender.
+        Darunter die Zahl der Einträge ohne Datum und „Neu“. Die Tage
+        scrollen seitlich in der Ansicht, nicht die Seite.
+      - Noch nicht: Balken ziehen oder in der Länge ändern, andere Maßstäbe
+        (Monate, Quartale), Abhängigkeiten.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-views.e2e.ts`.
+    - **Umsetzung 32e** (nur Frontend, keine Migration):
+      - Blöcke `columns` und `column` im Editor-Schema (ohne Inhalt): Die
+        Kinder eines `columns`-Blocks (je ein `column`) stehen ab `md`
+        nebeneinander, gleich breit; die Kinder eines `column` sind ihr
+        Inhalt. Die Anordnung ist nur CSS (`index.css`, Grid, ohne
+        Einrückung und Linie verschachtelter Blöcke); das Dokument bleibt
+        gewöhnliches BlockNote-JSON. Unter `md` stehen die Spalten
+        untereinander. BlockNotes eigenes Spalten-Paket ist nicht genutzt
+        (Lizenz GPL bzw. kommerziell).
+      - Slash-Menü „2 Spalten“ / „3 Spalten“: je Spalte ein leerer Absatz, der
+        Cursor steht in der ersten.
+      - Achtung: App-Versionen vor 32e kennen die Blöcke nicht und können
+        solche Seiten nicht öffnen (wie 19c/22).
+      - Noch nicht: Breite der Spalten ziehen, Blöcke per Ziehen in eine
+        Spalte legen, Spalten aus dem Notion-Import (der Export enthält sie
+        nur als Folge von Blöcken).
+      - Tests: Playwright `columns.e2e.ts` (nebeneinander, gespeicherte
+        Struktur, schmal untereinander).
+    - **Umsetzung 32f** (`20261020210000_button_property.sql`):
+      - Eigenschaftstyp `button` (wie Notions Button „Seiten bearbeiten“);
+        `options` = `{label, actions}`, `label` bis 100 Zeichen, `actions`
+        höchstens 10 Objekte mit Text `propertyId` und `value` (beliebiges
+        JSON) oder `today: true`; geprüft nur die Form
+        (`is_valid_button_options`, Check-Constraint, `23514`). Ein Button hat
+        keinen Wert (`set_page_property` → `22023`). Nur die erlaubten Werte
+        wachsen (rückwärtskompatibel; Apps ab 14e lassen den Typ aus). pgTAP:
+        `database_buttons.test.sql`.
+      - Klick in Tabelle oder Eigenschaftsleiste setzt die Werte nacheinander
+        per `set_page_property` (`useDatabase.runButton`, `buttonChanges`):
+        gleiche Rechte, LWW und Rücknahme wie bei jedem Wert. Aktionen auf
+        gelöschte Eigenschaften oder nicht mehr passende Werte (gelöschte
+        Option) entfallen; „Heute“ ist der lokale Tag. Nur mit Schreibrecht
+        und online.
+      - `ButtonEditor` (Dialog): Beschriftung, Aktionen für Checkbox
+        (angehakt/nicht), Auswahl und Status (Option oder „Leeren“), Datum
+        („Heute“/„Leeren“). Öffnet sich nach dem Anlegen, über „Button
+        bearbeiten“ im Spaltenkopf und über den Namen in der
+        Eigenschaftsleiste.
+      - Noch nicht: Buttons in Board, Liste, Galerie und Feed; Aktionen
+        „Seite anlegen“, „Seite öffnen“, Werte anderer Typen.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-buttons.e2e.ts`.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
@@ -1954,6 +2515,13 @@ Noch nicht abschließend geprüft:
   gelöscht (`on delete cascade`). Der Papierkorb zeigt „Endgültig
   löschen“ nur bei eigenen Seiten; da RLS fremde Deletes ohne Fehler
   filtert, prüft `permanentlyDeletePage` die zurückgegebenen Zeilen.
+- (Umgesetzt, Nutzerwunsch 2026-10-20) „Papierkorb leeren“ oben im
+  Papierkorb, mit Rückfrage (Anzahl, Seiten anderer bleiben): ein Request
+  `delete … where workspace_id, is_archived, owner_id = Nutzer` (keine
+  ID-Liste in der URL, vgl. 19a), Unterseiten gehen per Kaskade mit, danach
+  lädt der Baum neu (`usePages.emptyTrash`). Ohne eigene Seiten im
+  Papierkorb gibt es den Knopf nicht. Keine Migration (Delete-Policy wie
+  bisher). Test: `trash.e2e.ts`.
 - (Umgesetzt in Paket 18a) Verschieben nur über `move_page`, die
   Rechte, Workspace, Bereichsregel und Zyklen prüft; `parent_id` bleibt
   für API-Clients gesperrt.
@@ -1977,9 +2545,10 @@ Noch nicht abschließend geprüft:
   antwortete der Server mit 414. Jetzt in Teilen zu je 100 IDs
   (`setArchived` in `usePages.ts`). Scheitert ein Teil, bleibt das bereits
   Verschobene so und wird angezeigt; ein erneuter Versuch macht den Rest.
-- Paket 10 nicht umgesetzt (bewusst): Titelbilder, Suche, Favoriten
-  (Verschieben per Drag & Drop seit Paket 18b). Die Emoji-Auswahl ist eine feste
-  Liste ohne Suche. Abmelden ist mobil nur aus der Seitenliste
+- Paket 10 nicht umgesetzt (bewusst): nichts mehr (Suche seit 27,
+  Favoriten seit 30b, Titelbilder seit 30c, Verschieben per Drag & Drop
+  seit Paket 18b). Die Emoji-Auswahl hat seit 30a eine
+  Suche (feste Liste plus eingefügte Emojis). Abmelden ist mobil nur aus der Seitenliste
   (Workspace-Menü) erreichbar.
 - (Behoben) Ein Fehler beim Nachladen des Editors oder des Inhalts
   der öffentlichen Ansicht (`lazy()`) leerte die ganze App. Jetzt fängt

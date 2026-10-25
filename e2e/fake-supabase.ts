@@ -6,6 +6,8 @@ import type { BrowserContext, Route } from "@playwright/test";
 /** Must match VITE_SUPABASE_URL of the test build (playwright.config.ts). */
 export const SUPABASE_URL = "http://fake.localhost:54321";
 export const OWNER = "11111111-1111-4111-8111-111111111111";
+/** A second member of the workspace (person properties). */
+export const MEMBER = "22222222-2222-4222-8222-222222222222";
 // A local Supabase refuses requests from about 300 ids in the URL (414).
 const MAX_URL_LENGTH = 8000;
 const WORKSPACE = "w1";
@@ -24,6 +26,7 @@ export type FakePage = {
     kind: "page" | "database";
     position: number | null;
     created_at: string;
+    is_template?: boolean;
 };
 
 export type FakeProperty = {
@@ -84,6 +87,27 @@ export type FakeBackend = {
     savedDocuments: Map<string, unknown>;
     /** Pages behind a public link, by token. */
     publicPages: Map<string, { title: string; icon: string | null; full_width: boolean; document: unknown[] }>;
+    /** Rules of recurring entries (package 25), as the app stored them. */
+    recurrences: Record<string, unknown>[];
+    /** Workspaces create_due_recurring_entries was called for, oldest first. */
+    recurrenceRuns: string[];
+    /** Page ids in the user's favorites (package 30b). */
+    favorites: string[];
+    /** Comments of pages (package 31a), as the server stores them. */
+    comments: FakeComment[];
+};
+
+export type FakeComment = {
+    id: string;
+    page_id: string;
+    parent_id: string | null;
+    author_id: string;
+    author_email: string;
+    body: string;
+    quote: string | null;
+    created_at: string;
+    edited_at: string | null;
+    resolved_at: string | null;
 };
 
 export function page(id: string, title: string, extra: Partial<FakePage> = {}): FakePage {
@@ -128,6 +152,10 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         files: new Map(),
         savedDocuments: new Map(),
         publicPages: new Map(),
+        recurrences: [],
+        recurrenceRuns: [],
+        favorites: [],
+        comments: [],
         ...initial,
     };
 }
@@ -312,6 +340,7 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
                     kind: body.kind === "database" ? "database" : "page",
                     position: typeof body.position === "number" ? body.position : null,
                     created_at: new Date().toISOString(),
+                    ...(body.is_template === true ? { is_template: true } : {}),
                 }),
             );
             if (body.kind === "database") {
@@ -334,6 +363,29 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             for (const target of targets) Object.assign(target, requestBody(route));
             return json(targets.map(({ id }) => ({ id })));
         }
+        if (method === "DELETE") {
+            // Deleting for good (trash): by id or all own archived pages; subpages go with them (cascade).
+            const id = query.get("id")?.replace("eq.", "");
+            const owner = query.get("owner_id")?.replace("eq.", "");
+            const deleted = backend.pages.filter(
+                (item) => item.is_archived && (!id || item.id === id) && (!owner || item.owner_id === owner),
+            );
+            const gone = new Set(deleted.map((item) => item.id));
+            let grew = true;
+            while (grew) {
+                grew = false;
+                for (const item of backend.pages) {
+                    if (item.parent_id && gone.has(item.parent_id) && !gone.has(item.id)) {
+                        gone.add(item.id);
+                        grew = true;
+                    }
+                }
+            }
+            backend.pages = backend.pages.filter((item) => !gone.has(item.id));
+            return json(deleted.map((item) => ({ id: item.id })));
+        }
+        // The workspace of a database, for the members of person properties (package 29).
+        if (query.get("select") === "workspace_id") return json([{ workspace_id: WORKSPACE }]);
         // Readable page ids, for deleting local copies of revoked pages.
         if (query.get("select") === "id") {
             const ids = backend.pages.map(({ id }) => ({ id }));
@@ -348,8 +400,63 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
                     .map(({ id, title, icon, parent_id }) => ({ id, title, icon, parentId: parent_id })),
             );
         }
-        // Own workspace; nothing is shared from other workspaces.
-        return json(query.get("workspace_id") === `eq.${WORKSPACE}` ? backend.pages : []);
+        // Own workspace; nothing is shared from other workspaces. Favorites are embedded like PostgREST does.
+        return json(
+            query.get("workspace_id") === `eq.${WORKSPACE}`
+                ? backend.pages.map((item) => ({
+                      ...item,
+                      favorites: backend.favorites.includes(item.id) ? [{ created_at: "2026-10-20T10:00:00Z" }] : [],
+                  }))
+                : [],
+        );
+    }
+
+    if (path === "/rest/v1/rpc/list_page_comments") {
+        const pageId = text(requestBody(route), "p_page_id");
+        return json(backend.comments.filter((item) => item.page_id === pageId));
+    }
+    if (path === "/rest/v1/page_comments") {
+        // Like the server: author and times come from it; only own comments change their text.
+        const id = query.get("id")?.replace("eq.", "");
+        if (method === "POST") {
+            const body = requestBody(route);
+            const comment: FakeComment = {
+                // A thread on text brings its id (the mark in the text) and the quote (package 31b).
+                id: typeof body.id === "string" ? body.id : crypto.randomUUID(),
+                page_id: text(body, "page_id"),
+                parent_id: typeof body.parent_id === "string" ? body.parent_id : null,
+                author_id: OWNER,
+                author_email: "owner@nodi.test",
+                body: text(body, "body"),
+                quote: typeof body.quote === "string" && typeof body.parent_id !== "string" ? body.quote : null,
+                created_at: new Date().toISOString(),
+                edited_at: null,
+                resolved_at: null,
+            };
+            backend.comments.push(comment);
+            return json([{ id: comment.id }], 201);
+        }
+        const target = backend.comments.find((item) => item.id === id);
+        if (!target) return json([]);
+        if (method === "PATCH") {
+            const body = requestBody(route);
+            if (typeof body.body === "string")
+                Object.assign(target, { body: body.body, edited_at: new Date().toISOString() });
+            if ("resolved_at" in body) target.resolved_at = body.resolved_at === null ? null : new Date().toISOString();
+            return json([{ id: target.id }]);
+        }
+        if (method === "DELETE") {
+            backend.comments = backend.comments.filter((item) => item.id !== id && item.parent_id !== id);
+            return json([{ id: target.id }]);
+        }
+    }
+    if (path === "/rest/v1/page_favorites") {
+        if (method === "POST") backend.favorites.push(text(requestBody(route), "page_id"));
+        if (method === "DELETE") {
+            const id = query.get("page_id")?.replace("eq.", "");
+            backend.favorites = backend.favorites.filter((item) => item !== id);
+        }
+        return route.fulfill({ status: method === "POST" ? 201 : 204, headers: CORS });
     }
 
     // Databases
@@ -570,6 +677,86 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);
+    if (path === "/rest/v1/rpc/search_pages") {
+        // Like the server: titles and texts (the "text" values of the saved documents), title hits first.
+        const needle = text(requestBody(route), "p_query").trim().toLowerCase();
+        const texts = (document: unknown) =>
+            [...JSON.stringify(document ?? []).matchAll(/"text":"((?:[^"\\]|\\.)*)"/g)]
+                .map((match) => match[1])
+                .join(" ");
+        const hits = backend.pages.flatMap((item) => {
+            if (item.is_archived || needle.length < 2) return [];
+            const body = texts(backend.savedDocuments.get(item.id));
+            const inTitle = item.title.toLowerCase().includes(needle);
+            const at = body.toLowerCase().indexOf(needle);
+            if (!inTitle && at === -1) return [];
+            const snippet = at === -1 ? null : body.slice(Math.max(at - 40, 0), Math.max(at - 40, 0) + 160);
+            return [{ id: item.id, title: item.title, inTitle, snippet }];
+        });
+        hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle));
+        return json(hits.map(({ id, title, snippet }) => ({ id, title, snippet })));
+    }
+    if (path === "/rest/v1/rpc/list_workspace_members") {
+        return json([
+            { user_id: OWNER, email: "owner@nodi.test", role: "owner", joined_at: "2026-10-01T10:00:00Z" },
+            { user_id: MEMBER, email: "kim@nodi.test", role: "member", joined_at: "2026-10-02T10:00:00Z" },
+        ]);
+    }
+    if (path === "/rest/v1/rpc/page_backlinks") {
+        // Like the server: active pages whose saved text has a page link to the page.
+        const target = text(requestBody(route), "p_page_id");
+        const links = (document: unknown) => JSON.stringify(document ?? []).includes(`"pageId":"${target}"`);
+        return json(
+            backend.pages
+                .filter((item) => item.id !== target && !item.is_archived)
+                .filter((item) => links(backend.savedDocuments.get(item.id)))
+                .map(({ id, title, icon, kind }) => ({ id, title, icon, kind })),
+        );
+    }
+    if (path === "/rest/v1/rpc/create_entry_from_template") {
+        // Like the server: a copy of the template (title, icon, values) at the end of its database.
+        const template = backend.pages.find((item) => item.id === text(requestBody(route), "p_template_id"));
+        if (!template?.is_template) return json({ code: "22023", message: "not a template" }, 400);
+        const id = crypto.randomUUID();
+        const siblings = backend.pages.filter((item) => item.parent_id === template.parent_id);
+        backend.pages.push({
+            ...template,
+            id,
+            is_template: false,
+            position: Math.max(0, ...siblings.map((item) => item.position ?? 0)) + 1,
+        });
+        for (const value of backend.values.filter((item) => item.pageId === template.id)) {
+            backend.values.push({ ...value, pageId: id });
+        }
+        return json(id);
+    }
+    if (path === "/rest/v1/rpc/create_due_recurring_entries") {
+        backend.recurrenceRuns.push(text(requestBody(route), "p_workspace_id"));
+        return json(0);
+    }
+    if (path === "/rest/v1/entry_recurrences") {
+        const pageId = query.get("page_id")?.replace("eq.", "");
+        // The server's names, aliased like the app asks for them; the next day is the start here.
+        const shown = (row: Record<string, unknown>) => ({
+            pageId: row.page_id,
+            frequency: row.frequency,
+            interval: row.interval,
+            weekdays: row.weekdays,
+            startDate: row.start_date,
+            nextDate: row.start_date,
+            datePropertyId: row.date_property_id,
+        });
+        if (method === "GET") return json(backend.recurrences.filter((row) => row.page_id === pageId).map(shown));
+        if (method === "POST") {
+            const body = requestBody(route);
+            backend.recurrences = [...backend.recurrences.filter((row) => row.page_id !== body.page_id), body];
+            return json([shown(body)], 201);
+        }
+        if (method === "DELETE") {
+            backend.recurrences = backend.recurrences.filter((row) => row.page_id !== pageId);
+            return json([]);
+        }
+    }
 
     return json([]);
 }

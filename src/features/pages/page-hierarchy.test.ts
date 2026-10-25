@@ -6,6 +6,8 @@ import {
     findArchivedAncestors,
     moveProblem,
     pagesInSection,
+    placeBefore,
+    withoutDatabaseEntries,
 } from "./page-hierarchy";
 import type { Page } from "./types";
 
@@ -214,6 +216,21 @@ describe("pagesInSection", () => {
     });
 });
 
+describe("withoutDatabaseEntries", () => {
+    it("leaves out entries and everything below them, but not the database", () => {
+        const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
+        const pages = [
+            page("tasks", { kind: "database" }),
+            page("entry", { parent_id: "tasks" }),
+            page("sub", { parent_id: "entry" }),
+            page("costs", { parent_id: "sub", kind: "database" }),
+            page("notes"),
+            page("ideas", { parent_id: "notes" }),
+        ];
+        expect(withoutDatabaseEntries(pages).map((item) => item.id)).toEqual(["tasks", "notes", "ideas"]);
+    });
+});
+
 describe("moveProblem", () => {
     const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
     const notes = page("notes");
@@ -229,13 +246,14 @@ describe("moveProblem", () => {
         expect(moveProblem(ideas, { parentId: "tasks" }, pages, "u1")).toBeNull();
         expect(moveProblem(ideas, { section: "private" }, pages, "u1")).toBeNull();
         expect(moveProblem(tasks, { parentId: "notes" }, pages, "u1")).toBeNull();
+        // Entries have subpages (package 23).
+        expect(moveProblem(notes, { parentId: "tasks" }, pages, "u1")).toBeNull();
     });
 
     it("rejects what the server rejects", () => {
         expect(moveProblem(notes, { parentId: "ideas" }, pages, "u1")).toContain("in sich selbst");
         expect(moveProblem(notes, { parentId: "notes" }, pages, "u1")).toContain("in sich selbst");
         expect(moveProblem(contacts, { parentId: "tasks" }, pages, "u1")).toContain("Datenbank");
-        expect(moveProblem(notes, { parentId: "tasks" }, pages, "u1")).toContain("Unterseiten");
         expect(moveProblem(ideas, { parentId: "notes" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
         expect(moveProblem(notes, { section: "private" }, pages, "u1")).toBe("Die Seite liegt schon dort.");
         expect(moveProblem(ideas, { parentId: "gone" }, pages, "u1")).toContain("gibt es nicht mehr");
@@ -245,5 +263,43 @@ describe("moveProblem", () => {
         expect(moveProblem(othersShared, { section: "private" }, pages, "u1")).toContain("Nur wem die Seite gehört");
         expect(moveProblem(othersShared, { parentId: "notes" }, pages, "u1")).toContain("Nur wem die Seite gehört");
         expect(moveProblem(othersShared, { parentId: "shared" }, pages, "u1")).toBeNull();
+    });
+});
+
+describe("placeBefore", () => {
+    const sibling = (id: string, position: number | null, created_at = id): Page => ({
+        ...project,
+        id,
+        title: id,
+        position,
+        created_at,
+    });
+
+    it("needs one update between two neighbours with positions", () => {
+        const pages = [sibling("a", 1), sibling("b", 2), sibling("c", 3)];
+        expect(placeBefore(pages, "c", "b")).toEqual([{ id: "c", position: 1.5 }]);
+        expect(placeBefore(pages, "a", null)).toEqual([{ id: "a", position: 4 }]);
+        expect(placeBefore(pages, "c", "a")).toEqual([{ id: "c", position: 0 }]);
+    });
+
+    it("numbers all siblings anew when positions are missing or equal", () => {
+        // Pages of the tree have no position before package 32a: their order is by creation.
+        const pages = [sibling("a", null, "1"), sibling("b", null, "2"), sibling("c", null, "3")];
+        expect(placeBefore(pages, "c", "a")).toEqual([
+            { id: "c", position: 0 },
+            { id: "a", position: 1 },
+            { id: "b", position: 2 },
+        ]);
+        expect(placeBefore([sibling("a", 1), sibling("b", 1), sibling("c", 2)], "c", "b")).toEqual([
+            { id: "a", position: 0 },
+            { id: "c", position: 1 },
+            { id: "b", position: 2 },
+        ]);
+    });
+
+    it("changes nothing for a page placed where it is or an unknown target", () => {
+        const pages = [sibling("a", 1), sibling("b", 2)];
+        expect(placeBefore(pages, "a", "a")).toEqual([]);
+        expect(placeBefore(pages, "a", "gone")).toEqual([]);
     });
 });

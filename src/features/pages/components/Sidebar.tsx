@@ -1,9 +1,18 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, FileInput, LogOut, Plus, Table2, Trash2, Users } from "lucide-react";
+import { Check, ChevronsUpDown, FileInput, FileText, LogOut, Plus, Search, Table2, Trash2, Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
 import { PageTree, type TreeDragAndDrop } from "../PageTree";
-import { moveProblem, pagesInSection, withoutDatabaseEntries, type MoveTarget } from "../page-hierarchy";
+import { displayTitle } from "../page-display";
+import {
+    moveProblem,
+    pagesInSection,
+    placeBefore,
+    withoutDatabaseEntries,
+    compareByPosition,
+    type MoveTarget,
+    type PositionUpdate,
+} from "../page-hierarchy";
 import type { Page, PageKind, PageSection, Workspace } from "../types";
 import { TrashView } from "./TrashView";
 
@@ -28,14 +37,19 @@ type SidebarProps = {
     onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
     onOpenMembers: () => void;
     onImportNotion: () => void;
+    /** Opens the search (package 27). */
+    onSearch: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
     onDelete: (pageId: string) => Promise<string[]>;
+    onEmptyTrash: () => Promise<number>;
     /** "Verschieben nach …" for a page of the tree. */
     onMove: (page: Page) => void;
     /** A page dragged onto another page or a section title. */
     onDropPage: (page: Page, target: MoveTarget) => void;
+    /** A page dragged before or after a sibling (package 32a). */
+    onReorder: (updates: PositionUpdate[]) => void;
 };
 
 const SECTIONS: { section: PageSection; title: string; addLabel: string; emptyText: string }[] = [
@@ -69,12 +83,15 @@ export function Sidebar({
     onCreatePage,
     onOpenMembers,
     onImportNotion,
+    onSearch,
     onRename,
     onArchive,
     onRestore,
     onDelete,
+    onEmptyTrash,
     onMove,
     onDropPage,
+    onReorder,
 }: SidebarProps) {
     const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
     const [showTrash, setShowTrash] = useState(false);
@@ -84,16 +101,46 @@ export function Sidebar({
     const trashOpen = showTrash && !readOnly;
     const treePages = withoutDatabaseEntries(pages);
     const sharedTreePages = withoutDatabaseEntries(sharedPages);
+    // Entries too: a favorite opens wherever it is (package 30b).
+    const favorites = pages
+        .filter((page) => page.favorite)
+        .sort((a, b) => displayTitle(a).localeCompare(displayTitle(b), "de"));
 
     // Same rules as "Verschieben nach …"; the server checks the rights.
     const dragged = draggedId ? pages.find((page) => page.id === draggedId) : undefined;
     const canDrop = (target: MoveTarget) =>
         dragged !== undefined && moveProblem(dragged, target, pages, userId) === null;
+    // Reordering stays among siblings of one section; other places go through "Verschieben".
+    const siblingsOf = (page: Page) =>
+        treePages
+            .filter((item) => item.parent_id === page.parent_id && item.visibility === page.visibility)
+            .sort(compareByPosition);
+    const canPlace = (target: Page) =>
+        dragged !== undefined &&
+        dragged.id !== target.id &&
+        dragged.parent_id === target.parent_id &&
+        dragged.visibility === target.visibility;
+    const place = (target: Page, where: "before" | "after") => {
+        if (!dragged || !canPlace(target)) return;
+        const siblings = siblingsOf(target);
+        const others = siblings.filter((item) => item.id !== dragged.id);
+        const beforeId =
+            where === "before"
+                ? target.id
+                : (others[others.findIndex((item) => item.id === target.id) + 1]?.id ?? null);
+        onReorder(placeBefore(siblings, dragged.id, beforeId));
+    };
     const dragAndDrop: TreeDragAndDrop | undefined = readOnly
         ? undefined
         : {
               draggedId,
               canDrop,
+              canPlace,
+              place: (target, where) => {
+                  place(target, where);
+                  setDraggedId(null);
+                  setDropOnSection(null);
+              },
               start: setDraggedId,
               end: () => {
                   setDraggedId(null);
@@ -178,6 +225,20 @@ export function Sidebar({
                 </Menu>
             </div>
 
+            <div className="px-2 pt-1">
+                <button
+                    type="button"
+                    onClick={onSearch}
+                    className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground pointer-coarse:h-10"
+                >
+                    <Search className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="flex-1">Suchen</span>
+                    <kbd className="text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
+                        Strg K
+                    </kbd>
+                </button>
+            </div>
+
             <div className="space-y-1 px-4 pt-1 pb-2">
                 {status}
                 {readOnly && (
@@ -190,9 +251,50 @@ export function Sidebar({
 
             <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" aria-label="Seiten">
                 {trashOpen ? (
-                    <TrashView pages={archivedPages} userId={userId} onRestore={onRestore} onDelete={onDelete} />
+                    <TrashView
+                        pages={archivedPages}
+                        userId={userId}
+                        onRestore={onRestore}
+                        onDelete={onDelete}
+                        onEmpty={onEmptyTrash}
+                    />
                 ) : (
                     <>
+                        {favorites.length > 0 && (
+                            <section aria-labelledby="section-favorites" className="mb-3">
+                                <h2
+                                    id="section-favorites"
+                                    className="flex h-7 items-center px-2 text-xs font-medium text-muted-foreground"
+                                >
+                                    Favoriten
+                                </h2>
+                                <ul>
+                                    {favorites.map((page) => (
+                                        <li key={page.id}>
+                                            <button
+                                                type="button"
+                                                aria-current={page.id === selectedPageId ? "page" : undefined}
+                                                onClick={() => onSelect(page.id)}
+                                                className={cn(
+                                                    "flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm hover:bg-sidebar-accent/70 pointer-coarse:h-10",
+                                                    page.id === selectedPageId && "bg-sidebar-accent font-medium",
+                                                )}
+                                            >
+                                                <span className="flex size-5 shrink-0 items-center justify-center">
+                                                    {page.icon ??
+                                                        (page.kind === "database" ? (
+                                                            <Table2 className="size-4 text-muted-foreground" />
+                                                        ) : (
+                                                            <FileText className="size-4 text-muted-foreground" />
+                                                        ))}
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate">{displayTitle(page)}</span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </section>
+                        )}
                         {SECTIONS.map(({ section, title, addLabel, emptyText }) => (
                             <section key={section} aria-labelledby={`section-${section}`} className="mb-3">
                                 {/* Dropping a page on the section title moves it to the top of the section. */}

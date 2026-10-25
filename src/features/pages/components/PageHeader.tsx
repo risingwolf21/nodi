@@ -1,59 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { SmilePlus } from "lucide-react";
 import { Menu } from "@/components/ui/menu";
 import type { Page } from "../types";
-
-// A small, fixed choice keeps the picker light; no emoji library needed.
-const PAGE_ICONS = [
-    "📄",
-    "📝",
-    "📌",
-    "📎",
-    "📚",
-    "📖",
-    "🗂️",
-    "🗃️",
-    "📅",
-    "🗓️",
-    "✅",
-    "☑️",
-    "⭐",
-    "💡",
-    "🔥",
-    "🚀",
-    "🎯",
-    "🧭",
-    "🧩",
-    "🛠️",
-    "⚙️",
-    "🔒",
-    "🔑",
-    "💬",
-    "📊",
-    "📈",
-    "💰",
-    "🧾",
-    "🏠",
-    "🏢",
-    "✈️",
-    "🌍",
-    "🍳",
-    "🛒",
-    "🎵",
-    "🎨",
-    "📷",
-    "🎮",
-    "🏃",
-    "❤️",
-    "🌱",
-    "🐾",
-    "☕",
-    "🎁",
-    "🧠",
-    "🔬",
-    "🧪",
-    "🏷️",
-];
+import { IconGrid } from "./IconGrid";
 
 type PageHeaderProps = {
     page: Page;
@@ -63,9 +12,11 @@ type PageHeaderProps = {
     focusTitle: boolean;
     onRename: (pageId: string, title: string) => Promise<void>;
     onSetIcon: (pageId: string, icon: string | null) => Promise<void>;
+    /** More buttons beside "Icon hinzufügen", shown on hover (e.g. the cover, package 30c). */
+    actions?: ReactNode;
 };
 
-export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon }: PageHeaderProps) {
+export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon, actions }: PageHeaderProps) {
     // Only set while the title is being edited; otherwise the stored title shows.
     const [draft, setDraft] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -109,7 +60,7 @@ export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon }: 
     return (
         <div className="group/header mb-2 px-[var(--page-gutter)]">
             <div className="relative">
-                {page.icon ? (
+                {page.icon && (
                     <button
                         type="button"
                         aria-label="Icon ändern"
@@ -119,34 +70,25 @@ export function PageHeader({ page, editable, focusTitle, onRename, onSetIcon }: 
                     >
                         {page.icon}
                     </button>
-                ) : (
-                    editable && (
-                        <button
-                            type="button"
-                            onClick={() => setPickerOpen((open) => !open)}
-                            className="mb-1 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground opacity-0 hover:bg-accent focus-visible:opacity-100 group-hover/header:opacity-100 pointer-coarse:opacity-100"
-                        >
-                            <SmilePlus className="size-4" />
-                            Icon hinzufügen
-                        </button>
-                    )
+                )}
+                {editable && (!page.icon || actions) && (
+                    <div className="mb-1 flex flex-wrap items-start gap-1 opacity-0 focus-within:opacity-100 group-hover/header:opacity-100 pointer-coarse:opacity-100">
+                        {!page.icon && (
+                            <button
+                                type="button"
+                                onClick={() => setPickerOpen((open) => !open)}
+                                className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:bg-accent"
+                            >
+                                <SmilePlus className="size-4" />
+                                Icon hinzufügen
+                            </button>
+                        )}
+                        {actions}
+                    </div>
                 )}
 
                 <Menu open={pickerOpen} onClose={() => setPickerOpen(false)} align="start" className="w-72 p-2">
-                    <div className="grid grid-cols-8 gap-0.5" role="group" aria-label="Icons">
-                        {PAGE_ICONS.map((icon) => (
-                            <button
-                                key={icon}
-                                type="button"
-                                role="menuitem"
-                                aria-label={`Icon ${icon}`}
-                                onClick={() => chooseIcon(icon)}
-                                className="flex size-8 items-center justify-center rounded text-xl hover:bg-accent"
-                            >
-                                {icon}
-                            </button>
-                        ))}
-                    </div>
+                    <IconGrid onChoose={chooseIcon} />
                     {page.icon && (
                         <button
                             type="button"

@@ -1,7 +1,10 @@
 import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
+import { compareByPosition } from "@/features/pages/page-hierarchy";
+import { fileNameOfPath, pageIdOfFilePath } from "@/features/files/file-reference";
 import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
 import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
+import { computeRollup, isPercentRollup, keepsTargetFormat, ROLLUP_FUNCTIONS } from "./rollup";
 import {
     TITLE_FIELD,
     type DatabaseData,
@@ -17,7 +20,12 @@ import {
     type PropertyType,
     type PropertyValue,
     type RelatedEntry,
+    type RollupFunction,
+    type RollupSettings,
     type RelationSettings,
+    type WorkspacePerson,
+    type ButtonAction,
+    type ButtonSettings,
     type SortRule,
     type StoredPropertyValue,
     type ViewConfig,
@@ -37,6 +45,10 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "place",
     "formula",
     "relation",
+    "rollup",
+    "person",
+    "files",
+    "button",
     "created_time",
     "last_edited_time",
 ];
@@ -54,12 +66,25 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     place: "Ort",
     formula: "Formel",
     relation: "Verknüpfung",
+    rollup: "Rollup",
+    person: "Person",
+    files: "Dateien & Medien",
+    button: "Button",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
 
 /** All view types of the server (packages 14a, 14e). */
-export const VIEW_TYPES: readonly ViewType[] = ["table", "board", "list", "gallery", "feed", "calendar", "map"];
+export const VIEW_TYPES: readonly ViewType[] = [
+    "table",
+    "board",
+    "list",
+    "gallery",
+    "feed",
+    "calendar",
+    "map",
+    "timeline",
+];
 
 export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     table: "Tabelle",
@@ -69,6 +94,7 @@ export const VIEW_TYPE_LABELS: Record<ViewType, string> = {
     feed: "Feed",
     calendar: "Kalender",
     map: "Landkarte",
+    timeline: "Zeitleiste",
 };
 
 export const OPTION_COLORS: readonly OptionColor[] = [
@@ -88,9 +114,15 @@ export function hasOptions(type: PropertyType): boolean {
     return type === "select" || type === "multi_select" || type === "status";
 }
 
-/** Computed by the app, not set by hand. */
+/** Computed by the app, not set by hand; a button has no value at all. */
 export function isComputed(type: PropertyType): boolean {
-    return type === "created_time" || type === "last_edited_time" || type === "formula";
+    return (
+        type === "created_time" ||
+        type === "last_edited_time" ||
+        type === "formula" ||
+        type === "rollup" ||
+        type === "button"
+    );
 }
 
 /** A new status property starts like Notion's. */
@@ -183,6 +215,58 @@ function parseRelation(row: Record<string, unknown>): RelationSettings | null {
     };
 }
 
+/** The server keeps a button's label and actions in options (package 32f); invalid actions are left out. */
+function parseButton(row: Record<string, unknown>): ButtonSettings {
+    const source = isObject(row.button) ? row.button : isObject(row.options) ? row.options : {};
+    const actions = Array.isArray(source.actions)
+        ? source.actions.flatMap((action: unknown): ButtonAction[] => {
+              if (!isObject(action) || typeof action.propertyId !== "string") return [];
+              if (action.today === true) return [{ propertyId: action.propertyId, today: true }];
+              return "value" in action ? [{ propertyId: action.propertyId, value: action.value }] : [];
+          })
+        : [];
+    return { label: typeof source.label === "string" ? source.label : "", actions };
+}
+
+/** The cache keeps the members loaded with a person property (package 29). */
+function parsePeople(value: unknown): WorkspacePerson[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((person: unknown) =>
+        isObject(person) && typeof person.id === "string" && typeof person.email === "string"
+            ? [{ id: person.id, email: person.email }]
+            : [],
+    );
+}
+
+function isRollupFunction(value: unknown): value is RollupFunction {
+    return typeof value === "string" && (ROLLUP_FUNCTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * The server keeps a rollup's settings in options; the cache keeps them, with
+ * the loaded target, as `rollup`. Null while the rollup is not set up.
+ */
+function parseRollup(row: Record<string, unknown>): RollupSettings | null {
+    const source = isObject(row.rollup) ? row.rollup : isObject(row.options) ? row.options : null;
+    if (
+        !source ||
+        typeof source.relationPropertyId !== "string" ||
+        typeof source.targetPropertyId !== "string" ||
+        !isRollupFunction(source.function)
+    ) {
+        return null;
+    }
+    const settings: RollupSettings = {
+        relationPropertyId: source.relationPropertyId,
+        targetPropertyId: source.targetPropertyId,
+        function: source.function,
+    };
+    const target = isObject(source.target) ? source.target : null;
+    if (!target) return settings;
+    const [property = null] = target.property === null ? [] : parseProperties([target.property]);
+    return { ...settings, target: { property, values: isObject(target.values) ? target.values : {} } };
+}
+
 export function parseProperties(rows: unknown): DatabaseProperty[] {
     if (!Array.isArray(rows)) throw new Error(INVALID_DATA);
     return rows.flatMap((row: unknown): DatabaseProperty[] => {
@@ -199,6 +283,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
         // A relation without a valid target cannot be shown or edited.
         const relation = row.type === "relation" ? parseRelation(row) : null;
         if (row.type === "relation" && !relation) return [];
+        const rollup = row.type === "rollup" ? parseRollup(row) : null;
         // The server keeps the number format in options.
         const numberFormat = isNumberFormat(row.numberFormat)
             ? row.numberFormat
@@ -223,6 +308,10 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 ...(row.type === "formula" ? { formula: expression } : {}),
                 ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
                 ...(relation ? { relation } : {}),
+                ...(rollup ? { rollup } : {}),
+                ...(row.type === "button" ? { button: parseButton(row) } : {}),
+                // Server rows have none; the repository adds them (and the cache keeps them).
+                ...(row.type === "person" && Array.isArray(row.people) ? { people: parsePeople(row.people) } : {}),
             },
         ];
     });
@@ -414,11 +503,56 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
             const ids = raw.filter((id: unknown): id is string => typeof id === "string");
             return ids.length > 0 ? ids : null;
         }
+        case "person": {
+            // User ids; ones that are no (known) members are skipped when shown.
+            if (!Array.isArray(raw)) return null;
+            const ids = raw.filter((id: unknown): id is string => typeof id === "string" && UUID.test(id));
+            return ids.length > 0 ? ids : null;
+        }
+        case "files": {
+            // Storage paths of the bucket (package 15), as the server checks them.
+            if (!Array.isArray(raw)) return null;
+            const paths = raw.filter(
+                (path: unknown): path is string => typeof path === "string" && pageIdOfFilePath(path) !== null,
+            );
+            return paths.length > 0 ? paths : null;
+        }
         case "formula":
+        case "rollup":
+        case "button":
         case "created_time":
         case "last_edited_time":
             return null;
     }
+}
+
+/**
+ * The values a click on a button sets (package 32f): actions on properties
+ * that are gone or computed, or whose value no longer fits (a deleted
+ * option), are skipped; "today" is the local day.
+ */
+export function buttonChanges(
+    button: ButtonSettings,
+    properties: DatabaseProperty[],
+    today: string,
+): { propertyId: string; value: PropertyValue }[] {
+    return button.actions.flatMap((action) => {
+        const property = properties.find((item) => item.id === action.propertyId);
+        if (!property || isComputed(property.type)) return [];
+        if ("today" in action)
+            return property.type === "date" ? [{ propertyId: property.id, value: { start: today, end: null } }] : [];
+        const value = readValue(property, action.value);
+        return value === null && action.value !== null ? [] : [{ propertyId: property.id, value }];
+    });
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The known members of a person value, in its order. */
+export function chosenPeople(property: DatabaseProperty, value: PropertyValue): WorkspacePerson[] {
+    if (!Array.isArray(value)) return [];
+    const byId = new Map((property.people ?? []).map((person) => [person.id, person]));
+    return value.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** One entry of a database with its values, as views show it. */
@@ -522,6 +656,9 @@ function formulaInput(property: DatabaseProperty, value: PropertyValue): Formula
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" ? toDate(value) : null;
+        case "rollup":
+            if (typeof value === "number") return value;
+            return isDateValue(value) ? toDate(value.start) : formatValue(property, value) || null;
         default:
             return formatValue(property, value) || null;
     }
@@ -610,6 +747,27 @@ function computeFormulas(page: Page, values: Record<string, PropertyValue>, setu
     return { values: output, errors };
 }
 
+/** The rollup of one entry: its relation's known entries, their target values, the function. */
+function rollupValue(
+    property: DatabaseProperty,
+    values: Record<string, PropertyValue>,
+    properties: DatabaseProperty[],
+): PropertyValue {
+    const settings = property.rollup;
+    const relation = properties.find((item) => item.id === settings?.relationPropertyId && item.type === "relation");
+    if (!settings || !relation) return null;
+    const target = settings.target?.property ?? null;
+    const titles = settings.targetPropertyId === TITLE_FIELD;
+    // A target that is not loaded (deleted, not readable) has no values.
+    if (!titles && !target) return null;
+    const targetValues = relatedEntries(relation, values[relation.id] ?? null).map((entry) =>
+        titles || !target ? entry.title || null : readValue(target, settings.target?.values[entry.id]),
+    );
+    return computeRollup(settings.function, targetValues, (value) =>
+        target ? formatValue(target, value) : typeof value === "string" ? value : "",
+    );
+}
+
 export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
     const formulaSetup = setUpFormulas(data.properties);
     const storedByEntry = new Map<string, StoredPropertyValue[]>();
@@ -636,6 +794,10 @@ export function buildRows(entries: Page[], data: DatabaseData): DatabaseRow[] {
                 const raw = stored.find((value) => value.propertyId === property.id)?.value;
                 values[property.id] = readValue(property, raw);
             }
+        }
+        // Rollups read the relations of the entry; formulas may use them.
+        for (const property of data.properties) {
+            if (property.type === "rollup") values[property.id] = rollupValue(property, values, data.properties);
         }
         const formulas = computeFormulas(page, values, formulaSetup);
         return {
@@ -683,6 +845,23 @@ function formatFormulaResult(value: PropertyValue): string {
     return typeof value === "string" ? value : "";
 }
 
+const percentFormat = new Intl.NumberFormat("de-DE", { style: "percent", maximumFractionDigits: 1 });
+const rollupNumberFormat = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
+
+/** A rollup result: percentages as such, sums and the like in the target's number format. */
+function formatRollupResult(property: DatabaseProperty, value: PropertyValue): string {
+    const settings = property.rollup;
+    if (typeof value === "number" && settings) {
+        if (isPercentRollup(settings.function)) return percentFormat.format(value);
+        const target = settings.target?.property;
+        if (keepsTargetFormat(settings.function) && target?.type === "number" && target.numberFormat) {
+            return NUMBER_FORMATTERS[target.numberFormat].format(value);
+        }
+        return rollupNumberFormat.format(value);
+    }
+    return formatFormulaResult(value);
+}
+
 /** "48,13720; 11,57560"-style text for a point without an address. */
 function formatCoordinates(place: PlaceValue): string {
     return `${coordinateFormat.format(place.lat)}; ${coordinateFormat.format(place.lng)}`;
@@ -728,10 +907,18 @@ export function formatValue(property: DatabaseProperty, value: PropertyValue): s
             return isPlaceValue(value) ? (value.label ?? formatCoordinates(value)) : "";
         case "formula":
             return formatFormulaResult(value);
+        case "rollup":
+            return formatRollupResult(property, value);
         case "relation":
             return relatedEntries(property, value)
                 .map((entry) => displayTitle(entry))
                 .join(", ");
+        case "person":
+            return chosenPeople(property, value)
+                .map((person) => person.email)
+                .join(", ");
+        case "files":
+            return Array.isArray(value) ? value.map(fileNameOfPath).join(", ") : "";
         case "created_time":
         case "last_edited_time":
             return typeof value === "string" && !Number.isNaN(Date.parse(value))
@@ -772,8 +959,11 @@ export function operatorsFor(type: PropertyType | typeof TITLE_FIELD): FilterOpe
         case "multi_select":
         case "place":
         case "relation":
+        case "person":
+        case "files":
             return ["contains", "isEmpty", "isNotEmpty"];
         case "formula":
+        case "rollup":
             return ["contains", "equals", "notEquals", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"];
         case "date":
         case "created_time":
@@ -816,7 +1006,7 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
     const type =
         rule.propertyId === TITLE_FIELD
             ? "text"
-            : property?.type === "formula"
+            : property?.type === "formula" || property?.type === "rollup"
               ? formulaFilterType(value)
               : property?.type;
     // A rule for a deleted property does not hide anything.
@@ -868,9 +1058,10 @@ export function matchesFilter(row: DatabaseRow, rule: FilterRule, property: Data
     }
 
     // A place is found by its address (or coordinates), a formula by its shown result, a relation by
-    // the titles, like text.
+    // the titles, people by their e-mail addresses, files by their names, like text.
     const shown =
-        (type === "place" || type === "formula" || type === "relation") && property
+        (type === "place" || type === "formula" || type === "relation" || type === "person" || type === "files") &&
+        property
             ? formatValue(property, value)
             : typeof value === "string"
               ? value
@@ -909,12 +1100,7 @@ function compareKeys(a: string | number | null, b: string | number | null): numb
 }
 
 /** Manual order, then creation; used when a view has no sort rules. */
-export function compareByPosition(a: Page, b: Page): number {
-    if (a.position !== null && b.position !== null && a.position !== b.position) return a.position - b.position;
-    if (a.position !== null && b.position === null) return -1;
-    if (a.position === null && b.position !== null) return 1;
-    return a.created_at.localeCompare(b.created_at);
-}
+export { compareByPosition };
 
 /** Rows of a view: filtered (all rules), sorted by its rules or by position. */
 export function applyView(rows: DatabaseRow[], config: ViewConfig, properties: DatabaseProperty[]): DatabaseRow[] {
@@ -952,6 +1138,12 @@ export function visibleProperties(properties: DatabaseProperty[], config: ViewCo
 /** A board groups by the options of a select or status property. */
 export function canGroupBy(type: PropertyType): boolean {
     return type === "select" || type === "status";
+}
+
+/** Tables and lists are grouped only when chosen (package 32c), unlike a board. */
+export function chosenGroupProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const chosen = properties.find((property) => property.id === config.groupByPropertyId);
+    return chosen && canGroupBy(chosen.type) ? chosen : undefined;
 }
 
 /** The chosen group property, otherwise the first status, then the first select property. */
@@ -1055,6 +1247,43 @@ export function monthGrid(year: number, month: number): string[][] {
     );
 }
 
+/** The week (Monday first) of a "YYYY-MM-DD" day, package 32b. */
+export function weekDays(day: string): string[] {
+    const time = utcDay(day);
+    const monday = time - ((new Date(time).getUTCDay() + 6) % 7) * DAY_MS;
+    return Array.from({ length: 7 }, (_, weekday) => dayString(monday + weekday * DAY_MS));
+}
+
+/** A day moved by whole days ("YYYY-MM-DD"). */
+export function addDays(day: string, days: number): string {
+    return dayString(utcDay(day) + days * DAY_MS);
+}
+
+/** Days between two "YYYY-MM-DD" days. */
+function daysBetween(from: string, to: string): number {
+    return Math.round((utcDay(to) - utcDay(from)) / DAY_MS);
+}
+
+/** A day or a point in time moved by whole days; a time keeps its local time of day (summer time too). */
+function shiftDate(value: string, days: number): string {
+    if (isDay(value)) return addDays(value, days);
+    const date = toDate(value);
+    if (!date) return value;
+    date.setDate(date.getDate() + days);
+    return date.toISOString();
+}
+
+/**
+ * A date dragged in the calendar from one day to another (package 32b):
+ * start and end move by the same number of days, so a range keeps its length
+ * and a time its time of day.
+ */
+export function moveDate(value: DateValue, fromDay: string, toDay: string): DateValue {
+    const days = daysBetween(fromDay, toDay);
+    if (days === 0) return value;
+    return { start: shiftDate(value.start, days), end: value.end ? shiftDate(value.end, days) : null };
+}
+
 /** Entries per day ("YYYY-MM-DD"); a range appears on each of its days. Rows keep their order. */
 export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<string, DatabaseRow[]> {
     const days = new Map<string, DatabaseRow[]>();
@@ -1071,6 +1300,36 @@ export function rowsByDay(rows: DatabaseRow[], property: DatabaseProperty): Map<
         }
     }
     return days;
+}
+
+// ---------------------------------------------------------------------------
+// Timeline (package 32d).
+
+/** A bar of the timeline: from the first to the last shown day of an entry's date (indexes into the days). */
+export type TimelineBar = { row: DatabaseRow; first: number; last: number; startsBefore: boolean; endsAfter: boolean };
+
+/**
+ * The bars for `days` consecutive days from `firstDay`: one per entry with a
+ * date that touches them, clipped to the window; rows keep their order.
+ */
+export function timelineBars(rows: DatabaseRow[], property: DatabaseProperty, firstDay: string, days: number) {
+    const lastDay = addDays(firstDay, days - 1);
+    return rows.flatMap((row): TimelineBar[] => {
+        const value = row.values[property.id];
+        if (!isDateValue(value)) return [];
+        const start = dayOf(value.start);
+        const end = value.end && dayOf(value.end) >= start ? dayOf(value.end) : start;
+        if (end < firstDay || start > lastDay) return [];
+        return [
+            {
+                row,
+                first: Math.max(0, daysBetween(firstDay, start)),
+                last: Math.min(days - 1, daysBetween(firstDay, end)),
+                startsBefore: start < firstDay,
+                endsAfter: end > lastDay,
+            },
+        ];
+    });
 }
 
 // ---------------------------------------------------------------------------

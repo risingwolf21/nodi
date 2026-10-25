@@ -11,7 +11,7 @@ import { ShareDialog } from "@/features/pages/components/ShareDialog";
 import { MembersDialog } from "@/features/pages/components/MembersDialog";
 import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog";
 import { MovePageDialog } from "@/features/pages/components/MovePageDialog";
-import type { MoveTarget } from "@/features/pages/page-hierarchy";
+import type { MoveTarget, PositionUpdate } from "@/features/pages/page-hierarchy";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection } from "@/features/pages/types";
@@ -26,6 +26,7 @@ import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
+import { SearchDialog } from "@/features/search/components/SearchDialog";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
@@ -72,13 +73,17 @@ export default function WorkspaceHome() {
         error: pagesError,
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
+        createEntryFromTemplate,
         setPageSection,
         movePage,
         renamePage,
         updatePage,
+        setFavorite,
+        reorderPages,
         archivePage,
         restorePage,
         permanentlyDeletePage,
+        emptyTrash,
     } = usePages(workspaceId, user?.id);
 
     const {
@@ -123,6 +128,19 @@ export default function WorkspaceHome() {
 
     // On phones the app fits the area above the keyboard (package 20).
     useEffect(() => trackVirtualKeyboard(), []);
+
+    // Ctrl/⌘+K opens the search (package 27), as in Notion.
+    const [searchOpen, setSearchOpen] = useState(false);
+    useEffect(() => {
+        function openSearch(event: KeyboardEvent) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+                event.preventDefault();
+                setSearchOpen(true);
+            }
+        }
+        window.addEventListener("keydown", openSearch);
+        return () => window.removeEventListener("keydown", openSearch);
+    }, []);
 
     // Revoked shares: the local copies go at the next contact with the server.
     useEffect(() => {
@@ -171,6 +189,15 @@ export default function WorkspaceHome() {
             await movePage(item.id, target);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Die Seite konnte nicht verschoben werden.");
+        }
+    }
+
+    async function reorder(updates: PositionUpdate[]) {
+        setError("");
+        try {
+            await reorderPages(updates);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Die Reihenfolge konnte nicht gespeichert werden.");
         }
     }
 
@@ -287,12 +314,15 @@ export default function WorkspaceHome() {
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
                             onImportNotion={() => setImportOpen(true)}
+                            onSearch={() => setSearchOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
                             onDelete={permanentlyDeletePage}
+                            onEmptyTrash={emptyTrash}
                             onMove={(item) => setMovePageDialog({ page: item })}
                             onDropPage={(item, target) => void dropPage(item, target)}
+                            onReorder={(updates) => void reorder(updates)}
                         />
                     </aside>
 
@@ -311,6 +341,8 @@ export default function WorkspaceHome() {
                                 onRename={sharedPage ? renameSharedPage : renamePage}
                                 onUpdate={sharedPage ? updateSharedPage : updatePage}
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
+                                // Favorites of pages from other workspaces: later.
+                                onSetFavorite={sharedPage ? undefined : setFavorite}
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                                 // Moving stays within the page's own workspace.
                                 onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}
@@ -325,9 +357,30 @@ export default function WorkspaceHome() {
                                 )}
                                 // Entries are created in the database's own workspace only (for now).
                                 onCreateEntry={sharedPage ? undefined : createEntry}
+                                templateActions={
+                                    sharedPage
+                                        ? undefined
+                                        : {
+                                              onCreateFromTemplate: async (templateId) =>
+                                                  (await createEntryFromTemplate(templateId)).id,
+                                              onCreateTemplate: async () =>
+                                                  (
+                                                      await createWorkspacePage("", page.id, page.visibility, "page", {
+                                                          isTemplate: true,
+                                                      })
+                                                  ).id,
+                                          }
+                                }
+                                onCreateSubpage={
+                                    sharedPage
+                                        ? undefined
+                                        : (parentId, kind) => void createPage(parentId, page.visibility, kind)
+                                }
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                                 knownPages={knownPages}
+                                // Entries of other workspaces keep their order (for now).
+                                onReorderPages={sharedPage ? undefined : reorderPages}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
@@ -422,13 +475,23 @@ export default function WorkspaceHome() {
                         <NotionImportDialog
                             // Imported pages are private (decision of the user, CLAUDE.md §12 P16).
                             createPage={(title, parentId, kind, id) =>
-                                createWorkspacePage(title, parentId, "private", kind, id)
+                                createWorkspacePage(title, parentId, "private", kind, { id })
                             }
                             onOpen={(pageId) => openPage(pageId)}
                             onClose={() => setImportOpen(false)}
                         />
                     </Suspense>
                 </LoadErrorBoundary>
+            )}
+
+            {searchOpen && user && (
+                <SearchDialog
+                    knownPages={knownPages}
+                    userId={user.id}
+                    offline={readOnly || authOffline}
+                    onOpen={(id) => openPage(id)}
+                    onClose={() => setSearchOpen(false)}
+                />
             )}
 
             {sharingPage && user && (

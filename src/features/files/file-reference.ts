@@ -51,6 +51,11 @@ export function pageIdOfFilePath(path: string): string | null {
     return PATH_PATTERN.exec(path)?.[1] ?? null;
 }
 
+/** The file name in a path, without the page folder and the random id ("Plan.pdf"). */
+export function fileNameOfPath(path: string): string {
+    return path.replace(new RegExp(`^${UUID}/${UUID}-`), "");
+}
+
 /** Images are kept for offline use; other attachments are only downloaded on request. */
 export function isImagePath(path: string): boolean {
     const extension = path.split(".").pop()?.toLowerCase() ?? "";

@@ -13,7 +13,7 @@ type PropertyHeaderProps = {
     onChangeType: (type: PropertyType) => Promise<void>;
     onHide: () => Promise<void>;
     onDelete: () => Promise<void>;
-    /** Formula properties: opens the formula editor. */
+    /** Formula and rollup properties: opens their editor. */
     onEditFormula?: () => void;
     /** Number properties: how values are shown. */
     onChangeNumberFormat?: (format: NumberFormat) => Promise<void>;
@@ -84,17 +84,22 @@ export function PropertyHeader({
                         className="h-7 w-full rounded border bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                     />
                 </form>
-                {property.type === "formula" && onEditFormula && (
-                    <MenuItem
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onEditFormula();
-                        }}
-                    >
-                        <Sigma className="size-4" />
-                        Formel bearbeiten
-                    </MenuItem>
-                )}
+                {(property.type === "formula" || property.type === "rollup" || property.type === "button") &&
+                    onEditFormula && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onEditFormula();
+                            }}
+                        >
+                            <Sigma className="size-4" />
+                            {property.type === "formula"
+                                ? "Formel bearbeiten"
+                                : property.type === "rollup"
+                                  ? "Rollup bearbeiten"
+                                  : "Button bearbeiten"}
+                        </MenuItem>
+                    )}
                 {property.type === "number" && onChangeNumberFormat && (
                     <>
                         <p className="px-2 pt-2 pb-1 text-xs text-muted-foreground">Zahlenformat</p>

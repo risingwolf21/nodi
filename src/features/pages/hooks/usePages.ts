@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createDueRecurringEntries } from "@/features/databases/services/recurring-entries";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import {
@@ -7,6 +8,7 @@ import {
     isDatabaseEntry,
     nextPosition,
     type MoveTarget,
+    type PositionUpdate,
 } from "../page-hierarchy";
 import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
 import type { Page, PageKind, PageSection, PageSettings, StoredPage } from "../types";
@@ -47,7 +49,9 @@ export function parseServerPages(data: unknown): StoredPage[] {
 
 // Columns of a page in the tree (StoredPage).
 export const PAGE_COLUMNS =
-    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at";
+    "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at,is_template,cover," +
+    // Only the user's own favorites (RLS), package 30b.
+    "favorites:page_favorites(created_at)";
 
 export const toPage = ({
     id,
@@ -60,6 +64,9 @@ export const toPage = ({
     kind,
     position,
     created_at,
+    is_template,
+    favorite,
+    cover,
 }: StoredPage): Page => ({
     id,
     title,
@@ -71,7 +78,17 @@ export const toPage = ({
     kind,
     position,
     created_at,
+    ...(is_template ? { is_template } : {}),
+    ...(favorite ? { favorite } : {}),
+    ...(cover ? { cover } : {}),
 });
+
+export type NewPageOptions = {
+    /** Known before the page exists, e.g. for links to it (Notion import). */
+    id?: string;
+    /** A template of its database (package 26). */
+    isTemplate?: boolean;
+};
 
 type UsePagesResult = {
     pages: Page[];
@@ -87,15 +104,23 @@ type UsePagesResult = {
         parentId: string | null,
         section: PageSection,
         kind?: PageKind,
-        id?: string,
+        options?: NewPageOptions,
     ) => Promise<Page>;
+    /** A new entry from a template of its database (RPC create_entry_from_template, package 26). */
+    createEntryFromTemplate: (templateId: string) => Promise<Page>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
     movePage: (pageId: string, target: MoveTarget) => Promise<void>;
     renamePage: (pageId: string, title: string) => Promise<void>;
     updatePage: (pageId: string, settings: PageSettings) => Promise<void>;
+    /** Adds the page to the user's favorites or removes it (package 30b). */
+    setFavorite: (pageId: string, favorite: boolean) => Promise<void>;
+    /** New manual order of siblings or entries (package 32a, `placeBefore`). */
+    reorderPages: (updates: PositionUpdate[]) => Promise<void>;
     archivePage: (pageId: string) => Promise<string[]>;
+    /** Deletes the user's pages in the trash for good (with their subpages); how many. */
+    emptyTrash: () => Promise<number>;
     restorePage: (pageId: string) => Promise<string[]>;
     permanentlyDeletePage: (pageId: string) => Promise<string[]>;
 };
@@ -182,6 +207,11 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                     userId: currentUserId,
                     readCache: () => pageTreeCacheFor(currentUserId).getPages(workspaceId),
                     fetchServer: async () => {
+                        // Recurring entries that are due appear with this load (package 25). Without
+                        // them the tree still loads; they come with the next one.
+                        await createDueRecurringEntries(workspaceId).catch((err: unknown) => {
+                            console.error("Wiederkehrende Einträge konnten nicht angelegt werden:", err);
+                        });
                         const response = await supabase
                             .from("pages")
                             .select(PAGE_COLUMNS)
@@ -253,9 +283,10 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             parentId: string | null,
             section: PageSection,
             kind: PageKind = "page",
-            // Known before the page exists, e.g. for links to it (Notion import).
-            id: string = crypto.randomUUID(),
+            options: NewPageOptions = {},
         ): Promise<Page> => {
+            const id = options.id ?? crypto.randomUUID();
+            const isTemplate = options.isTemplate === true;
             if (!userId || !workspaceId) {
                 throw new Error("Bitte wähle einen Workspace aus.");
             }
@@ -288,6 +319,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 kind,
                 position,
                 created_at: new Date().toISOString(),
+                ...(isTemplate ? { is_template: true } : {}),
             };
 
             setError("");
@@ -302,6 +334,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 parent_id: parentId,
                 kind,
                 position,
+                ...(isTemplate ? { is_template: true } : {}),
             });
 
             const failure = pageChangeError(response, "Die Seite konnte nicht erstellt werden.");
@@ -313,6 +346,38 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             }
 
             return createdPage;
+        },
+        [userId, workspaceId, requireOnline, switchedSince],
+    );
+
+    const createEntryFromTemplate = useCallback(
+        async (templateId: string): Promise<Page> => {
+            if (!userId) throw new Error("Bitte melde dich an.");
+            requireOnline();
+            const template = latestPages.current.find((page) => page.id === templateId);
+            if (!template?.parent_id) throw new Error("Diese Vorlage gibt es nicht mehr.");
+            setError("");
+
+            const response = await supabase.rpc("create_entry_from_template", { p_template_id: templateId });
+            const failure = pageChangeError(response, "Der Eintrag konnte nicht angelegt werden.");
+            if (failure) throw failure;
+            if (typeof response.data !== "string") throw new Error("Unerwartete Antwort beim Anlegen des Eintrags.");
+
+            // At once in the database; values and text come from the server with the reload.
+            const created: Page = {
+                ...template,
+                id: response.data,
+                owner_id: userId,
+                position: nextPosition(latestPages.current.filter((page) => page.parent_id === template.parent_id)),
+                created_at: new Date().toISOString(),
+                is_template: false,
+            };
+            if (!switchedSince(workspaceId)) {
+                latestPages.current = [...latestPages.current, created];
+                setPages((current) => [...current, created]);
+                setMovesToLoad((count) => count + 1);
+            }
+            return created;
         },
         [userId, workspaceId, requireOnline, switchedSince],
     );
@@ -452,6 +517,63 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         [workspaceId, requireOnline, switchedSince],
     );
 
+    const setFavorite = useCallback(
+        async (pageId: string, favorite: boolean) => {
+            requireOnline();
+            setError("");
+
+            const response = favorite
+                ? await supabase.from("page_favorites").insert({ page_id: pageId })
+                : await supabase.from("page_favorites").delete().eq("page_id", pageId);
+            const failure = pageChangeError(
+                response,
+                favorite
+                    ? "Die Seite konnte nicht zu den Favoriten hinzugefügt werden."
+                    : "Der Favorit konnte nicht entfernt werden.",
+            );
+            if (failure) throw failure;
+            if (switchedSince(workspaceId)) return;
+
+            setPages((current) => current.map((page) => (page.id === pageId ? { ...page, favorite } : page)));
+        },
+        [workspaceId, requireOnline, switchedSince],
+    );
+
+    const reorderPages = useCallback(
+        async (updates: PositionUpdate[]) => {
+            if (updates.length === 0) return;
+            requireOnline();
+            setError("");
+
+            const positions = new Map(updates.map((update) => [update.id, update.position]));
+            // Shown at once; the server's answer decides.
+            setPages((current) =>
+                current.map((page) =>
+                    positions.has(page.id) ? { ...page, position: positions.get(page.id) ?? null } : page,
+                ),
+            );
+            const responses = await Promise.all(
+                updates.map((update) =>
+                    supabase
+                        .from("pages")
+                        .update({ position: update.position })
+                        .eq("id", update.id)
+                        .eq("workspace_id", workspaceId)
+                        .select("id"),
+                ),
+            );
+            const failure = responses
+                .map((response) => pageChangeError(response, "Die Reihenfolge konnte nicht gespeichert werden."))
+                .find((item) => item !== null);
+            const refused = responses.some((response) => (response.data ?? []).length === 0);
+            if (failure || refused) {
+                setMovesToLoad((count) => count + 1);
+                throw failure ?? new Error(NO_EDIT_RIGHT_MESSAGE);
+            }
+        },
+        [workspaceId, requireOnline],
+    );
+
     const archivePage = useCallback(
         async (pageId: string): Promise<string[]> => {
             requireOnline();
@@ -550,6 +672,35 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         [archivedPages, workspaceId, requireOnline, switchedSince],
     );
 
+    /**
+     * Deletes every page of the trash that belongs to the user, in one
+     * request (no id list in the URL: large trees, 19a); their subpages go
+     * with them. Pages of others stay. Returns how many were deleted.
+     */
+    const emptyTrash = useCallback(async (): Promise<number> => {
+        if (!userId) throw new Error("Bitte melde dich an.");
+        requireOnline();
+        setError("");
+
+        const response = await supabase
+            .from("pages")
+            .delete()
+            .eq("workspace_id", workspaceId)
+            .eq("is_archived", true)
+            .eq("owner_id", userId)
+            .select("id");
+        const failure = pageChangeError(response, "Der Papierkorb konnte nicht geleert werden.");
+        if (failure) throw failure;
+        const deleted = response.data ?? [];
+        if (switchedSince(workspaceId)) return deleted.length;
+
+        const deletedIds = new Set(deleted.flatMap((row) => collectDescendantIds(row.id, archivedPages)));
+        setArchivedPages((current) => current.filter((page) => !deletedIds.has(page.id)));
+        // Cascades the answer does not list (subpages of others) come with the reload.
+        setMovesToLoad((count) => count + 1);
+        return deleted.length;
+    }, [archivedPages, userId, workspaceId, requireOnline, switchedSince]);
+
     return {
         pages: showsCurrentWorkspace ? pages : [],
         archivedPages: showsCurrentWorkspace ? archivedPages : [],
@@ -557,12 +708,16 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         error,
         fromCache,
         createPage,
+        createEntryFromTemplate,
         setPageSection,
         movePage,
         renamePage,
         updatePage,
+        setFavorite,
+        reorderPages,
         archivePage,
         restorePage,
         permanentlyDeletePage,
+        emptyTrash,
     };
 }

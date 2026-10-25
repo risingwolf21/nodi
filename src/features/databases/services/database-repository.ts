@@ -1,13 +1,17 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
+import { parseMembers } from "@/features/pages/services/workspace-members";
 import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
-import type {
-    DatabaseBlockRef,
-    DatabaseData,
-    DatabaseProperty,
-    DatabaseView,
-    PropertyOption,
-    RelatedEntry,
+import { canRollUp } from "../rollup";
+import {
+    TITLE_FIELD,
+    type DatabaseBlockRef,
+    type DatabaseData,
+    type DatabaseProperty,
+    type DatabaseView,
+    type PropertyOption,
+    type RelatedEntry,
+    type WorkspacePerson,
 } from "../types";
 
 export const DATABASE_OFFLINE_MESSAGE =
@@ -65,7 +69,7 @@ const optionsColumn = (options: PropertyOption[]) => ({ options });
 
 export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "numberFormat">;
 export type PropertyChanges = Partial<
-    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat">
+    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat" | "rollup" | "button">
 >;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
@@ -83,6 +87,8 @@ async function withRelatedEntries(properties: DatabaseProperty[]): Promise<Datab
         .select("id,title,icon,parentId:parent_id")
         .in("parent_id", targets)
         .eq("is_archived", false)
+        // Templates are no entries to link (package 26).
+        .eq("is_template", false)
         .order("position", { ascending: true, nullsFirst: false })
         .order("created_at");
     const failure = toRequestError(response);
@@ -111,6 +117,92 @@ async function withRelatedEntries(properties: DatabaseProperty[]): Promise<Datab
               }
             : property,
     );
+}
+
+/**
+ * Rollups read a property of the related entries: its definition and its
+ * stored values are loaded with the database, like the related entries
+ * (RLS decides what is readable). The title needs nothing more.
+ */
+async function withRollupTargets(properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const targetIds = [
+        ...new Set(
+            properties.flatMap((property) =>
+                property.rollup && property.rollup.targetPropertyId !== TITLE_FIELD
+                    ? [property.rollup.targetPropertyId]
+                    : [],
+            ),
+        ),
+    ];
+    if (targetIds.length === 0) return properties;
+
+    const [targets, values] = await Promise.all([
+        supabase.from("database_properties").select(PROPERTY_COLUMNS).in("id", targetIds),
+        supabase
+            .from("page_property_values")
+            .select("pageId:page_id,propertyId:property_id,value,updatedAt:updated_at")
+            .in("property_id", targetIds),
+    ]);
+    for (const response of [targets, values]) {
+        const failure = toRequestError(response);
+        if (failure) throw failure;
+    }
+    // Computed targets have no stored values: the rollup shows nothing for them.
+    const targetProperties = new Map(
+        parseProperties(targets.data)
+            .filter((property) => canRollUp(property.type))
+            .map((property) => [property.id, property]),
+    );
+    const valuesByProperty = new Map<string, Record<string, unknown>>();
+    for (const value of parseValues(values.data)) {
+        const record = valuesByProperty.get(value.propertyId) ?? {};
+        record[value.pageId] = value.value;
+        valuesByProperty.set(value.propertyId, record);
+    }
+    return properties.map((property) => {
+        const rollup = property.rollup;
+        if (!rollup || rollup.targetPropertyId === TITLE_FIELD) return property;
+        const target = targetProperties.get(rollup.targetPropertyId) ?? null;
+        const loaded = { property: target, values: valuesByProperty.get(rollup.targetPropertyId) ?? {} };
+        return { ...property, rollup: { ...rollup, target: loaded } };
+    });
+}
+
+const isPersonProperty = (property: DatabaseProperty | null | undefined) => property?.type === "person";
+
+/**
+ * Person properties (package 29) offer the members of the database's
+ * workspace, loaded with the database like the entries of a relation (also
+ * for a rollup that shows people). Only members may list them: for a
+ * database shared from another workspace the list stays empty.
+ */
+async function withPeople(databaseId: string, properties: DatabaseProperty[]): Promise<DatabaseProperty[]> {
+    const needed = properties.some(
+        (property) => isPersonProperty(property) || isPersonProperty(property.rollup?.target?.property),
+    );
+    if (!needed) return properties;
+
+    const page = await supabase.from("pages").select("workspace_id").eq("id", databaseId).maybeSingle();
+    const pageFailure = toRequestError(page);
+    if (pageFailure) throw pageFailure;
+    const workspaceId: unknown = page.data?.workspace_id;
+    let people: WorkspacePerson[] = [];
+    if (typeof workspaceId === "string") {
+        const response = await supabase.rpc("list_workspace_members", { p_workspace_id: workspaceId });
+        if (response.error?.code !== "42501") {
+            const failure = toRequestError(response);
+            if (failure) throw failure;
+            people = parseMembers(response.data).map((member) => ({ id: member.userId, email: member.email }));
+        }
+    }
+    return properties.map((property) => {
+        const target = property.rollup?.target;
+        if (property.rollup && target && isPersonProperty(target.property) && target.property) {
+            const rollup = { ...property.rollup, target: { ...target, property: { ...target.property, people } } };
+            return { ...property, rollup };
+        }
+        return isPersonProperty(property) ? { ...property, people } : property;
+    });
 }
 
 /** Whether a value write was taken or lost against a newer one (LWW). */
@@ -184,7 +276,10 @@ export const databaseRepository = {
         }
 
         return {
-            properties: await withRelatedEntries(parseProperties(properties.data)),
+            properties: await withPeople(
+                databaseId,
+                await withRollupTargets(await withRelatedEntries(parseProperties(properties.data))),
+            ),
             views: parseViews(views.data),
             values: parseValues(values.data),
             documentEditedAt,
@@ -233,16 +328,24 @@ export const databaseRepository = {
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, formula, numberFormat, ...rest } = changes;
-        // The server keeps a formula's expression and a number's format in options as well.
+        const { options, formula, numberFormat, rollup, button, ...rest } = changes;
+        // The server keeps a formula's expression, a number's format and a rollup's settings in options.
         const column =
             formula !== undefined
                 ? { expression: formula }
                 : numberFormat !== undefined
                   ? { format: numberFormat }
-                  : options
-                    ? optionsColumn(options)
-                    : undefined;
+                  : button !== undefined
+                    ? { label: button.label, actions: button.actions }
+                    : rollup !== undefined
+                      ? {
+                            relationPropertyId: rollup.relationPropertyId,
+                            targetPropertyId: rollup.targetPropertyId,
+                            function: rollup.function,
+                        }
+                      : options
+                        ? optionsColumn(options)
+                        : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)
@@ -251,6 +354,18 @@ export const databaseRepository = {
         const failure = databaseError(response, "Die Eigenschaft konnte nicht geändert werden.");
         if (failure) throw failure;
         return requireRow(parseProperties(response.data));
+    },
+
+    /** The properties of another database, e.g. for choosing what a rollup reads. */
+    async listProperties(databaseId: string): Promise<DatabaseProperty[]> {
+        const response = await supabase
+            .from("database_properties")
+            .select(PROPERTY_COLUMNS)
+            .eq("database_id", databaseId)
+            .order("position");
+        const failure = databaseError(response, "Die Eigenschaften konnten nicht geladen werden.");
+        if (failure) throw failure;
+        return parseProperties(response.data);
     },
 
     async deleteProperty(propertyId: string): Promise<void> {

@@ -212,6 +212,106 @@ test("Eine Datenbank in einer Notion-Seite wird zum Datenbank-Block mit ihren An
     await expect(editor.getByText("Hotel", { exact: true })).toBeVisible();
 });
 
+test("Ein neuerer Notion-Export (Ordner ohne ID, eingebettete Ansicht mit Sortierung) wird richtig übernommen", async ({
+    page,
+    context,
+}) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    // Copies of embedded views sit at the top and name the database by the start and end of its id.
+    const copy = `Untitled ${TASKS.slice(0, 4)}-${TASKS.slice(-4)}_all.csv`;
+    await chooseArchive(
+        page,
+        zipSync({
+            [`Bereich/Projekt ${ROME}.md`]: strToU8(
+                [
+                    "# Projekt",
+                    "",
+                    `[Aufgaben](Projekt/Aufgaben%20${TASKS}.md)`,
+                    "",
+                    `[Heute](../${encodeURIComponent(copy)})`,
+                    "",
+                    "filters:",
+                    "unlesbar",
+                    "sort:",
+                    "Name: descending",
+                    "",
+                    "Ende der Seite",
+                ].join("\n"),
+            ),
+            [`Bereich/Projekt/Aufgaben ${TASKS}.md`]: strToU8(`# Aufgaben\n\n[Aufgaben](Aufgaben%20${TASKS}_all.csv)`),
+            [`Bereich/Projekt/Aufgaben ${TASKS}_all.csv`]: strToU8("Name,Status\nAngebot,Offen\nBericht,Erledigt\n"),
+            [`Bereich/Projekt/Aufgaben/Bericht ${DAY}.md`]: strToU8("# Bericht\n\nStatus: Erledigt\n\nErster Entwurf."),
+            [copy]: strToU8("Name,Status\nAngebot,Offen\n"),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText(/1 von 1 Datenbank/)).toBeVisible();
+
+    const projectPage = backend.pages.find((item) => item.title === "Projekt");
+    const database = backend.pages.find((item) => item.title === "Aufgaben");
+    expect(database).toMatchObject({ kind: "database", parent_id: projectPage?.id });
+    expect(backend.pages.filter((item) => item.parent_id === database?.id).map((item) => item.title)).toEqual([
+        "Angebot",
+        "Bericht",
+    ]);
+    expect(backend.blockViews.map(({ databaseId, type }) => [databaseId, type])).toEqual([
+        [database?.id, "table"],
+        [database?.id, "board"],
+    ]);
+
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+    await page.getByRole("button", { name: "Projekt", exact: true }).click();
+    const editor = page.locator(".bn-editor");
+    await expect(editor).toContainText("Ende der Seite");
+    await expect(editor).not.toContainText("filters:");
+    // Sorted like the embedded view: by name, descending.
+    await expect(editor.getByRole("cell").filter({ hasText: /^(Angebot|Bericht)/ })).toHaveText([
+        /^Bericht/,
+        /^Angebot/,
+    ]);
+});
+
+test("Notion-Callouts werden Callout-Blöcke", async ({ page, context }) => {
+    const backend = createBackend();
+    await openApp(page, context, backend);
+    const dialog = await openImportDialog(page);
+    await chooseArchive(
+        page,
+        zipSync({
+            [`Tipps ${ROME}.md`]: strToU8(
+                [
+                    "# Tipps",
+                    "",
+                    "<aside>",
+                    "🧭 Früh **losgehen**",
+                    "",
+                    "Wasser mitnehmen",
+                    "",
+                    "</aside>",
+                    "",
+                    "Ende",
+                ].join("\n"),
+            ),
+        }),
+    );
+    await dialog.getByRole("button", { name: "Importieren" }).click();
+    await expect(dialog.getByText(/1 von 1 Seite/)).toBeVisible();
+    await dialog.getByRole("button", { name: "Schließen" }).click();
+
+    await page.getByRole("button", { name: "Tipps", exact: true }).click();
+    const callout = page.locator('.bn-editor [data-content-type="callout"]');
+    await expect(callout).toContainText("🧭");
+    await expect(callout).toContainText("Früh losgehen");
+    await expect(callout.locator("strong")).toHaveText("losgehen");
+    // The rest of the aside is nested in the callout.
+    await expect(page.locator(".bn-block:has(> * > [data-content-type=callout]) .bn-block-group")).toContainText(
+        "Wasser mitnehmen",
+    );
+    await expect(page.locator(".bn-editor")).not.toContainText("aside");
+});
+
 test("Notion-Relationen zwischen zwei Datenbanken werden zur Verknüpfung", async ({ page, context }) => {
     const backend = createBackend();
     await openApp(page, context, backend);

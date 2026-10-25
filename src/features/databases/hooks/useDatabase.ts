@@ -6,7 +6,9 @@ import {
     OPTION_COLORS,
     PROPERTY_TYPE_LABELS,
     VIEW_TYPE_LABELS,
+    buttonChanges,
     defaultOptions,
+    localDay,
     parseCachedDatabase,
     uniqueName,
 } from "../database-model";
@@ -46,6 +48,8 @@ export type UseDatabaseResult = {
     deleteView: (viewId: string) => Promise<void>;
     /** Shown at once; undone if the server rejects it. */
     setValue: (pageId: string, propertyId: string, value: PropertyValue) => Promise<void>;
+    /** A click on a button property of an entry: its values, one after the other (package 32f). */
+    runButton: (pageId: string, property: DatabaseProperty) => Promise<void>;
     /**
      * A new entry, with a first value if given (a board column, a calendar
      * day). Resolves to its page id, or null while another one is being
@@ -209,6 +213,8 @@ export function useDatabase(
                 position: nextPosition(current.properties),
             });
             change((latest) => ({ ...latest, properties: [...latest.properties, property] }));
+            // The members a person property offers come with the database.
+            if (type === "person") setManualReloads((count) => count + 1);
             return property;
         },
         [databaseId, requireEditable],
@@ -219,11 +225,21 @@ export function useDatabase(
             const current = requireEditable();
             const before = current.properties.find((item) => item.id === propertyId);
             const updated = await databaseRepository.updateProperty(propertyId, changes);
-            // The related entries are loaded with the database, not with the property.
+            // The related entries and a rollup's target are loaded with the database, not with the property.
+            const sameTarget =
+                updated.rollup?.targetPropertyId === before?.rollup?.targetPropertyId && before?.rollup?.target;
             const property =
                 updated.relation && before?.relation
                     ? { ...updated, relation: { ...updated.relation, entries: before.relation.entries } }
-                    : updated;
+                    : updated.rollup && sameTarget
+                      ? { ...updated, rollup: { ...updated.rollup, target: sameTarget } }
+                      : updated.type === "person" && before?.people
+                        ? { ...updated, people: before.people }
+                        : updated;
+            // A rollup reading something new needs its target's values, a new person property the members.
+            if ((changes.rollup && !sameTarget) || (property.type === "person" && !property.people)) {
+                setManualReloads((count) => count + 1);
+            }
             // The server clears the values when the type changes.
             const typeChanged = before !== undefined && before.type !== property.type;
             change((latest) => ({
@@ -396,6 +412,21 @@ export function useDatabase(
         [databaseId, requireEditable],
     );
 
+    const runButton = useCallback(
+        async (pageId: string, property: DatabaseProperty) => {
+            if (!property.button) return;
+            const current = requireEditable();
+            for (const { propertyId, value } of buttonChanges(
+                property.button,
+                current.properties,
+                localDay(new Date()),
+            )) {
+                await setValue(pageId, propertyId, value);
+            }
+        },
+        [requireEditable, setValue],
+    );
+
     // Repeated taps on "Neu" while an entry is being created add nothing.
     const creatingEntry = useRef(false);
     const createEntry = useCallback(
@@ -427,6 +458,7 @@ export function useDatabase(
         updateView,
         deleteView,
         setValue,
+        runButton,
         createEntry,
     };
 }

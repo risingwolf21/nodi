@@ -3,7 +3,10 @@ import type { Page } from "@/features/pages/types";
 import { buildRows } from "../database-model";
 import { useDatabase } from "../hooks/useDatabase";
 import { AddPropertyButton } from "./AddPropertyButton";
+import { ButtonEditor } from "./ButtonEditor";
 import { FormulaEditor } from "./FormulaEditor";
+import { RecurrenceSetting } from "./RecurrenceSetting";
+import { RollupEditor } from "./RollupEditor";
 import { PropertyTypeIcon } from "./PropertyTypeIcon";
 import { PropertyValueEditor } from "./PropertyValueEditor";
 
@@ -19,12 +22,10 @@ type PropertyBarProps = {
 
 /** The properties of an entry, between its title and its text (like Notion). */
 export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: PropertyBarProps) {
-    const { data, error, fromCache, addProperty, addRelation, updateProperty, addOption, setValue } = useDatabase(
-        databaseId,
-        userId,
-    );
+    const { data, error, fromCache, addProperty, addRelation, updateProperty, addOption, setValue, runButton } =
+        useDatabase(databaseId, userId);
     const [actionError, setActionError] = useState("");
-    const [formulaPropertyId, setFormulaPropertyId] = useState("");
+    const [editedPropertyId, setEditedPropertyId] = useState("");
 
     if (!data) {
         return error ? (
@@ -38,18 +39,26 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
     const [row] = buildRows([entry], data);
     const properties = [...data.properties].sort((a, b) => a.position - b.position);
     const formulaProperty = properties.find(
-        (property) => property.id === formulaPropertyId && property.type === "formula",
+        (property) => property.id === editedPropertyId && property.type === "formula",
     );
+    const rollupProperty = properties.find(
+        (property) => property.id === editedPropertyId && property.type === "rollup",
+    );
+    const buttonProperty = properties.find(
+        (property) => property.id === editedPropertyId && property.type === "button",
+    );
+    const editorLabel = { formula: "Formel", rollup: "Rollup", button: "Button" } as const;
 
     return (
         <section aria-label="Eigenschaften" className="mb-6 space-y-0.5 border-b px-[var(--page-gutter)] pb-4">
             {properties.map((property) => (
                 <div key={property.id} className="grid grid-cols-[minmax(7rem,10rem)_1fr] items-start gap-2">
-                    {property.type === "formula" && editable ? (
+                    {(property.type === "formula" || property.type === "rollup" || property.type === "button") &&
+                    editable ? (
                         <button
                             type="button"
-                            onClick={() => setFormulaPropertyId(property.id)}
-                            aria-label={`Formel „${property.name}“ bearbeiten`}
+                            onClick={() => setEditedPropertyId(property.id)}
+                            aria-label={`${editorLabel[property.type]} „${property.name}“ bearbeiten`}
                             className="flex min-h-8 min-w-0 items-center gap-1.5 rounded text-left text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                         >
                             <PropertyTypeIcon type={property.type} />
@@ -63,15 +72,22 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
                     )}
                     <PropertyValueEditor
                         property={property}
+                        pageId={entry.id}
                         value={row?.values[property.id] ?? null}
                         editable={editable}
                         onChange={(value) => setValue(entry.id, property.id, value)}
                         onCreateOption={(name) => addOption(property.id, name)}
                         onError={setActionError}
                         error={row?.errors[property.id]}
+                        onRunButton={() => runButton(entry.id, property)}
                     />
                 </div>
             ))}
+            <RecurrenceSetting
+                entryId={entry.id}
+                dateProperties={properties.filter((property) => property.type === "date")}
+                editable={editable}
+            />
             {editable && (
                 <AddPropertyButton
                     label="Eigenschaft hinzufügen"
@@ -81,7 +97,9 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
                     }
                     onAdd={async (type) => {
                         const property = await addProperty(type);
-                        if (type === "formula") setFormulaPropertyId(property.id);
+                        if (type === "formula" || type === "rollup" || type === "button") {
+                            setEditedPropertyId(property.id);
+                        }
                     }}
                     onError={setActionError}
                 />
@@ -91,8 +109,24 @@ export function PropertyBar({ entry, databaseId, userId, readOnly, databases }: 
                     property={formulaProperty}
                     data={data}
                     sample={entry}
-                    onClose={() => setFormulaPropertyId("")}
+                    onClose={() => setEditedPropertyId("")}
                     onSave={(formula) => updateProperty(formulaProperty.id, { formula })}
+                />
+            )}
+            {rollupProperty && (
+                <RollupEditor
+                    property={rollupProperty}
+                    properties={properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(rollup) => updateProperty(rollupProperty.id, { rollup })}
+                />
+            )}
+            {buttonProperty && (
+                <ButtonEditor
+                    property={buttonProperty}
+                    properties={properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(button) => updateProperty(buttonProperty.id, { button })}
                 />
             )}
             {actionError && (

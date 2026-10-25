@@ -1,7 +1,7 @@
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { StoredPage } from "../types";
-import { PageTreeCache } from "./page-tree-cache";
+import { PageTreeCache, parseStoredPages } from "./page-tree-cache";
 
 let cache: PageTreeCache;
 
@@ -82,6 +82,65 @@ describe("PageTreeCache", () => {
                 position: null,
                 created_at: "",
             },
+        ]);
+    });
+
+    it("keeps templates of databases (package 26)", async () => {
+        const template = {
+            id: "t1",
+            title: "Wochentreffen",
+            parent_id: "db",
+            owner_id: "u1",
+            visibility: "private" as const,
+            is_archived: false,
+            icon: null,
+            full_width: false,
+            kind: "page" as const,
+            position: 1,
+            created_at: "",
+            is_template: true,
+        };
+        await cache.putPages("w1", [template, { ...template, id: "e1", is_template: false }]);
+        expect((await cache.getPages("w1"))?.map((page) => [page.id, page.is_template])).toEqual([
+            ["t1", true],
+            ["e1", undefined],
+        ]);
+    });
+
+    it("reads favorites from the server's embedded rows and keeps them as a flag (package 30b)", () => {
+        const row = {
+            id: "p1",
+            title: "Reise",
+            parent_id: null,
+            owner_id: "u1",
+            visibility: "private",
+            is_archived: false,
+        };
+        expect(
+            parseStoredPages([
+                { ...row, favorites: [{ created_at: "2026-10-20T10:00:00Z" }] },
+                { ...row, id: "p2", favorites: [] },
+                { ...row, id: "p3", favorite: true },
+            ])?.map((page) => [page.id, page.favorite]),
+        ).toEqual([
+            ["p1", true],
+            ["p2", undefined],
+            ["p3", true],
+        ]);
+    });
+
+    it("keeps covers (package 30c); trees cached before have none", () => {
+        const row = { id: "p1", title: "Reise", parent_id: null, is_archived: false };
+        expect(
+            parseStoredPages([
+                { ...row, cover: "gradient:ocean" },
+                { ...row, id: "p2", cover: null },
+                { ...row, id: "p3" },
+            ])?.map((page) => [page.id, page.cover]),
+        ).toEqual([
+            ["p1", "gradient:ocean"],
+            ["p2", undefined],
+            ["p3", undefined],
         ]);
     });
 

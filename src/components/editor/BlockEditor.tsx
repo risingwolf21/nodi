@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu, isTouchDevice } from "@blocknote/core";
 import {
+    FormattingToolbar,
     FormattingToolbarController,
+    getFormattingToolbarItems,
     getDefaultReactSlashMenuItems,
     MobileFormattingToolbarController,
     SuggestionMenuController,
@@ -12,7 +14,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { Table2 } from "lucide-react";
+import { Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -21,6 +23,8 @@ import { EditorFrame } from "@/components/editor/EditorFrame";
 import { editorTheme } from "@/components/editor/editor-theme";
 import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
 import { editorSchema } from "@/components/editor/editor-schema";
+import { CommentButton } from "@/components/editor/CommentButton";
+import { displayTitle } from "@/features/pages/page-display";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
 import { localDocumentStoreFor, type LocalDocumentStore } from "@/features/editor/services/local-document-store";
@@ -57,6 +61,8 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
+// The "@" menu shows this many pages; typing narrows them down.
+const PAGE_LINK_CHOICES = 12;
 
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
@@ -99,7 +105,19 @@ function statusText(status: SessionStatus): string {
  * of the user, package 20), so typing keeps the room; formatting otherwise
  * goes through "/" and Markdown shortcuts.
  */
-function SelectionFormattingToolbar() {
+/** BlockNote's buttons and "Kommentieren" (package 31b). */
+function toolbarWithComments(pageId: string) {
+    return function ToolbarWithComments() {
+        return (
+            <FormattingToolbar>
+                {getFormattingToolbarItems()}
+                <CommentButton key="comment" pageId={pageId} />
+            </FormattingToolbar>
+        );
+    };
+}
+
+function SelectionFormattingToolbar({ toolbar }: { toolbar: () => ReactNode }) {
     // Keeps BlockNote's keyboard detection running from the start: it has to
     // see the full height before the keyboard opens.
     useVirtualKeyboard();
@@ -110,7 +128,7 @@ function SelectionFormattingToolbar() {
             return !selection.empty && selection.$from.parent.isTextblock;
         },
     });
-    return textSelected ? <MobileFormattingToolbarController /> : null;
+    return textSelected ? <MobileFormattingToolbarController formattingToolbar={toolbar} /> : null;
 }
 
 function loadErrorMessage(error: unknown): string {
@@ -227,6 +245,48 @@ function EditorContent({
         session.current?.recordEdit(editor.document);
     }, editor);
 
+    // Pages to link: known pages (not templates), title matches first, a few at a time.
+    // Columns (package 32e): each column starts with an empty paragraph, the cursor in the first.
+    const insertColumns = (count: number) => {
+        const paragraphIds = Array.from({ length: count }, () => crypto.randomUUID());
+        insertOrUpdateBlockForSlashMenu(editor, {
+            type: "columns",
+            children: paragraphIds.map((id) => ({
+                type: "column",
+                children: [{ id, type: "paragraph" }],
+            })),
+        });
+        editor.setTextCursorPosition(paragraphIds[0], "start");
+    };
+
+    // A stable component: a new one on each render would remount the toolbar.
+    const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
+
+    const pageLinkItems = (query: string) => {
+        const needle = query.trim().toLocaleLowerCase("de");
+        return databaseBlocks.pages
+            .filter((page) => !page.is_template && page.id !== pageId)
+            .filter((page) => displayTitle(page).toLocaleLowerCase("de").includes(needle))
+            .slice(0, PAGE_LINK_CHOICES)
+            .map((page) => ({
+                title: displayTitle(page),
+                group: "Seite verlinken",
+                icon: page.icon ? (
+                    <span>{page.icon}</span>
+                ) : page.kind === "database" ? (
+                    <Table2 size={18} />
+                ) : (
+                    <FileText size={18} />
+                ),
+                onItemClick: () => {
+                    editor.insertInlineContent([
+                        { type: "pageLink", props: { pageId: page.id, title: displayTitle(page) } },
+                        " ",
+                    ]);
+                },
+            }));
+    };
+
     const databaseBlockContext: DatabaseBlockContextValue = {
         ...databaseBlocks,
         pageId,
@@ -295,7 +355,11 @@ function EditorContent({
                     formattingToolbar={false}
                 >
                     {/* Elsewhere the toolbar floats at the selection, as before. */}
-                    {isTouchDevice() ? <SelectionFormattingToolbar /> : <FormattingToolbarController />}
+                    {isTouchDevice() ? (
+                        <SelectionFormattingToolbar toolbar={commentToolbar} />
+                    ) : (
+                        <FormattingToolbarController formattingToolbar={commentToolbar} />
+                    )}
                     <SuggestionMenuController
                         triggerCharacter="/"
                         getItems={(query) =>
@@ -303,6 +367,24 @@ function EditorContent({
                                 filterSuggestionItems(
                                     [
                                         ...getDefaultReactSlashMenuItems(editor),
+                                        {
+                                            title: "Callout",
+                                            subtext: "Hervorgehobener Text mit Emoji",
+                                            aliases: ["callout", "hinweis", "info", "box", "aside"],
+                                            group: "Einfache Blöcke",
+                                            icon: <MessageSquareText size={18} />,
+                                            onItemClick: () => {
+                                                insertOrUpdateBlockForSlashMenu(editor, { type: "callout" });
+                                            },
+                                        },
+                                        ...[2, 3].map((count) => ({
+                                            title: `${count} Spalten`,
+                                            subtext: "Blöcke nebeneinander (auf dem Handy untereinander)",
+                                            aliases: ["spalten", "columns", "nebeneinander", `${count}`],
+                                            group: "Einfache Blöcke",
+                                            icon: <Columns2 size={18} />,
+                                            onItemClick: () => insertColumns(count),
+                                        })),
                                         {
                                             title: "Datenbank",
                                             subtext: "Ansicht einer bestehenden Datenbank",
@@ -318,6 +400,11 @@ function EditorContent({
                                 ),
                             )
                         }
+                    />
+                    {/* "@" links a page (package 28). */}
+                    <SuggestionMenuController
+                        triggerCharacter="@"
+                        getItems={(query) => Promise.resolve(pageLinkItems(query))}
                     />
                 </BlockNoteView>
             </DatabaseBlockContext>

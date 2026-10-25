@@ -1,4 +1,5 @@
 import { isImagePath } from "@/features/files/file-reference";
+import type { NotionSort } from "./notion-export";
 
 // Blocks as BlockNote's Markdown parser returns them: plain JSON.
 type JsonObject = Record<string, unknown>;
@@ -6,16 +7,17 @@ type JsonObject = Record<string, unknown>;
 /** Where a link or file URL of a Markdown page points to. */
 export type LinkTarget =
     | { kind: "web" }
-    | { kind: "page" }
-    /** `databaseId` of the imported database; null when it is not imported. */
-    | { kind: "database"; databaseId: string | null }
+    /** `pageId` of the imported page; null when it is not imported (the link becomes text). */
+    | { kind: "page"; pageId?: string | null }
+    /** `databaseId` of the imported database; null when it is not imported. `sort`: of an embedded view. */
+    | { kind: "database"; databaseId: string | null; sort?: NotionSort[] }
     | { kind: "file"; path: string }
     | { kind: "missing"; path: string };
 
 export type UploadResult = { reference: string } | { error: string };
 
 /** A "Datenbank" block made from a link (package 19d); it gets the database's views. */
-export type DatabaseBlockLink = { blockId: string; databaseId: string };
+export type DatabaseBlockLink = { blockId: string; databaseId: string; sort: NotionSort[] };
 
 export type RewriteResult = {
     blocks: JsonObject[];
@@ -38,8 +40,9 @@ function note(text: string): JsonObject {
  * Turns the parsed Markdown of an exported page into Nodi blocks: images
  * and attachments of the export are uploaded and referenced, a link to an
  * imported database on its own becomes a "Datenbank" block (as Notion shows
- * a database in a page), links to other exported pages become plain text
- * (their pages exist in the tree), links to the web stay. Problems are
+ * a database in a page), links to imported pages become page links
+ * (package 28), other links of the export become plain text, links to the
+ * web stay. Problems are
  * reported, nothing is dropped silently.
  */
 export async function rewriteImportedBlocks(
@@ -72,10 +75,19 @@ export async function rewriteImportedBlocks(
             if (!isObject(item) || item.type !== "link" || typeof item.href !== "string") return [item];
             const target = classify(item.href);
             if (target.kind === "web") return [item];
+            const content = Array.isArray(item.content) ? item.content : [];
+            if (target.kind === "page" && target.pageId) {
+                // A link to an imported page (package 28); the title as the text showed it.
+                const title = content
+                    .map((part) => (isObject(part) && typeof part.text === "string" ? part.text : ""))
+                    .join("")
+                    .trim();
+                return [{ type: "pageLink", props: { pageId: target.pageId, title } }];
+            }
             if (target.kind === "file") {
                 problems.push(`${fileName(target.path)}: Anhang im Fließtext, als Text übernommen`);
             }
-            return Array.isArray(item.content) ? item.content : [];
+            return content;
         });
 
     const rewriteContent = (content: unknown): unknown => {
@@ -137,7 +149,7 @@ export async function rewriteImportedBlocks(
         if (link?.kind === "database" && link.databaseId) {
             // A fixed id: the block's views are stored under it.
             const blockId = crypto.randomUUID();
-            databaseBlocks.push({ blockId, databaseId: link.databaseId });
+            databaseBlocks.push({ blockId, databaseId: link.databaseId, sort: link.sort ?? [] });
             return [
                 { id: blockId, type: "database", props: { databaseId: link.databaseId }, children: block.children },
             ];
@@ -154,4 +166,49 @@ export async function rewriteImportedBlocks(
     };
 
     return { blocks: await rewriteAll(blocks), files, problems, databaseBlocks };
+}
+
+const ASIDE = /<aside>([\s\S]*?)<\/aside>/g;
+// An emoji at the start of a callout's text is its icon ("💡 Tipp").
+const LEADING_EMOJI = /^(\p{Extended_Pictographic}️?(?:‍\p{Extended_Pictographic}️?)*)\s*/u;
+
+const isOnlyLink = (content: unknown[]) =>
+    content.filter((item) => !(isObject(item) && item.type === "text" && String(item.text).trim() === "")).length ===
+        1 && content.some((item) => isObject(item) && item.type === "link");
+
+/** A callout from the blocks inside an `<aside>`: the first paragraph is its text, the rest is nested. */
+function callout(inner: unknown[]): JsonObject {
+    const [first, ...rest] = inner;
+    // A link on its own stays a block (it may become a database or a file).
+    if (!isObject(first) || first.type !== "paragraph" || !Array.isArray(first.content) || isOnlyLink(first.content)) {
+        return { type: "callout", props: {}, content: [], children: inner };
+    }
+    const content = [...first.content];
+    const props: JsonObject = {};
+    const [head] = content;
+    const emoji = isObject(head) && head.type === "text" ? LEADING_EMOJI.exec(String(head.text)) : null;
+    if (emoji && isObject(head)) {
+        props.emoji = emoji[1];
+        const text = String(head.text).slice(emoji[0].length);
+        if (text) content[0] = { ...head, text };
+        else content.shift();
+    }
+    const children = Array.isArray(first.children) ? first.children : [];
+    return { type: "callout", props, content, children: [...children, ...rest] };
+}
+
+/** Parses an exported page; Notion's callouts (`<aside>…</aside>`) become callout blocks (package 22). */
+export function markdownToImportedBlocks(
+    markdown: string,
+    markdownToBlocks: (markdown: string) => unknown[],
+): unknown[] {
+    const parse = (part: string) => (part.trim() ? markdownToBlocks(part) : []);
+    const blocks: unknown[] = [];
+    let end = 0;
+    for (const match of markdown.matchAll(ASIDE)) {
+        blocks.push(...parse(markdown.slice(end, match.index)), callout(parse(match[1])));
+        end = match.index + match[0].length;
+    }
+    blocks.push(...parse(markdown.slice(end)));
+    return blocks;
 }

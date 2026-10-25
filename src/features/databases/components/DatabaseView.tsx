@@ -1,6 +1,18 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { CalendarDays, Columns3, LayoutGrid, List, Map as MapIcon, MapPin, Plus, Rss, Table2 } from "lucide-react";
+import {
+    CalendarDays,
+    ChartGantt,
+    Columns3,
+    LayoutGrid,
+    List,
+    Map as MapIcon,
+    MapPin,
+    Plus,
+    Rss,
+    Table2,
+} from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { placeBefore, type PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page } from "@/features/pages/types";
 import { cn } from "@/lib/utils";
 import {
@@ -9,20 +21,28 @@ import {
     applyView,
     buildRows,
     canGroupBy,
+    chosenGroupProperty,
     dateProperty,
     defaultOptions,
     groupProperty,
+    groupRows,
     placeProperty,
     visibleProperties,
+    type DatabaseRow,
 } from "../database-model";
 import { useDatabase, type DatabaseBlockOptions, type NewEntryValue } from "../hooks/useDatabase";
 import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
 import { BoardView } from "./BoardView";
+import { ButtonEditor } from "./ButtonEditor";
 import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
 import { FormulaEditor } from "./FormulaEditor";
+import { RollupEditor } from "./RollupEditor";
+import { TemplatesMenu, type TemplateActions } from "./TemplatesMenu";
+import { TimelineView } from "./TimelineView";
 import { GalleryView } from "./GalleryView";
+import { GroupedRows } from "./GroupedRows";
 import { ListView } from "./ListView";
 import { MapView } from "./MapView";
 import { TableView } from "./TableView";
@@ -36,11 +56,12 @@ const VIEW_ICONS = {
     feed: Rss,
     calendar: CalendarDays,
     map: MapIcon,
+    timeline: ChartGantt,
 } satisfies Record<ViewType, unknown>;
 
 type DatabaseViewProps = {
     database: Page;
-    /** Pages below the database, from the page tree. */
+    /** Pages below the database, from the page tree (templates included, package 26). */
     entries: Page[];
     userId: string | undefined;
     /** The page tree is a cached copy (offline). */
@@ -53,6 +74,10 @@ type DatabaseViewProps = {
     databases?: Page[];
     /** Shown as a block in a page: the block's own views (package 19c). */
     block?: DatabaseBlockOptions;
+    /** Templates of the database; undefined where they cannot be used (blocks, other workspaces). */
+    templateActions?: TemplateActions;
+    /** New manual order of entries (package 32a); undefined where it cannot change. */
+    onReorderEntries?: (updates: PositionUpdate[]) => Promise<void>;
 };
 
 function ViewTab({
@@ -140,7 +165,7 @@ function ViewTab({
  */
 export function DatabaseView({
     database,
-    entries,
+    entries: pagesBelow,
     userId,
     readOnly,
     onOpenEntry,
@@ -148,7 +173,12 @@ export function DatabaseView({
     onRenameEntry,
     databases,
     block,
+    templateActions,
+    onReorderEntries,
 }: DatabaseViewProps) {
+    // Templates are entries the views leave out; "Vorlagen" offers them.
+    const entries = useMemo(() => pagesBelow.filter((page) => !page.is_template), [pagesBelow]);
+    const templates = useMemo(() => pagesBelow.filter((page) => page.is_template), [pagesBelow]);
     const {
         data,
         loading,
@@ -163,12 +193,13 @@ export function DatabaseView({
         updateView,
         deleteView,
         setValue,
+        runButton,
         createEntry,
     } = useDatabase(database.id, userId, onCreateEntry, block);
     const [activeViewId, setActiveViewId] = useState("");
     const [actionError, setActionError] = useState("");
     const [viewToDelete, setViewToDelete] = useState<DatabaseViewModel | null>(null);
-    const [formulaPropertyId, setFormulaPropertyId] = useState("");
+    const [editedPropertyId, setEditedPropertyId] = useState("");
     const [addViewOpen, setAddViewOpen] = useState(false);
 
     const views = useMemo(() => [...(data?.views ?? [])].sort((a, b) => a.position - b.position), [data]);
@@ -206,10 +237,24 @@ export function DatabaseView({
 
     const columns = activeView ? visibleProperties(data.properties, activeView.config) : [];
     const formulaProperty = data.properties.find(
-        (property) => property.id === formulaPropertyId && property.type === "formula",
+        (property) => property.id === editedPropertyId && property.type === "formula",
+    );
+    const buttonProperty = data.properties.find(
+        (property) => property.id === editedPropertyId && property.type === "button",
+    );
+    const rollupProperty = data.properties.find(
+        (property) => property.id === editedPropertyId && property.type === "rollup",
     );
     const boardGroup = activeView?.type === "board" ? groupProperty(data.properties, activeView.config) : undefined;
-    const calendarDate = activeView?.type === "calendar" ? dateProperty(data.properties, activeView.config) : undefined;
+    const listGroup =
+        activeView?.type === "table" || activeView?.type === "list"
+            ? chosenGroupProperty(data.properties, activeView.config)
+            : undefined;
+    // The calendar and the timeline (package 32d) are built on a date property.
+    const calendarDate =
+        activeView?.type === "calendar" || activeView?.type === "timeline"
+            ? dateProperty(data.properties, activeView.config)
+            : undefined;
     const mapPlace = activeView?.type === "map" ? placeProperty(data.properties, activeView.config) : undefined;
 
     // Views other than the table open a new entry at once (like Notion); a
@@ -222,6 +267,46 @@ export function DatabaseView({
             report(err instanceof Error ? err.message : "Der Eintrag konnte nicht angelegt werden.");
         }
     }
+
+    // The table, whole or for one group (package 32c).
+    const renderTable = (tableRows: DatabaseRow[], createTableEntry: (() => Promise<string>) | undefined) =>
+        activeView && (
+            <TableView
+                rows={tableRows}
+                // Grouped too, the value stays editable here: changing it moves the entry to its group.
+                properties={columns}
+                editable={editable}
+                onOpenEntry={onOpenEntry}
+                onRenameEntry={onRenameEntry}
+                onCreateEntry={createTableEntry}
+                onSetValue={setValue}
+                onCreateOption={addOption}
+                relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
+                onAddRelation={(target) => addRelation(target, database.title)}
+                onAddProperty={async (type) => {
+                    const property = await addProperty(type);
+                    // A new formula needs its expression first, a rollup its settings.
+                    if (type === "formula" || type === "rollup" || type === "button") setEditedPropertyId(property.id);
+                }}
+                onEditFormula={setEditedPropertyId}
+                onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
+                onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
+                onChangePropertyType={(propertyId, type) =>
+                    updateProperty(propertyId, { type, options: defaultOptions(type) })
+                }
+                onHideProperty={(propertyId) =>
+                    updateView(activeView.id, {
+                        config: {
+                            ...activeView.config,
+                            hiddenPropertyIds: [...activeView.config.hiddenPropertyIds, propertyId],
+                        },
+                    })
+                }
+                onDeleteProperty={deleteProperty}
+                onError={report}
+                onRunButton={runButton}
+            />
+        );
 
     return (
         <div className="space-y-2">
@@ -281,6 +366,21 @@ export function DatabaseView({
                                 onError={report}
                             />
                         )}
+                        {(activeView.type === "table" || activeView.type === "list") && (
+                            <PropertyChoicePanel
+                                label="Gruppieren"
+                                icon={Columns3}
+                                emptyText="Keine Auswahl- oder Status-Eigenschaft."
+                                noneLabel="Nicht gruppieren"
+                                choices={data.properties.filter((property) => canGroupBy(property.type))}
+                                current={listGroup}
+                                editable={viewsEditable}
+                                onChoose={(groupByPropertyId) =>
+                                    updateView(activeView.id, { config: { ...activeView.config, groupByPropertyId } })
+                                }
+                                onError={report}
+                            />
+                        )}
                         {activeView.type === "map" && (
                             <PropertyChoicePanel
                                 label="Ort"
@@ -295,7 +395,7 @@ export function DatabaseView({
                                 onError={report}
                             />
                         )}
-                        {activeView.type === "calendar" && (
+                        {(activeView.type === "calendar" || activeView.type === "timeline") && (
                             <PropertyChoicePanel
                                 label="Datum"
                                 icon={CalendarDays}
@@ -306,6 +406,14 @@ export function DatabaseView({
                                 onChoose={(datePropertyId) =>
                                     updateView(activeView.id, { config: { ...activeView.config, datePropertyId } })
                                 }
+                                onError={report}
+                            />
+                        )}
+                        {templateActions && editable && (
+                            <TemplatesMenu
+                                templates={templates}
+                                actions={templateActions}
+                                onOpen={onOpenEntry}
                                 onError={report}
                             />
                         )}
@@ -364,21 +472,48 @@ export function DatabaseView({
                             : undefined
                     }
                     onMoveEntry={(pageId, optionId) => setValue(pageId, boardGroup?.id ?? "", optionId)}
+                    // The manual order counts only where no sort rule decides (like Notion).
+                    onPlaceEntry={
+                        onReorderEntries && activeView.config.sort.length === 0
+                            ? (pageId, beforeId) => onReorderEntries(placeBefore(entries, pageId, beforeId))
+                            : undefined
+                    }
                     onAddGroupProperty={async () => {
                         await addProperty("status");
                     }}
                     onError={report}
                 />
             )}
-            {activeView?.type === "list" && (
-                <ListView
-                    rows={rows}
-                    properties={columns}
-                    editable={editable}
-                    onOpenEntry={onOpenEntry}
-                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
-                />
-            )}
+            {activeView?.type === "list" &&
+                (listGroup ? (
+                    <GroupedRows groups={groupRows(rows, listGroup)} property={listGroup}>
+                        {(group) => (
+                            <ListView
+                                rows={group.rows}
+                                properties={columns.filter((property) => property.id !== listGroup.id)}
+                                editable={editable}
+                                onOpenEntry={onOpenEntry}
+                                onCreateEntry={
+                                    onCreateEntry
+                                        ? () =>
+                                              createAndOpenEntry({
+                                                  propertyId: listGroup.id,
+                                                  value: group.option?.id ?? null,
+                                              })
+                                        : undefined
+                                }
+                            />
+                        )}
+                    </GroupedRows>
+                ) : (
+                    <ListView
+                        rows={rows}
+                        properties={columns}
+                        editable={editable}
+                        onOpenEntry={onOpenEntry}
+                        onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
+                    />
+                ))}
             {activeView?.type === "gallery" && (
                 <GalleryView
                     rows={rows}
@@ -410,6 +545,20 @@ export function DatabaseView({
                                   createAndOpenEntry({ propertyId: calendarDate.id, value: { start: day, end: null } })
                             : undefined
                     }
+                    onMoveEntry={(pageId, value) => setValue(pageId, calendarDate?.id ?? "", value)}
+                    onAddDateProperty={async () => {
+                        await addProperty("date");
+                    }}
+                    onError={report}
+                />
+            )}
+            {activeView?.type === "timeline" && (
+                <TimelineView
+                    rows={rows}
+                    dateProperty={calendarDate}
+                    editable={editable}
+                    onOpenEntry={onOpenEntry}
+                    onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
                     onAddDateProperty={async () => {
                         await addProperty("date");
                     }}
@@ -429,49 +578,49 @@ export function DatabaseView({
                     onError={report}
                 />
             )}
-            {activeView?.type === "table" && (
-                <TableView
-                    rows={rows}
-                    properties={columns}
-                    editable={editable}
-                    onOpenEntry={onOpenEntry}
-                    onRenameEntry={onRenameEntry}
-                    onCreateEntry={onCreateEntry}
-                    onSetValue={setValue}
-                    onCreateOption={addOption}
-                    relationTargets={databases?.map(({ id, title, icon }) => ({ id, title, icon }))}
-                    onAddRelation={(target) => addRelation(target, database.title)}
-                    onAddProperty={async (type) => {
-                        const property = await addProperty(type);
-                        // A new formula needs its expression first.
-                        if (type === "formula") setFormulaPropertyId(property.id);
-                    }}
-                    onEditFormula={setFormulaPropertyId}
-                    onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
-                    onChangeNumberFormat={(propertyId, numberFormat) => updateProperty(propertyId, { numberFormat })}
-                    onChangePropertyType={(propertyId, type) =>
-                        updateProperty(propertyId, { type, options: defaultOptions(type) })
-                    }
-                    onHideProperty={(propertyId) =>
-                        updateView(activeView.id, {
-                            config: {
-                                ...activeView.config,
-                                hiddenPropertyIds: [...activeView.config.hiddenPropertyIds, propertyId],
-                            },
-                        })
-                    }
-                    onDeleteProperty={deleteProperty}
-                    onError={report}
-                />
-            )}
+            {activeView?.type === "table" &&
+                (listGroup ? (
+                    <GroupedRows groups={groupRows(rows, listGroup)} property={listGroup}>
+                        {(group) =>
+                            renderTable(
+                                group.rows,
+                                onCreateEntry
+                                    ? async () =>
+                                          (await createEntry({
+                                              propertyId: listGroup.id,
+                                              value: group.option?.id ?? null,
+                                          })) ?? ""
+                                    : undefined,
+                            )
+                        }
+                    </GroupedRows>
+                ) : (
+                    renderTable(rows, onCreateEntry)
+                ))}
 
             {formulaProperty && (
                 <FormulaEditor
                     property={formulaProperty}
                     data={data}
                     sample={rows[0]?.page ?? entries[0]}
-                    onClose={() => setFormulaPropertyId("")}
+                    onClose={() => setEditedPropertyId("")}
                     onSave={(formula) => updateProperty(formulaProperty.id, { formula })}
+                />
+            )}
+            {buttonProperty && (
+                <ButtonEditor
+                    property={buttonProperty}
+                    properties={data.properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(button) => updateProperty(buttonProperty.id, { button })}
+                />
+            )}
+            {rollupProperty && (
+                <RollupEditor
+                    property={rollupProperty}
+                    properties={data.properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(rollup) => updateProperty(rollupProperty.id, { rollup })}
                 />
             )}
 

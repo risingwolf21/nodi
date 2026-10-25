@@ -3,16 +3,21 @@ import type { Page } from "@/features/pages/types";
 import {
     applyView,
     buildRows,
+    buttonChanges,
     dateFromInput,
     dateHasTime,
     dateInputValue,
     EMPTY_VIEW_CONFIG,
     dateProperty,
     formatValue,
+    chosenGroupProperty,
     groupProperty,
     groupRows,
     matchesFilter,
     monthGrid,
+    moveDate,
+    timelineBars,
+    weekDays,
     parseCachedDatabase,
     parseProperties,
     parseViewConfig,
@@ -189,6 +194,12 @@ describe("board", () => {
         position: 0,
     };
 
+    it("groups tables and lists only by a chosen select or status property (package 32c)", () => {
+        expect(chosenGroupProperty([status], config())).toBeUndefined();
+        expect(chosenGroupProperty([status], config({ groupByPropertyId: "status" }))).toBe(status);
+        expect(chosenGroupProperty([estimate], config({ groupByPropertyId: "estimate" }))).toBeUndefined();
+    });
+
     it("groups by the chosen property, otherwise by the first status", () => {
         expect(groupProperty([priority, status, estimate], config())?.id).toBe("status");
         expect(groupProperty([priority, status], config({ groupByPropertyId: "priority" }))?.id).toBe("priority");
@@ -229,6 +240,60 @@ describe("feed", () => {
 });
 
 describe("calendar", () => {
+    it("puts entries on the timeline, clipped to the shown days", () => {
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [due],
+            values: [
+                { pageId: "a", propertyId: "due", value: { start: "2026-10-18", end: "2026-10-22" }, updatedAt: "" },
+                { pageId: "b", propertyId: "due", value: { start: "2026-10-25", end: null }, updatedAt: "" },
+                { pageId: "c", propertyId: "due", value: { start: "2026-12-01", end: null }, updatedAt: "" },
+            ],
+        });
+        expect(
+            timelineBars(rows, due, "2026-10-19", 7).map(({ row, first, last, startsBefore, endsAfter }) => [
+                row.page.id,
+                first,
+                last,
+                startsBefore,
+                endsAfter,
+            ]),
+        ).toEqual([
+            ["a", 0, 3, true, false],
+            ["b", 6, 6, false, false],
+        ]);
+    });
+
+    it("shows the week of a day, Monday first", () => {
+        expect(weekDays("2026-10-22")).toEqual([
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21",
+            "2026-10-22",
+            "2026-10-23",
+            "2026-10-24",
+            "2026-10-25",
+        ]);
+        expect(weekDays("2026-11-01")[0]).toBe("2026-10-26");
+    });
+
+    it("moves a dragged date by whole days, ranges keep their length, times their time of day", () => {
+        expect(moveDate({ start: "2026-10-20", end: null }, "2026-10-20", "2026-10-23")).toEqual({
+            start: "2026-10-23",
+            end: null,
+        });
+        // Dragged from the second day of a range to the day before it.
+        expect(moveDate({ start: "2026-10-20", end: "2026-10-22" }, "2026-10-21", "2026-10-19")).toEqual({
+            start: "2026-10-18",
+            end: "2026-10-20",
+        });
+        const start = new Date(2026, 9, 24, 14, 30).toISOString();
+        const moved = moveDate({ start, end: null }, "2026-10-24", "2026-10-26");
+        // Across the end of summer time (25 October 2026 in Germany) the local time stays.
+        expect(new Date(moved.start).getHours()).toBe(14);
+        expect(new Date(moved.start).getDate()).toBe(26);
+    });
+
     it("starts weeks on Monday and covers the whole month", () => {
         const weeks = monthGrid(2026, 9); // October 2026 starts on a Thursday.
         expect(weeks[0]).toEqual([
@@ -479,6 +544,152 @@ describe("relations", () => {
     });
 });
 
+describe("person and files", () => {
+    const KIM = "22222222-2222-4222-8222-222222222222";
+    const ALEX = "33333333-3333-4333-8333-333333333333";
+    const PAGE = "e0000000-0000-4000-8000-000000000001";
+    const PLAN = `${PAGE}/c0000000-0000-4000-8000-000000000001-Plan.pdf`;
+    const person: DatabaseProperty = {
+        id: "person",
+        databaseId: "db",
+        name: "Zuständig",
+        type: "person",
+        options: [],
+        position: 6,
+        people: [
+            { id: KIM, email: "kim@nodi.test" },
+            { id: ALEX, email: "alex@nodi.test" },
+        ],
+    };
+    const files: DatabaseProperty = {
+        id: "files",
+        databaseId: "db",
+        name: "Anhänge",
+        type: "files",
+        options: [],
+        position: 7,
+    };
+
+    it("reads user ids and storage paths only", () => {
+        expect(readValue(person, [KIM, "kim@nodi.test", 3])).toEqual([KIM]);
+        expect(readValue(person, "kim")).toBeNull();
+        expect(readValue(files, [PLAN, "https://example.com/plan.pdf", `${PAGE}/../x`])).toEqual([PLAN]);
+        expect(readValue(files, [])).toBeNull();
+    });
+
+    it("shows known members by e-mail and files by name, and is found by them", () => {
+        // A former member is left out.
+        expect(formatValue(person, [ALEX, "44444444-4444-4444-8444-444444444444", KIM])).toBe(
+            "alex@nodi.test, kim@nodi.test",
+        );
+        expect(formatValue(files, [PLAN])).toBe("Plan.pdf");
+        const rows = buildRows(entries, {
+            ...data,
+            properties: [person, files],
+            values: [
+                { pageId: "a", propertyId: "person", value: [KIM], updatedAt: "" },
+                { pageId: "b", propertyId: "files", value: [PLAN], updatedAt: "" },
+            ],
+        });
+        const found = (property: DatabaseProperty, operator: "contains" | "isEmpty", value = "") =>
+            rows
+                .filter((row) => matchesFilter(row, { propertyId: property.id, operator, value }, property))
+                .map((row) => row.page.id);
+        expect(found(person, "contains", "kim")).toEqual(["a"]);
+        expect(found(files, "contains", "plan")).toEqual(["b"]);
+        expect(found(files, "isEmpty")).toEqual(["a", "c"]);
+    });
+
+    it("keeps the loaded members in the cache, not from server rows", () => {
+        expect(parseProperties([{ ...person }])[0].people).toEqual(person.people);
+        const [fromServer] = parseProperties([{ id: "p", databaseId: "db", name: "P", type: "person", options: {} }]);
+        expect(fromServer.people).toBeUndefined();
+    });
+});
+
+describe("rollups", () => {
+    const hours: DatabaseProperty = {
+        id: "hours",
+        databaseId: "other",
+        name: "Stunden",
+        type: "number",
+        options: [],
+        position: 0,
+        numberFormat: "euro",
+    };
+    const tasks: DatabaseProperty = {
+        id: "tasks",
+        databaseId: "db",
+        name: "Aufgaben",
+        type: "relation",
+        options: [],
+        position: 5,
+        relation: {
+            databaseId: "other",
+            pairedPropertyId: "back",
+            entries: [
+                { id: "t1", title: "Entwurf", icon: null },
+                { id: "t2", title: "Texte", icon: null },
+                { id: "t3", title: "Bilder", icon: null },
+            ],
+        },
+    };
+    const rollup = (fn: "sum" | "count_all" | "show_original" | "percent_not_empty", targetPropertyId = "hours") =>
+        ({
+            id: `r-${fn}`,
+            databaseId: "db",
+            name: fn,
+            type: "rollup",
+            options: [],
+            position: 6,
+            rollup: {
+                relationPropertyId: "tasks",
+                targetPropertyId,
+                function: fn,
+                target: { property: targetPropertyId === TITLE_FIELD ? null : hours, values: { t1: 2.5, t3: 4 } },
+            },
+        }) satisfies DatabaseProperty;
+
+    it("computes from the related entries' values, in the target's format", () => {
+        const properties = [
+            tasks,
+            rollup("sum"),
+            rollup("count_all"),
+            rollup("show_original", TITLE_FIELD),
+            rollup("percent_not_empty"),
+        ];
+        const [row, empty] = buildRows(entries.slice(0, 2), {
+            ...data,
+            properties,
+            // "gone" is not readable: it does not count.
+            values: [{ pageId: "a", propertyId: "tasks", value: ["t1", "t2", "t3", "gone"], updatedAt: "" }],
+        });
+        expect(row.values["r-sum"]).toBe(6.5);
+        expect(formatValue(properties[1], 6.5)).toBe("6,50\u00a0€");
+        expect(row.values["r-count_all"]).toBe(3);
+        expect(row.values["r-show_original"]).toBe("Entwurf, Texte, Bilder");
+        expect(formatValue(properties[4], row.values["r-percent_not_empty"])).toBe("66,7\u00a0%");
+        // Without related entries.
+        expect([empty.values["r-sum"], empty.values["r-count_all"], empty.values["r-show_original"]]).toEqual([
+            0,
+            0,
+            null,
+        ]);
+    });
+
+    it("reads its settings from the server and, with the target, from the cache", () => {
+        const options = { relationPropertyId: "tasks", targetPropertyId: "hours", function: "sum" };
+        const [fromServer] = parseProperties([{ id: "r", databaseId: "db", name: "R", type: "rollup", options }]);
+        expect(fromServer.rollup).toEqual(options);
+        const cached = rollup("sum");
+        expect(parseProperties([{ ...cached }])[0].rollup).toEqual(cached.rollup);
+        // Not set up yet: no settings, still a property.
+        const [unset] = parseProperties([{ id: "n", databaseId: "db", name: "N", type: "rollup", options: {} }]);
+        expect(unset.rollup).toBeUndefined();
+        expect(buildRows(entries.slice(0, 1), { ...data, properties: [unset] })[0].values.n).toBeNull();
+    });
+});
+
 describe("dates with a time", () => {
     const at = (hours: number, minutes = 0) => new Date(2026, 9, 19, hours, minutes).toISOString();
 
@@ -542,8 +753,8 @@ describe("parsing", () => {
 
     it("rejects broken server rows, but leaves out types of a newer app version", () => {
         expect(() => parseProperties([{ id: "p", databaseId: "db", type: "text" }])).toThrow();
-        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "rollup" }])).toEqual([]);
-        expect(parseViews([{ id: "v", databaseId: "db", name: "Zeitleiste", type: "timeline" }])).toEqual([]);
+        expect(parseProperties([{ id: "p", databaseId: "db", name: "X", type: "unique_id" }])).toEqual([]);
+        expect(parseViews([{ id: "v", databaseId: "db", name: "Gantt", type: "gantt" }])).toEqual([]);
     });
 
     it("reads the server's options object and the cached list alike", () => {
@@ -575,6 +786,54 @@ describe("helpers", () => {
     it("hides properties of a view and keeps the order", () => {
         expect(visibleProperties([due, status], config({ hiddenPropertyIds: ["due"] })).map((p) => p.id)).toEqual([
             "status",
+        ]);
+    });
+});
+
+describe("buttons (package 32f)", () => {
+    it("reads label and actions from the server's options, invalid actions left out", () => {
+        const [button] = parseProperties([
+            {
+                id: "b",
+                databaseId: "db",
+                name: "Fertig",
+                type: "button",
+                options: {
+                    label: "Abhaken",
+                    actions: [{ propertyId: "done", value: true }, { propertyId: "due", today: true }, { value: 1 }],
+                },
+            },
+        ]);
+        expect(button.button).toEqual({
+            label: "Abhaken",
+            actions: [
+                { propertyId: "done", value: true },
+                { propertyId: "due", today: true },
+            ],
+        });
+        expect(
+            parseProperties([{ id: "b", databaseId: "db", name: "Neu", type: "button", options: {} }])[0].button,
+        ).toEqual({ label: "", actions: [] });
+    });
+
+    it("sets the values of its actions; today on a date, gone or computed properties skipped", () => {
+        expect(
+            buttonChanges(
+                {
+                    label: "Abhaken",
+                    actions: [
+                        { propertyId: "done", value: true },
+                        { propertyId: "due", today: true },
+                        { propertyId: "edited", value: "x" },
+                        { propertyId: "gone", value: 1 },
+                    ],
+                },
+                [done, due, edited],
+                "2026-10-20",
+            ),
+        ).toEqual([
+            { propertyId: "done", value: true },
+            { propertyId: "due", value: { start: "2026-10-20", end: null } },
         ]);
     });
 });

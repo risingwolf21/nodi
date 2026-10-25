@@ -1,11 +1,17 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, MoreHorizontal, Table2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, MoreHorizontal, Star, Table2 } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
+import { PageComments } from "@/features/comments/components/PageComments";
+import { Backlinks } from "@/features/pages/components/Backlinks";
+import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
+import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle } from "@/features/pages/page-display";
-import type { Page, PageSection, PageSettings } from "@/features/pages/types";
+import type { PositionUpdate } from "@/features/pages/page-hierarchy";
+import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
+import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -31,6 +37,8 @@ type PageViewProps = {
     onRename: (pageId: string, title: string) => Promise<void>;
     onUpdate: (pageId: string, settings: PageSettings) => Promise<void>;
     onArchive: (page: Page) => void;
+    /** Adds the page to the favorites or removes it (package 30b); undefined where that is not possible. */
+    onSetFavorite?: (pageId: string, favorite: boolean) => Promise<void>;
     /** Only for the page owner. */
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
@@ -38,14 +46,20 @@ type PageViewProps = {
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
     userId: string | undefined;
-    /** For a database: its entries (subpages). */
+    /** The page's children: a database's entries, an entry's subpages. */
     entries: Page[];
+    /** For a database: its templates (package 26); undefined where they cannot be used. */
+    templateActions?: TemplateActions;
+    /** For an entry: adds a subpage or database (package 23); undefined where that is not possible. */
+    onCreateSubpage?: (parentId: string, kind: PageKind) => void;
     /** For a database: adds an entry; undefined where that is not possible. */
     onCreateEntry?: (databaseId: string) => Promise<string>;
     /** Databases of the workspace, for new relations; undefined where that is not possible. */
     databases?: Page[];
     /** All pages the app knows, for the databases shown as blocks in the text. */
     knownPages: Page[];
+    /** New manual order of a database's entries (package 32a); undefined where it cannot change. */
+    onReorderPages?: (updates: PositionUpdate[]) => Promise<void>;
 };
 
 function PageLabel({ page }: { page: Page }) {
@@ -75,14 +89,18 @@ export function PageView({
     onRename,
     onUpdate,
     onArchive,
+    onSetFavorite,
     onShare,
     onMoveSection,
     onMove,
     userId,
     entries,
     onCreateEntry,
+    onCreateSubpage,
+    templateActions,
     databases,
     knownPages,
+    onReorderPages,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
@@ -94,6 +112,14 @@ export function PageView({
         setMenuError("");
         onUpdate(page.id, { full_width: !page.full_width }).catch((err: unknown) => {
             setMenuError(err instanceof Error ? err.message : "Die Breite konnte nicht gespeichert werden.");
+        });
+    }
+
+    function toggleFavorite(setFavorite: (pageId: string, favorite: boolean) => Promise<void>) {
+        setMenuOpen(false);
+        setMenuError("");
+        setFavorite(page.id, !page.favorite).catch((err: unknown) => {
+            setMenuError(err instanceof Error ? err.message : "Die Favoriten konnten nicht geändert werden.");
         });
     }
 
@@ -142,6 +168,12 @@ export function PageView({
                     <MoreHorizontal className="size-5" />
                 </button>
                 <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                    {onSetFavorite && (
+                        <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
+                            <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
+                            {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+                        </MenuItem>
+                    )}
                     {onShare && (
                         <MenuItem
                             onSelect={() => {
@@ -190,8 +222,19 @@ export function PageView({
             </div>
         );
 
+    const setCover = (cover: string | null) => onUpdate(page.id, { cover });
+
     const renderHeader = (canEdit: boolean) => (
         <>
+            {page.cover && (
+                <PageCover
+                    pageId={page.id}
+                    cover={page.cover}
+                    userId={userId}
+                    editable={canEdit && !readOnly}
+                    onSetCover={setCover}
+                />
+            )}
             {menuError && (
                 <p className="mb-4 px-[var(--page-gutter)] text-sm text-destructive" role="alert">
                     {menuError}
@@ -203,7 +246,18 @@ export function PageView({
                 focusTitle={focusTitle}
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
+                actions={
+                    !page.cover && (
+                        <CoverPicker
+                            pageId={page.id}
+                            label="Titelbild hinzufügen"
+                            hasCover={false}
+                            onSetCover={setCover}
+                        />
+                    )
+                }
             />
+            <Backlinks pageId={page.id} knownPages={knownPages} online={!readOnly} onOpen={onSelect} />
             {database && (
                 // Its own boundary: the editor's fallback shows this header again.
                 <LoadErrorBoundary
@@ -223,6 +277,22 @@ export function PageView({
                     </Suspense>
                 </LoadErrorBoundary>
             )}
+            {database && page.is_template && (
+                <p className="mb-4 px-[var(--page-gutter)] text-sm text-muted-foreground" role="note">
+                    Vorlage in „{displayTitle(database)}“: Neue Einträge aus dieser Vorlage bekommen ihren Text und ihre
+                    Eigenschaften.
+                </p>
+            )}
+            {database && (
+                <SubpageList
+                    subpages={entries}
+                    onOpen={onSelect}
+                    onCreate={
+                        onCreateSubpage && canEdit && !readOnly ? (kind) => onCreateSubpage(page.id, kind) : undefined
+                    }
+                />
+            )}
+            <PageComments pageId={page.id} userId={userId} online={!readOnly} canComment={canEdit && !readOnly} />
         </>
     );
 
@@ -253,6 +323,8 @@ export function PageView({
                             onCreateEntry={onCreateEntry ? () => onCreateEntry(page.id) : undefined}
                             onRenameEntry={onRename}
                             databases={databases}
+                            templateActions={templateActions}
+                            onReorderEntries={onReorderPages}
                         />
                     </Suspense>
                 </LoadErrorBoundary>

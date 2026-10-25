@@ -1,4 +1,4 @@
-/** Property types of the server (packages 14a, 14e, 14f, 17d); formula and the last two are computed. */
+/** Property types of the server (packages 14a, 14e, 14f, 17d, 24, 29); formula, rollup and the last two are computed. */
 export type PropertyType =
     | "text"
     | "number"
@@ -12,6 +12,10 @@ export type PropertyType =
     | "place"
     | "formula"
     | "relation"
+    | "rollup"
+    | "person"
+    | "files"
+    | "button"
     | "created_time"
     | "last_edited_time";
 
@@ -42,6 +46,50 @@ export type RelationSettings = {
     entries: RelatedEntry[];
 };
 
+/** What a button does to its entry (package 32f): set a value, or today's date. */
+export type ButtonAction = { propertyId: string; value: unknown } | { propertyId: string; today: true };
+
+/** A button property: its label and actions (server: options). */
+export type ButtonSettings = { label: string; actions: ButtonAction[] };
+
+/** A member of the database's workspace, as person properties show and pick them (package 29). */
+export type WorkspacePerson = {
+    id: string;
+    email: string;
+};
+
+/** What a rollup computes from the related entries (package 24, Notion's functions). */
+export type RollupFunction =
+    | "show_original"
+    | "count_all"
+    | "count_values"
+    | "count_unique"
+    | "count_empty"
+    | "count_not_empty"
+    | "percent_empty"
+    | "percent_not_empty"
+    | "sum"
+    | "average"
+    | "median"
+    | "min"
+    | "max"
+    | "range"
+    | "earliest"
+    | "latest"
+    | "checked"
+    | "unchecked"
+    | "percent_checked";
+
+/** A rollup reads a property of the entries a relation links (server: options). */
+export type RollupSettings = {
+    relationPropertyId: string;
+    /** A property of the related database, or `TITLE_FIELD`. */
+    targetPropertyId: string;
+    function: RollupFunction;
+    /** Loaded with the database: the target property (null: the title) and its stored values per entry. */
+    target?: { property: DatabaseProperty | null; values: Record<string, unknown> };
+};
+
 export type DatabaseProperty = {
     id: string;
     databaseId: string;
@@ -55,6 +103,12 @@ export type DatabaseProperty = {
     numberFormat?: NumberFormat;
     /** Relation properties: the related database (server: options.databaseId, options.pairedPropertyId). */
     relation?: RelationSettings;
+    /** Rollup properties (server: options.relationPropertyId, …). */
+    rollup?: RollupSettings;
+    /** Button properties (package 32f). */
+    button?: ButtonSettings;
+    /** Person properties: the members of the workspace, loaded with the database (empty for non-members). */
+    people?: WorkspacePerson[];
     position: number;
 };
 
@@ -82,7 +136,7 @@ export type StoredPropertyValue = {
     updatedAt: string;
 };
 
-export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar" | "map";
+export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar" | "map" | "timeline";
 
 /** Sorting and filtering by the title uses this id instead of a property id. */
 export const TITLE_FIELD = "title";

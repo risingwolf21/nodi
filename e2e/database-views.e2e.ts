@@ -33,7 +33,8 @@ test.describe("Board, Liste und Galerie", () => {
         await page.getByRole("menuitem", { name: "Board" }).click();
         const column = (name: string) => page.getByRole("region", { name, exact: true });
 
-        await expect(page.locator("section[aria-label]")).toHaveCount(4);
+        // The board's columns; the page's comments are a section too.
+        await expect(page.locator('section[aria-label]:not([aria-label="Kommentare"])')).toHaveCount(4);
         await expect(page.getByRole("button", { name: "Gruppieren" })).toHaveText("Gruppieren: Status");
         await expect(column("Ohne Status").getByRole("button", { name: /Angebot/ })).toBeVisible();
 
@@ -175,6 +176,57 @@ test.describe("Feed und Kalender", () => {
             p_property_id: "due",
             p_value: { start: "2026-10-15", end: null },
         });
+    });
+
+    test("Kalender: Woche zeigen; Ziehen auf einen anderen Tag verschiebt den Zeitraum", async ({ page, context }) => {
+        const backend = calendarDatabase();
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+        await page.getByRole("button", { name: "Ansicht hinzufügen" }).click();
+        await page.getByRole("menuitem", { name: "Kalender" }).click();
+        const calendar = page.getByRole("region", { name: "Kalender" });
+        const day = (label: string) => calendar.getByRole("group", { name: label, exact: true });
+
+        // Dragged from its first day (10 Oct) to 13 Oct: 10–12 becomes 13–15.
+        await day("10. Oktober").getByRole("button", { name: "Bericht" }).dragTo(day("13. Oktober"));
+        await expect
+            .poll(() => backend.propertyCalls.at(-1))
+            .toMatchObject({
+                p_page_id: "e1",
+                p_property_id: "due",
+                p_value: { start: "2026-10-13", end: "2026-10-15" },
+            });
+        await expect(day("15. Oktober").getByRole("button", { name: "Bericht" })).toBeVisible();
+
+        // The week of today (19 Oct); back one week shows 13–15 Oct.
+        await page.getByRole("button", { name: "Woche", exact: true }).click();
+        await expect(page.getByRole("heading", { name: /19\. Okt\. 2026 – 25\. Okt\. 2026/ })).toBeVisible();
+        await expect(calendar.getByRole("group")).toHaveCount(7);
+        await expect(calendar.getByRole("button", { name: "Bericht" })).toHaveCount(0);
+        await page.getByRole("button", { name: "Vorherige Woche" }).click();
+        await expect(calendar.getByRole("button", { name: "Bericht" })).toHaveCount(3);
+    });
+
+    test("Zeitleiste zeigt Einträge als Balken über ihren Zeitraum", async ({ page, context }) => {
+        const backend = calendarDatabase();
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+        await page.getByRole("button", { name: "Ansicht hinzufügen" }).click();
+        await page.getByRole("menuitem", { name: "Zeitleiste" }).click();
+        await expect.poll(() => backend.views.map(({ type }) => type)).toContain("timeline");
+        const timeline = page.getByRole("region", { name: "Zeitleiste" });
+
+        // From the Monday before last (12 Oct): Bericht (10–12 Oct) starts before, one day is shown.
+        await expect(page.getByRole("heading", { name: /12\. Okt\. 2026 – 22\. Nov\. 2026/ })).toBeVisible();
+        const bar = timeline.getByRole("button", { name: "Bericht" });
+        await expect(bar).toHaveCSS("width", "28px");
+        await expect(page.getByText("1 Eintrag ohne Fällig")).toBeVisible();
+
+        // Two weeks earlier all three days are there.
+        await page.getByRole("button", { name: "Früher" }).click();
+        await expect(bar).toHaveCSS("width", `${3 * 32 - 4}px`);
+        await bar.click();
+        await expect(page.getByRole("region", { name: "Eigenschaften" })).toBeVisible();
     });
 
     test("Kalender ohne Datums-Eigenschaft bietet an, eine anzulegen; mobil ohne seitliches Scrollen", async ({
