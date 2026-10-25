@@ -150,8 +150,8 @@ function Datenschutz() {
                 <p>
                     Deine Daten bleiben gespeichert, bis du sie löschst oder dein Konto löschst (Workspace-Menü → „Konto
                     löschen …“). Dabei werden deine privaten Seiten gelöscht; Seiten im geteilten Bereich eines
-                    Workspace bleiben für dessen Mitglieder erhalten. Hochgeladene Dateien gelöschter Seiten werden
-                    derzeit nicht automatisch entfernt; auf Anfrage löschen wir sie.
+                    Workspace bleiben für dessen Mitglieder erhalten. Hochgeladene Dateien endgültig gelöschter Seiten
+                    werden automatisch entfernt, in der Regel innerhalb eines Tages.
                 </p>
             </Section>
 

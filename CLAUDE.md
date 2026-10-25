@@ -260,6 +260,7 @@ vite.config.ts
 .github/workflows/
   ci.yml                    # Lint, Build, DB-Migrationen, pgTAP-Tests
   deploy.yml                # GitHub Pages, nur bei Push auf `production`
+  purge-deleted-files.yml   # täglich: Dateien gelöschter Seiten entfernen (35b)
 src/
   App.tsx
   main.tsx
@@ -396,6 +397,7 @@ design/
   README.md                 # wie die PNGs erzeugt werden
 supabase/
   config.toml
+  functions/purge-deleted-files/ # Edge Function: Dateien gelöschter Seiten (35b)
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
@@ -880,7 +882,8 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
   Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
   frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
   danach verknüpft `migrate` das Supabase-Projekt und führt
-  `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+  `supabase db push --yes` aus (nur fehlende Migrationen) und deployt
+  danach die Edge Function `purge-deleted-files` (seit 35b). Schlägt ein
   Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
   `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
@@ -2620,6 +2623,42 @@ nicht gewünscht.
       - Die Migration trägt einmalig die Seiten ein, deren Dateien heute
         schon verwaist sind (Ordner ohne Seite).
       - pgTAP: `page_file_cleanup.test.sql`.
+    - **Umsetzung 35b** (Edge Function, Workflows, App; keine Migration):
+      - Edge Function `supabase/functions/purge-deleted-files/index.ts`
+        (Deno, ohne Abhängigkeiten, nur `fetch`): bis zu zehn Runden
+        `next_page_file_deletions(1000)` → Storage-API
+        `DELETE /storage/v1/object/page-files` (`prefixes`), Antwort
+        `{removed}`. Schlüssel: `SUPABASE_SECRET_KEYS.default` (neue Keys,
+        nur im `apikey`-Header), sonst `SUPABASE_SERVICE_ROLE_KEY`
+        (Legacy-JWT, auch als `Authorization`). Nur `POST` (sonst 405),
+        CORS für die App.
+      - Ohne JWT-Prüfung (`[functions.purge-deleted-files] verify_jwt =
+false` in `supabase/config.toml`, beim Deploy `--no-verify-jwt`):
+        Die App ruft sie nach dem Löschen auch ohne Sitzung auf (Konto
+        gelöscht), der tägliche Lauf mit dem Publishable Key. Bewusst offen:
+        Sie löscht nur Dateien von Seiten, die es nicht mehr gibt, und
+        verrät nur eine Anzahl; ein Aufruf macht höchstens 10 000 Dateien.
+      - App: `requestDeletedFilesCleanup()`
+        (`features/files/services/purge-deleted-files.ts`, nur anstoßen,
+        Fehler in der Konsole) nach „Endgültig löschen“, „Papierkorb leeren“
+        (wenn etwas gelöscht wurde) und „Konto löschen“.
+      - Deploy (`deploy.yml`, Job `migrate`): nach `db push` folgt
+        `supabase functions deploy purge-deleted-files --no-verify-jwt
+--use-api` (ohne Docker); keine neuen Secrets.
+      - Täglicher Lauf `.github/workflows/purge-deleted-files.yml` (03:23
+        UTC und von Hand): `POST` mit `VITE_SUPABASE_URL` und
+        `VITE_SUPABASE_PUBLISHABLE_KEY` aus den Repository-Secrets. GitHub
+        pausiert Zeitpläne nach 60 Tagen ohne Aktivität im Repository; die
+        Aufrufe der App räumen weiter auf.
+      - ESLint lässt `supabase/functions` aus (Deno, nicht im tsconfig der
+        App). Geprüft lokal mit `supabase functions serve` gegen die lokale
+        Supabase: Datei einer gelöschten Seite entfernt, Warteschlange leer,
+        zweiter Aufruf `{removed: 0}`, `GET` → 405, neuer Secret Key nur im
+        `apikey`-Header von REST und Storage angenommen.
+      - Datenschutzerklärung (Abschnitt 8): Dateien gelöschter Seiten werden
+        automatisch entfernt.
+      - Tests: Playwright `trash.e2e.ts`, `account.e2e.ts` (Aufruf der
+        Function im Fake-Backend).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

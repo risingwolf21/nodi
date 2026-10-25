@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createDueRecurringEntries } from "@/features/databases/services/recurring-entries";
+import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import {
@@ -661,6 +662,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
             if ((response.data ?? []).length === 0) {
                 throw new Error("Nur der Eigentümer kann diese Seite endgültig löschen.");
             }
+            requestDeletedFilesCleanup();
             if (switchedSince(workspaceId)) return ids;
 
             const deletedIds = new Set(ids);
@@ -692,6 +694,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         const failure = pageChangeError(response, "Der Papierkorb konnte nicht geleert werden.");
         if (failure) throw failure;
         const deleted = response.data ?? [];
+        if (deleted.length > 0) requestDeletedFilesCleanup();
         if (switchedSince(workspaceId)) return deleted.length;
 
         const deletedIds = new Set(deleted.flatMap((row) => collectDescendantIds(row.id, archivedPages)));
