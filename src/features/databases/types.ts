@@ -127,7 +127,7 @@ export type StoredPropertyValue = {
     updatedAt: string;
 };
 
-export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar" | "map";
+export type ViewType = "table" | "board" | "list" | "gallery" | "feed" | "calendar" | "map" | "timeline";
 
 /** Sorting and filtering by the title uses this id instead of a property id. */
 export const TITLE_FIELD = "title";
