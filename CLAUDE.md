@@ -2356,7 +2356,59 @@ nicht gewünscht.
 32. **Kleinere Lücken:** Reihenfolge per Ziehen (Seitenleiste,
     Board-Spalten), Kalender mit Woche und Ziehen, Gruppierung in Tabelle
     und Liste, Ansicht Zeitleiste, Spalten-Layout im Text,
-    Button-Eigenschaft.
+    Button-Eigenschaft. Aufteilung: 32a Reihenfolge, 32b Kalender, 32c
+    Gruppierung, 32d Zeitleiste, 32e Spalten im Text, 32f Button (je ein PR).
+    - **Umsetzung 32a** (nur Frontend, keine Migration; `pages.position` ist
+      für Bearbeiter schon änderbar):
+      - Geschwister in der Seitenleiste stehen nach `position`, dann nach
+        Erstellung (`compareByPosition`, jetzt in `page-hierarchy.ts`; die
+        Datenbank-Ansichten nutzen dieselbe Regel). `placeBefore` berechnet
+        die neue Reihenfolge: zwischen zwei Nachbarn mit Position genügt eine
+        Änderung (Mittelwert), sonst werden die Geschwister neu nummeriert
+        (Seiten ohne Position, gleiche Positionen).
+      - Seitenleiste: Ziehen auf den oberen oder unteren Rand einer Seite
+        (je ein Viertel) setzt sie davor bzw. dahinter (Linie als Hinweis),
+        nur unter Geschwistern desselben Bereichs; die Mitte macht wie bisher
+        eine Unterseite daraus.
+      - Board: Eine Karte auf eine andere ziehen setzt sie davor (in einer
+        anderen Spalte auch deren Wert); in eine leere Stelle einer anderen
+        Spalte ans Ende. Nur ohne Sortierregel der Ansicht (wie Notion); die
+        Reihenfolge gilt für alle Ansichten ohne Sortierung.
+      - `usePages.reorderPages`: sofort sichtbar, je Seite ein Update; lehnt
+        der Server ab, lädt der Baum neu und ein Hinweis erscheint.
+      - Noch nicht: Reihenfolge in geteilten Seiten anderer Workspaces,
+        Ziehen in Tabelle und Liste, auf Touch-Geräten.
+      - Tests: Vitest `page-hierarchy.test.ts`, Playwright
+        `page-order.e2e.ts`.
+    - **Umsetzung 32b** (nur Frontend, keine Migration):
+      - Kalender: Umschalter „Monat | Woche“ (wie der Monat nur im Tab, nicht
+        gespeichert). Die Woche ist eine Zeile mit sieben Tagen ab Montag
+        (`weekDays`), Vor/Zurück springt um eine Woche, „Heute“ zur
+        aktuellen.
+      - Einträge per Ziehen (Maus) auf einen anderen Tag: `moveDate` schiebt
+        Start und Ende um dieselbe Zahl Tage (vom Tag, an dem man den Eintrag
+        greift, z. B. am zweiten Tag eines Zeitraums); ein Zeitraum behält
+        seine Länge, eine Uhrzeit ihre Ortszeit, auch über die Zeitumstellung.
+        Gespeichert per `set_page_property`; nur mit Schreibrecht und online.
+      - Noch nicht: Uhrzeiten als Raster in der Woche, Ziehen auf
+        Touch-Geräten, Länge eines Zeitraums per Ziehen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-views.e2e.ts`.
+    - **Umsetzung 32c** (nur Frontend, keine Migration; `config.groupByPropertyId`
+      gibt es seit 14c):
+      - Tabelle und Liste: „Gruppieren“ in der Leiste mit „Nicht gruppieren“
+        und den Auswahl- und Status-Eigenschaften. Anders als das Board wird
+        nur gruppiert, wenn man es wählt (`chosenGroupProperty`).
+      - Je Option mit Einträgen ein einklappbarer Abschnitt (`GroupedRows`,
+        Option als Abzeichen, Anzahl; leere Gruppen fallen weg, „Ohne …“
+        zuerst), darin die Tabelle bzw. Liste. In der Tabelle bleibt die
+        Spalte sichtbar (ein neuer Wert verschiebt den Eintrag in seine
+        Gruppe); „Neu“ in einer Gruppe setzt deren Wert. Eingeklappt ist nur
+        im Tab, nicht gespeichert.
+      - Noch nicht: Gruppieren nach anderen Typen (Checkbox, Datum, Person),
+        Galerie und Feed gruppieren, Reihenfolge der Gruppen ändern.
+      - Tests: Vitest `database-model.test.ts`, Playwright
+        `database-grouping.e2e.ts`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -11,7 +11,7 @@ import { ShareDialog } from "@/features/pages/components/ShareDialog";
 import { MembersDialog } from "@/features/pages/components/MembersDialog";
 import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog";
 import { MovePageDialog } from "@/features/pages/components/MovePageDialog";
-import type { MoveTarget } from "@/features/pages/page-hierarchy";
+import type { MoveTarget, PositionUpdate } from "@/features/pages/page-hierarchy";
 import { Sidebar } from "@/features/pages/components/Sidebar";
 import { findAncestors } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection } from "@/features/pages/types";
@@ -79,6 +79,7 @@ export default function WorkspaceHome() {
         renamePage,
         updatePage,
         setFavorite,
+        reorderPages,
         archivePage,
         restorePage,
         permanentlyDeletePage,
@@ -188,6 +189,15 @@ export default function WorkspaceHome() {
             await movePage(item.id, target);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Die Seite konnte nicht verschoben werden.");
+        }
+    }
+
+    async function reorder(updates: PositionUpdate[]) {
+        setError("");
+        try {
+            await reorderPages(updates);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Die Reihenfolge konnte nicht gespeichert werden.");
         }
     }
 
@@ -312,6 +322,7 @@ export default function WorkspaceHome() {
                             onEmptyTrash={emptyTrash}
                             onMove={(item) => setMovePageDialog({ page: item })}
                             onDropPage={(item, target) => void dropPage(item, target)}
+                            onReorder={(updates) => void reorder(updates)}
                         />
                     </aside>
 
@@ -368,6 +379,8 @@ export default function WorkspaceHome() {
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                                 knownPages={knownPages}
+                                // Entries of other workspaces keep their order (for now).
+                                onReorderPages={sharedPage ? undefined : reorderPages}
                             />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">

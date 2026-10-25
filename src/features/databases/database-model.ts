@@ -1,5 +1,6 @@
 import type { Page } from "@/features/pages/types";
 import { displayTitle } from "@/features/pages/page-display";
+import { compareByPosition } from "@/features/pages/page-hierarchy";
 import { fileNameOfPath, pageIdOfFilePath } from "@/features/files/file-reference";
 import { evaluateFormula, type FormulaValue } from "./formula/formula-evaluator";
 import { FormulaError, NO_FORMULA_MESSAGE, parseFormula, type FormulaNode } from "./formula/formula-parser";
@@ -1044,12 +1045,7 @@ function compareKeys(a: string | number | null, b: string | number | null): numb
 }
 
 /** Manual order, then creation; used when a view has no sort rules. */
-export function compareByPosition(a: Page, b: Page): number {
-    if (a.position !== null && b.position !== null && a.position !== b.position) return a.position - b.position;
-    if (a.position !== null && b.position === null) return -1;
-    if (a.position === null && b.position !== null) return 1;
-    return a.created_at.localeCompare(b.created_at);
-}
+export { compareByPosition };
 
 /** Rows of a view: filtered (all rules), sorted by its rules or by position. */
 export function applyView(rows: DatabaseRow[], config: ViewConfig, properties: DatabaseProperty[]): DatabaseRow[] {
@@ -1087,6 +1083,12 @@ export function visibleProperties(properties: DatabaseProperty[], config: ViewCo
 /** A board groups by the options of a select or status property. */
 export function canGroupBy(type: PropertyType): boolean {
     return type === "select" || type === "status";
+}
+
+/** Tables and lists are grouped only when chosen (package 32c), unlike a board. */
+export function chosenGroupProperty(properties: DatabaseProperty[], config: ViewConfig): DatabaseProperty | undefined {
+    const chosen = properties.find((property) => property.id === config.groupByPropertyId);
+    return chosen && canGroupBy(chosen.type) ? chosen : undefined;
 }
 
 /** The chosen group property, otherwise the first status, then the first select property. */
@@ -1188,6 +1190,43 @@ export function monthGrid(year: number, month: number): string[][] {
     return Array.from({ length: weekCount }, (_, week) =>
         Array.from({ length: 7 }, (_, weekday) => dayString(start + (week * 7 + weekday) * DAY_MS)),
     );
+}
+
+/** The week (Monday first) of a "YYYY-MM-DD" day, package 32b. */
+export function weekDays(day: string): string[] {
+    const time = utcDay(day);
+    const monday = time - ((new Date(time).getUTCDay() + 6) % 7) * DAY_MS;
+    return Array.from({ length: 7 }, (_, weekday) => dayString(monday + weekday * DAY_MS));
+}
+
+/** A day moved by whole days ("YYYY-MM-DD"). */
+export function addDays(day: string, days: number): string {
+    return dayString(utcDay(day) + days * DAY_MS);
+}
+
+/** Days between two "YYYY-MM-DD" days. */
+function daysBetween(from: string, to: string): number {
+    return Math.round((utcDay(to) - utcDay(from)) / DAY_MS);
+}
+
+/** A day or a point in time moved by whole days; a time keeps its local time of day (summer time too). */
+function shiftDate(value: string, days: number): string {
+    if (isDay(value)) return addDays(value, days);
+    const date = toDate(value);
+    if (!date) return value;
+    date.setDate(date.getDate() + days);
+    return date.toISOString();
+}
+
+/**
+ * A date dragged in the calendar from one day to another (package 32b):
+ * start and end move by the same number of days, so a range keeps its length
+ * and a time its time of day.
+ */
+export function moveDate(value: DateValue, fromDay: string, toDay: string): DateValue {
+    const days = daysBetween(fromDay, toDay);
+    if (days === 0) return value;
+    return { start: shiftDate(value.start, days), end: value.end ? shiftDate(value.end, days) : null };
 }
 
 /** Entries per day ("YYYY-MM-DD"); a range appears on each of its days. Rows keep their order. */

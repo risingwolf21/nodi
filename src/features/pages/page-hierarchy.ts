@@ -6,6 +6,45 @@ export function nextPosition(siblings: Page[]): number {
     return positions.length === 0 ? siblings.length : Math.max(...positions) + 1;
 }
 
+/** Manual order, then creation; for siblings in the tree and entries of a database. */
+export function compareByPosition(a: Page, b: Page): number {
+    if (a.position !== null && b.position !== null && a.position !== b.position) return a.position - b.position;
+    if (a.position !== null && b.position === null) return -1;
+    if (a.position === null && b.position !== null) return 1;
+    return a.created_at.localeCompare(b.created_at);
+}
+
+export type PositionUpdate = { id: string; position: number };
+
+/**
+ * New positions to put a page before another one of `siblings` (null: at
+ * the end), package 32a. Between two neighbours with positions one update
+ * suffices (their mean); otherwise all siblings are numbered anew. Only
+ * pages whose position changes are returned.
+ */
+export function placeBefore(siblings: Page[], movedId: string, beforeId: string | null): PositionUpdate[] {
+    const moved = siblings.find((page) => page.id === movedId);
+    if (!moved || movedId === beforeId) return [];
+    const order = siblings.filter((page) => page.id !== movedId).sort(compareByPosition);
+    const index = beforeId === null ? order.length : order.findIndex((page) => page.id === beforeId);
+    if (index === -1) return [];
+
+    const previous = order[index - 1];
+    const next = order[index];
+    const positions = [previous, next].filter((page): page is Page => page !== undefined).map((page) => page.position);
+    if (positions.every((position) => position !== null)) {
+        const [low, high] = [previous?.position ?? null, next?.position ?? null];
+        const position =
+            low !== null && high !== null ? (low + high) / 2 : low !== null ? low + 1 : high !== null ? high - 1 : 0;
+        // Equal neighbours leave no room in between: number anew.
+        if ((low === null || position > low) && (high === null || position < high)) {
+            return moved.position === position ? [] : [{ id: movedId, position }];
+        }
+    }
+    const placed = [...order.slice(0, index), moved, ...order.slice(index)];
+    return placed.flatMap((page, position) => (page.position === position ? [] : [{ id: page.id, position }]));
+}
+
 /** An entry of a database; unlike other pages it may have an empty title. */
 export function isDatabaseEntry(pageId: string, pages: Page[]): boolean {
     const parentId = pages.find((page) => page.id === pageId)?.parent_id;

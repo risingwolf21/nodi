@@ -9,10 +9,13 @@ import {
     EMPTY_VIEW_CONFIG,
     dateProperty,
     formatValue,
+    chosenGroupProperty,
     groupProperty,
     groupRows,
     matchesFilter,
     monthGrid,
+    moveDate,
+    weekDays,
     parseCachedDatabase,
     parseProperties,
     parseViewConfig,
@@ -189,6 +192,12 @@ describe("board", () => {
         position: 0,
     };
 
+    it("groups tables and lists only by a chosen select or status property (package 32c)", () => {
+        expect(chosenGroupProperty([status], config())).toBeUndefined();
+        expect(chosenGroupProperty([status], config({ groupByPropertyId: "status" }))).toBe(status);
+        expect(chosenGroupProperty([estimate], config({ groupByPropertyId: "estimate" }))).toBeUndefined();
+    });
+
     it("groups by the chosen property, otherwise by the first status", () => {
         expect(groupProperty([priority, status, estimate], config())?.id).toBe("status");
         expect(groupProperty([priority, status], config({ groupByPropertyId: "priority" }))?.id).toBe("priority");
@@ -229,6 +238,36 @@ describe("feed", () => {
 });
 
 describe("calendar", () => {
+    it("shows the week of a day, Monday first", () => {
+        expect(weekDays("2026-10-22")).toEqual([
+            "2026-10-19",
+            "2026-10-20",
+            "2026-10-21",
+            "2026-10-22",
+            "2026-10-23",
+            "2026-10-24",
+            "2026-10-25",
+        ]);
+        expect(weekDays("2026-11-01")[0]).toBe("2026-10-26");
+    });
+
+    it("moves a dragged date by whole days, ranges keep their length, times their time of day", () => {
+        expect(moveDate({ start: "2026-10-20", end: null }, "2026-10-20", "2026-10-23")).toEqual({
+            start: "2026-10-23",
+            end: null,
+        });
+        // Dragged from the second day of a range to the day before it.
+        expect(moveDate({ start: "2026-10-20", end: "2026-10-22" }, "2026-10-21", "2026-10-19")).toEqual({
+            start: "2026-10-18",
+            end: "2026-10-20",
+        });
+        const start = new Date(2026, 9, 24, 14, 30).toISOString();
+        const moved = moveDate({ start, end: null }, "2026-10-24", "2026-10-26");
+        // Across the end of summer time (25 October 2026 in Germany) the local time stays.
+        expect(new Date(moved.start).getHours()).toBe(14);
+        expect(new Date(moved.start).getDate()).toBe(26);
+    });
+
     it("starts weeks on Monday and covers the whole month", () => {
         const weeks = monthGrid(2026, 9); // October 2026 starts on a Thursday.
         expect(weeks[0]).toEqual([

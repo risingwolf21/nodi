@@ -6,6 +6,7 @@ import {
     findArchivedAncestors,
     moveProblem,
     pagesInSection,
+    placeBefore,
     withoutDatabaseEntries,
 } from "./page-hierarchy";
 import type { Page } from "./types";
@@ -262,5 +263,43 @@ describe("moveProblem", () => {
         expect(moveProblem(othersShared, { section: "private" }, pages, "u1")).toContain("Nur wem die Seite gehört");
         expect(moveProblem(othersShared, { parentId: "notes" }, pages, "u1")).toContain("Nur wem die Seite gehört");
         expect(moveProblem(othersShared, { parentId: "shared" }, pages, "u1")).toBeNull();
+    });
+});
+
+describe("placeBefore", () => {
+    const sibling = (id: string, position: number | null, created_at = id): Page => ({
+        ...project,
+        id,
+        title: id,
+        position,
+        created_at,
+    });
+
+    it("needs one update between two neighbours with positions", () => {
+        const pages = [sibling("a", 1), sibling("b", 2), sibling("c", 3)];
+        expect(placeBefore(pages, "c", "b")).toEqual([{ id: "c", position: 1.5 }]);
+        expect(placeBefore(pages, "a", null)).toEqual([{ id: "a", position: 4 }]);
+        expect(placeBefore(pages, "c", "a")).toEqual([{ id: "c", position: 0 }]);
+    });
+
+    it("numbers all siblings anew when positions are missing or equal", () => {
+        // Pages of the tree have no position before package 32a: their order is by creation.
+        const pages = [sibling("a", null, "1"), sibling("b", null, "2"), sibling("c", null, "3")];
+        expect(placeBefore(pages, "c", "a")).toEqual([
+            { id: "c", position: 0 },
+            { id: "a", position: 1 },
+            { id: "b", position: 2 },
+        ]);
+        expect(placeBefore([sibling("a", 1), sibling("b", 1), sibling("c", 2)], "c", "b")).toEqual([
+            { id: "a", position: 0 },
+            { id: "c", position: 1 },
+            { id: "b", position: 2 },
+        ]);
+    });
+
+    it("changes nothing for a page placed where it is or an unknown target", () => {
+        const pages = [sibling("a", 1), sibling("b", 2)];
+        expect(placeBefore(pages, "a", "a")).toEqual([]);
+        expect(placeBefore(pages, "a", "gone")).toEqual([]);
     });
 });
