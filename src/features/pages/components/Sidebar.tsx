@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
     Check,
     ChevronsUpDown,
+    Download,
     FileInput,
     FileText,
     LogOut,
@@ -51,6 +52,7 @@ type SidebarProps = {
     onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
     onOpenMembers: () => void;
     onImportNotion: () => void;
+    onExportWorkspace: () => void;
     /** Opens the search (package 27). */
     onSearch: () => void;
     onRename: (page: Page) => void;
@@ -98,6 +100,7 @@ export function Sidebar({
     onCreatePage,
     onOpenMembers,
     onImportNotion,
+    onExportWorkspace,
     onSearch,
     onRename,
     onArchive,
@@ -224,6 +227,17 @@ export function Sidebar({
                         >
                             <FileInput className="size-4" />
                             Aus Notion importieren
+                        </MenuItem>
+                    )}
+                    {!readOnly && workspace && (
+                        <MenuItem
+                            onSelect={() => {
+                                setWorkspaceMenuOpen(false);
+                                onExportWorkspace();
+                            }}
+                        >
+                            <Download className="size-4" />
+                            Workspace exportieren
                         </MenuItem>
                     )}
                     {accountEmail && <p className="truncate px-2 py-1 text-xs text-muted-foreground">{accountEmail}</p>}

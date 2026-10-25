@@ -34,6 +34,7 @@ import { PageView } from "./PageView";
 
 // Loaded on demand: it brings the ZIP reader and BlockNote's Markdown parser.
 const NotionImportDialog = lazy(() => import("@/features/import/components/NotionImportDialog"));
+const ExportDialog = lazy(() => import("@/features/export/components/ExportDialog"));
 
 const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
@@ -106,6 +107,9 @@ export default function WorkspaceHome() {
     const [membersOpen, setMembersOpen] = useState(false);
     const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
+    const [exportRequest, setExportRequest] = useState<{ rootIds: string[]; label: string; fileName: string } | null>(
+        null,
+    );
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
     const readOnly = workspacesFromCache || pagesFromCache;
@@ -317,6 +321,14 @@ export default function WorkspaceHome() {
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
                             onImportNotion={() => setImportOpen(true)}
+                            onExportWorkspace={() => {
+                                const name = workspaces.find((item) => item.id === workspaceId)?.name ?? "Workspace";
+                                setExportRequest({
+                                    rootIds: pages.filter((item) => item.parent_id === null).map((item) => item.id),
+                                    label: `Workspace „${name}“`,
+                                    fileName: name,
+                                });
+                            }}
                             onSearch={() => setSearchOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
@@ -346,6 +358,17 @@ export default function WorkspaceHome() {
                                 onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                                 // Favorites of pages from other workspaces: later.
                                 onSetFavorite={sharedPage ? undefined : setFavorite}
+                                // Export from the own workspace, whose page tree is known here.
+                                onExport={
+                                    sharedPage
+                                        ? undefined
+                                        : (item) =>
+                                              setExportRequest({
+                                                  rootIds: [item.id],
+                                                  label: `Seite „${item.title || "Ohne Titel"}“`,
+                                                  fileName: item.title || "Ohne Titel",
+                                              })
+                                }
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                                 // Moving stays within the page's own workspace.
                                 onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}
@@ -491,6 +514,30 @@ export default function WorkspaceHome() {
                             }
                             onOpen={(pageId) => openPage(pageId)}
                             onClose={() => setImportOpen(false)}
+                        />
+                    </Suspense>
+                </LoadErrorBoundary>
+            )}
+
+            {exportRequest && user && (
+                <LoadErrorBoundary
+                    fallback={
+                        <Dialog labelledBy="export-load-error" onClose={() => setExportRequest(null)}>
+                            <h2 id="export-load-error" className="sr-only">
+                                Export
+                            </h2>
+                            <LoadErrorNotice message="Der Export konnte nicht geladen werden. Prüfe die Internetverbindung und lade neu." />
+                        </Dialog>
+                    }
+                >
+                    <Suspense fallback={null}>
+                        <ExportDialog
+                            userId={user.id}
+                            pages={pages}
+                            rootIds={exportRequest.rootIds}
+                            label={exportRequest.label}
+                            fileName={exportRequest.fileName}
+                            onClose={() => setExportRequest(null)}
                         />
                     </Suspense>
                 </LoadErrorBoundary>
