@@ -415,7 +415,7 @@ supabase/
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
                             # Zeitleiste (P32d), Buttons (P32f),
-                            # Konto löschen (P33a)
+                            # Konto löschen (P33a), Speicher aufräumen (P35a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2597,6 +2597,29 @@ nicht gewünscht.
         `export.e2e.ts` (Datenbank exportieren und wieder importieren).
 35. **Speicher aufräumen:** Dateien endgültig gelöschter Seiten und Konten
     aus dem Storage entfernen.
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Warteschlange in der
+      Datenbank und eine Edge Function, die über die Storage-API löscht
+      (`storage.objects` erlaubt kein direktes Löschen); der
+      Service-Role-Key bleibt in der Edge Function. (2) Angestoßen von der
+      App nach „Endgültig löschen“, „Papierkorb leeren“ und „Konto löschen“
+      und zusätzlich einmal täglich von einem GitHub-Workflow.
+    - **Aufteilung:** 35a Datenbank, 35b Edge Function, Deploy, täglicher
+      Lauf, Aufrufe in der App.
+    - **Umsetzung 35a** (`20261025100000_page_file_cleanup.sql`):
+      - Tabelle `page_file_deletions (page_id, queued_at)`: Der Trigger
+        `queue_page_file_deletion` (nach `delete` auf `pages`, je Zeile)
+        trägt jede endgültig gelöschte Seite ein, auch Unterseiten (Kaskade)
+        und Seiten aus `delete_account`. RLS ohne Policies, keine Rechte für
+        `anon`/`authenticated`.
+      - `next_page_file_deletions(limit)` (nur `service_role`): entfernt
+        zuerst erledigte Einträge (keine Dateien mehr im Ordner, oder eine
+        Seite mit dieser ID gibt es wieder; deren Dateien bleiben) und
+        liefert dann bis zu `limit` (1–1000) Pfade im Bucket `page-files`,
+        die noch zu löschen sind. Doppelt löschen schadet nicht; ein
+        abgebrochener Lauf macht beim nächsten Aufruf weiter.
+      - Die Migration trägt einmalig die Seiten ein, deren Dateien heute
+        schon verwaist sind (Ordner ohne Seite).
+      - pgTAP: `page_file_cleanup.test.sql`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
