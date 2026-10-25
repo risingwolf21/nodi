@@ -10,6 +10,7 @@ import {
     Link,
     List,
     MapPin,
+    MousePointerClick,
     Paperclip,
     SearchCheck,
     Sigma,
@@ -35,6 +36,7 @@ const ICONS = {
     rollup: SearchCheck,
     person: User,
     files: Paperclip,
+    button: MousePointerClick,
     created_time: Clock,
     last_edited_time: History,
 } satisfies Record<PropertyType, unknown>;

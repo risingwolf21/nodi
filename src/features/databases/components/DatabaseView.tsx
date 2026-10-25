@@ -33,6 +33,7 @@ import {
 import { useDatabase, type DatabaseBlockOptions, type NewEntryValue } from "../hooks/useDatabase";
 import type { DatabaseView as DatabaseViewModel, ViewType } from "../types";
 import { BoardView } from "./BoardView";
+import { ButtonEditor } from "./ButtonEditor";
 import { CalendarView } from "./CalendarView";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FeedView } from "./FeedView";
@@ -192,6 +193,7 @@ export function DatabaseView({
         updateView,
         deleteView,
         setValue,
+        runButton,
         createEntry,
     } = useDatabase(database.id, userId, onCreateEntry, block);
     const [activeViewId, setActiveViewId] = useState("");
@@ -237,6 +239,9 @@ export function DatabaseView({
     const formulaProperty = data.properties.find(
         (property) => property.id === editedPropertyId && property.type === "formula",
     );
+    const buttonProperty = data.properties.find(
+        (property) => property.id === editedPropertyId && property.type === "button",
+    );
     const rollupProperty = data.properties.find(
         (property) => property.id === editedPropertyId && property.type === "rollup",
     );
@@ -281,7 +286,7 @@ export function DatabaseView({
                 onAddProperty={async (type) => {
                     const property = await addProperty(type);
                     // A new formula needs its expression first, a rollup its settings.
-                    if (type === "formula" || type === "rollup") setEditedPropertyId(property.id);
+                    if (type === "formula" || type === "rollup" || type === "button") setEditedPropertyId(property.id);
                 }}
                 onEditFormula={setEditedPropertyId}
                 onRenameProperty={(propertyId, name) => updateProperty(propertyId, { name })}
@@ -299,6 +304,7 @@ export function DatabaseView({
                 }
                 onDeleteProperty={deleteProperty}
                 onError={report}
+                onRunButton={runButton}
             />
         );
 
@@ -599,6 +605,14 @@ export function DatabaseView({
                     sample={rows[0]?.page ?? entries[0]}
                     onClose={() => setEditedPropertyId("")}
                     onSave={(formula) => updateProperty(formulaProperty.id, { formula })}
+                />
+            )}
+            {buttonProperty && (
+                <ButtonEditor
+                    property={buttonProperty}
+                    properties={data.properties}
+                    onClose={() => setEditedPropertyId("")}
+                    onSave={(button) => updateProperty(buttonProperty.id, { button })}
                 />
             )}
             {rollupProperty && (

@@ -24,6 +24,8 @@ import {
     type RollupSettings,
     type RelationSettings,
     type WorkspacePerson,
+    type ButtonAction,
+    type ButtonSettings,
     type SortRule,
     type StoredPropertyValue,
     type ViewConfig,
@@ -46,6 +48,7 @@ export const PROPERTY_TYPES: readonly PropertyType[] = [
     "rollup",
     "person",
     "files",
+    "button",
     "created_time",
     "last_edited_time",
 ];
@@ -66,6 +69,7 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
     rollup: "Rollup",
     person: "Person",
     files: "Dateien & Medien",
+    button: "Button",
     created_time: "Erstellt am",
     last_edited_time: "Geändert am",
 };
@@ -110,9 +114,15 @@ export function hasOptions(type: PropertyType): boolean {
     return type === "select" || type === "multi_select" || type === "status";
 }
 
-/** Computed by the app, not set by hand. */
+/** Computed by the app, not set by hand; a button has no value at all. */
 export function isComputed(type: PropertyType): boolean {
-    return type === "created_time" || type === "last_edited_time" || type === "formula" || type === "rollup";
+    return (
+        type === "created_time" ||
+        type === "last_edited_time" ||
+        type === "formula" ||
+        type === "rollup" ||
+        type === "button"
+    );
 }
 
 /** A new status property starts like Notion's. */
@@ -205,6 +215,19 @@ function parseRelation(row: Record<string, unknown>): RelationSettings | null {
     };
 }
 
+/** The server keeps a button's label and actions in options (package 32f); invalid actions are left out. */
+function parseButton(row: Record<string, unknown>): ButtonSettings {
+    const source = isObject(row.button) ? row.button : isObject(row.options) ? row.options : {};
+    const actions = Array.isArray(source.actions)
+        ? source.actions.flatMap((action: unknown): ButtonAction[] => {
+              if (!isObject(action) || typeof action.propertyId !== "string") return [];
+              if (action.today === true) return [{ propertyId: action.propertyId, today: true }];
+              return "value" in action ? [{ propertyId: action.propertyId, value: action.value }] : [];
+          })
+        : [];
+    return { label: typeof source.label === "string" ? source.label : "", actions };
+}
+
 /** The cache keeps the members loaded with a person property (package 29). */
 function parsePeople(value: unknown): WorkspacePerson[] {
     if (!Array.isArray(value)) return [];
@@ -286,6 +309,7 @@ export function parseProperties(rows: unknown): DatabaseProperty[] {
                 ...(row.type === "number" && numberFormat ? { numberFormat } : {}),
                 ...(relation ? { relation } : {}),
                 ...(rollup ? { rollup } : {}),
+                ...(row.type === "button" ? { button: parseButton(row) } : {}),
                 // Server rows have none; the repository adds them (and the cache keeps them).
                 ...(row.type === "person" && Array.isArray(row.people) ? { people: parsePeople(row.people) } : {}),
             },
@@ -495,10 +519,31 @@ export function readValue(property: DatabaseProperty, raw: unknown): PropertyVal
         }
         case "formula":
         case "rollup":
+        case "button":
         case "created_time":
         case "last_edited_time":
             return null;
     }
+}
+
+/**
+ * The values a click on a button sets (package 32f): actions on properties
+ * that are gone or computed, or whose value no longer fits (a deleted
+ * option), are skipped; "today" is the local day.
+ */
+export function buttonChanges(
+    button: ButtonSettings,
+    properties: DatabaseProperty[],
+    today: string,
+): { propertyId: string; value: PropertyValue }[] {
+    return button.actions.flatMap((action) => {
+        const property = properties.find((item) => item.id === action.propertyId);
+        if (!property || isComputed(property.type)) return [];
+        if ("today" in action)
+            return property.type === "date" ? [{ propertyId: property.id, value: { start: today, end: null } }] : [];
+        const value = readValue(property, action.value);
+        return value === null && action.value !== null ? [] : [{ propertyId: property.id, value }];
+    });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

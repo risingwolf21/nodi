@@ -69,7 +69,7 @@ const optionsColumn = (options: PropertyOption[]) => ({ options });
 
 export type NewProperty = Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "numberFormat">;
 export type PropertyChanges = Partial<
-    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat" | "rollup">
+    Pick<DatabaseProperty, "name" | "type" | "options" | "position" | "formula" | "numberFormat" | "rollup" | "button">
 >;
 export type NewView = Pick<DatabaseView, "name" | "type" | "config" | "position">;
 export type ViewChanges = Partial<Pick<DatabaseView, "name" | "config" | "position">>;
@@ -328,22 +328,24 @@ export const databaseRepository = {
     },
 
     async updateProperty(propertyId: string, changes: PropertyChanges): Promise<DatabaseProperty> {
-        const { options, formula, numberFormat, rollup, ...rest } = changes;
+        const { options, formula, numberFormat, rollup, button, ...rest } = changes;
         // The server keeps a formula's expression, a number's format and a rollup's settings in options.
         const column =
             formula !== undefined
                 ? { expression: formula }
                 : numberFormat !== undefined
                   ? { format: numberFormat }
-                  : rollup !== undefined
-                    ? {
-                          relationPropertyId: rollup.relationPropertyId,
-                          targetPropertyId: rollup.targetPropertyId,
-                          function: rollup.function,
-                      }
-                    : options
-                      ? optionsColumn(options)
-                      : undefined;
+                  : button !== undefined
+                    ? { label: button.label, actions: button.actions }
+                    : rollup !== undefined
+                      ? {
+                            relationPropertyId: rollup.relationPropertyId,
+                            targetPropertyId: rollup.targetPropertyId,
+                            function: rollup.function,
+                        }
+                      : options
+                        ? optionsColumn(options)
+                        : undefined;
         const response = await supabase
             .from("database_properties")
             .update(column ? { ...rest, options: column } : rest)
