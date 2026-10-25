@@ -57,6 +57,23 @@ const calloutBlock = createReactBlockSpec(
     },
 );
 
+/**
+ * Columns (package 32e): a "columns" block whose children ("column" blocks)
+ * stand side by side; each column's children are its content. The layout is
+ * CSS only (`index.css`), so the document stays plain BlockNote blocks.
+ * BlockNote's own multi-column package is not used (its license is GPL or
+ * commercial).
+ */
+const columnsBlock = createReactBlockSpec(
+    { type: "columns", propSchema: {}, content: "none" },
+    { render: () => <div className="nodi-columns-handle" contentEditable={false} /> },
+);
+
+const columnBlock = createReactBlockSpec(
+    { type: "column", propSchema: {}, content: "none" },
+    { render: () => <div className="nodi-column-handle" contentEditable={false} /> },
+);
+
 /** A link to a page in the text, inserted with "@" (package 28). */
 const pageLink = createReactInlineContentSpec(
     {
@@ -82,7 +99,13 @@ const commentStyle = createReactStyleSpec(
  * text; comments on text.
  */
 export const editorSchema = BlockNoteSchema.create({
-    blockSpecs: { ...defaultBlockSpecs, database: databaseBlock(), callout: calloutBlock() },
+    blockSpecs: {
+        ...defaultBlockSpecs,
+        database: databaseBlock(),
+        callout: calloutBlock(),
+        columns: columnsBlock(),
+        column: columnBlock(),
+    },
     inlineContentSpecs: { ...defaultInlineContentSpecs, pageLink },
     styleSpecs: { ...defaultStyleSpecs, comment: commentStyle },
 });
