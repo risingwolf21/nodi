@@ -19,6 +19,13 @@ type AuthContextValue = {
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
     signOut: () => Promise<void>;
+    /** Sends a link to set a new password (package 33b). */
+    requestPasswordReset: (email: string) => Promise<void>;
+    /** Opened from that link: the app asks for a new password first. */
+    passwordRecovery: boolean;
+    updatePassword: (password: string) => Promise<void>;
+    /** Checks the password, deletes the account on the server and ends the session here. */
+    deleteAccount: (password: string) => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

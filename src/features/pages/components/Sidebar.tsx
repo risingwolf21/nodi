@@ -1,7 +1,20 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronsUpDown, FileInput, FileText, LogOut, Plus, Search, Table2, Trash2, Users } from "lucide-react";
+import {
+    Check,
+    ChevronsUpDown,
+    FileInput,
+    FileText,
+    LogOut,
+    Plus,
+    Search,
+    Table2,
+    Trash2,
+    UserX,
+    Users,
+} from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { cn } from "@/lib/utils";
+import { LegalLinks } from "@/features/legal/LegalLinks";
 import { PageTree, type TreeDragAndDrop } from "../PageTree";
 import { displayTitle } from "../page-display";
 import {
@@ -32,6 +45,7 @@ type SidebarProps = {
     accountEmail: string | null;
     signingOut: boolean;
     onSignOut: () => void;
+    onDeleteAccount: () => void;
     onSelect: (pageId: string) => void;
     /** `section` is used for root pages; subpages take their parent's. */
     onCreatePage: (parentId: string | null, section: PageSection, kind?: PageKind) => void;
@@ -79,6 +93,7 @@ export function Sidebar({
     accountEmail,
     signingOut,
     onSignOut,
+    onDeleteAccount,
     onSelect,
     onCreatePage,
     onOpenMembers,
@@ -222,6 +237,17 @@ export function Sidebar({
                         <LogOut className="size-4" />
                         {signingOut ? "Synchronisiert …" : "Abmelden"}
                     </MenuItem>
+                    <MenuItem
+                        disabled={signingOut}
+                        onSelect={() => {
+                            setWorkspaceMenuOpen(false);
+                            onDeleteAccount();
+                        }}
+                    >
+                        <UserX className="size-4" />
+                        Konto löschen …
+                    </MenuItem>
+                    <LegalLinks className="justify-start px-2 py-1" />
                 </Menu>
             </div>
 
