@@ -1,0 +1,27 @@
+name: Dateien gelöschter Seiten entfernen
+
+# Paket 35: Einmal täglich räumt die Edge Function purge-deleted-files auf, was
+# die App nach dem Löschen nicht geschafft hat (abgebrochen, offline, mehr als
+# eine Runde). Sie löscht nur Dateien von Seiten, die es nicht mehr gibt.
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  purge:
+    name: Purge files of deleted pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call purge-deleted-files
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" || (echo "VITE_SUPABASE_URL fehlt" && exit 1)
+          test -n "$SUPABASE_PUBLISHABLE_KEY" || (echo "VITE_SUPABASE_PUBLISHABLE_KEY fehlt" && exit 1)
+          curl --fail-with-body --silent --show-error --max-time 300 -X POST \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            "$SUPABASE_URL/functions/v1/purge-deleted-files"

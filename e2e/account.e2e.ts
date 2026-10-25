@@ -49,6 +49,7 @@ test("Konto löschen: falsches Passwort wird abgelehnt, dann ist das Konto weg u
     await dialog.getByRole("button", { name: "Konto endgültig löschen" }).click();
     await expect(page.getByText("Willkommen zurück")).toBeVisible();
     expect(backend.accountDeleted).toBe(true);
+    await expect.poll(() => backend.fileCleanups).toBe(1);
     await expect
         .poll(() => page.evaluate(async () => (await indexedDB.databases()).map((database) => database.name)))
         .toEqual([]);

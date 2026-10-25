@@ -27,6 +27,7 @@ import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndi
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
 import { DeleteAccountDialog } from "@/features/auth/DeleteAccountDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
+import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
 import { SearchDialog } from "@/features/search/components/SearchDialog";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
@@ -453,7 +454,12 @@ export default function WorkspaceHome() {
                     offline={authOffline}
                     onCancel={() => setDeleteAccountOpen(false)}
                     // Like signing out: the local data of the account goes as well (package 33).
-                    onDelete={(password) => signOutAndDeleteLocalData(user.id, () => deleteAccount(password))}
+                    onDelete={(password) =>
+                        signOutAndDeleteLocalData(user.id, async () => {
+                            await deleteAccount(password);
+                            requestDeletedFilesCleanup();
+                        })
+                    }
                 />
             )}
 

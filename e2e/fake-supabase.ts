@@ -100,6 +100,8 @@ export type FakeBackend = {
     /** New passwords set with updateUser. */
     newPasswords: string[];
     accountDeleted: boolean;
+    /** Calls of the Edge Function purge-deleted-files. */
+    fileCleanups: number;
 };
 
 export type FakeComment = {
@@ -164,6 +166,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         passwordResets: [],
         newPasswords: [],
         accountDeleted: false,
+        fileCleanups: 0,
         ...initial,
     };
 }
@@ -440,6 +443,10 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
 
+    if (path === "/functions/v1/purge-deleted-files") {
+        if (method === "POST") backend.fileCleanups += 1;
+        return json({ removed: 0 });
+    }
     if (path === "/rest/v1/rpc/delete_account") {
         backend.accountDeleted = true;
         return route.fulfill({ status: 204, headers: CORS });

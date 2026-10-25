@@ -48,6 +48,8 @@ test("„Papierkorb leeren“ löscht alle eigenen Seiten im Papierkorb auf einm
     await expect(dialog).toBeHidden();
 
     expect(backend.pages.map((item) => item.id)).toEqual(["p4", "p5"]);
+    // The server removes the files of the deleted pages (package 35).
+    await expect.poll(() => backend.fileCleanups).toBe(1);
     await expect(page.getByText("Von Anna")).toBeVisible();
     await expect(page.getByText("Entwurf")).toBeHidden();
     // Only pages of others are left: nothing more to empty.
