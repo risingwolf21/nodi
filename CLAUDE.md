@@ -267,7 +267,8 @@ src/
   vite-env.d.ts
   components/
     LoadErrorBoundary.tsx   # Fehler beim Nachladen: Hinweis + „Neu laden“
-    auth/AuthForm.tsx
+    auth/AuthForm.tsx       # Anmelden, Registrieren, Passwort vergessen (33b)
+    auth/NewPasswordForm.tsx # neues Passwort nach dem Link aus der E-Mail (33b)
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
@@ -290,6 +291,8 @@ src/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
       SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
+      DeleteAccountDialog.tsx # Konto löschen mit Passwort (33b)
+    legal/                  # Impressum/Datenschutz unter ?seite= (33b); Angaben in operator.ts
     databases/              # Paket 14b
       types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
       database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
@@ -2499,6 +2502,31 @@ nicht gewünscht.
       - Dateien im Storage bleiben vorerst liegen (Paket 35).
       - pgTAP: `delete_account.test.sql`; zusätzlich über die lokale
         Supabase-API geprüft (Konto weg, alter Token abgelehnt).
+    - **Umsetzung 33b** (nur Frontend, keine Migration):
+      - Login: „Passwort vergessen?“ → `resetPasswordForEmail` mit
+        `redirectTo` = App-URL (`BASE_URL`, auf GitHub Pages
+        `https://risingwolf21.github.io/nodi/`); dieselbe Antwort, ob es das
+        Konto gibt oder nicht. Der Link meldet über `#…&type=recovery` an
+        (`PASSWORD_RECOVERY` im `AuthProvider`), die App fragt dann zuerst
+        nach dem neuen Passwort (`NewPasswordForm`, `updateUser`, „Später“).
+        **Im Supabase-Dashboard** muss die App-URL unter Authentication → URL
+        Configuration als Redirect-URL eingetragen sein.
+      - Workspace-Menü → „Konto löschen …“ (`DeleteAccountDialog`): Folgen,
+        Passwort zur Bestätigung (erneutes `signInWithPassword`, „Das Passwort
+        stimmt nicht.“), nur online. Danach `delete_account`, lokale Sitzung
+        beenden (`signOut({ scope: "local" })`) und wie beim Abmelden alle
+        lokalen Datenbanken des Kontos löschen (`signOutAndDeleteLocalData`).
+      - Impressum und Datenschutzerklärung unter `?seite=impressum` bzw.
+        `?seite=datenschutz` (wie `?p=` ohne Anmeldung, `main.tsx`), verlinkt
+        auf der Login-Seite und im Workspace-Menü (`LegalLinks`). Inhalt in
+        `features/legal/LegalPage.tsx` aus den tatsächlichen Datenflüssen
+        (GitHub Pages, Supabase, Klartext, Teilen/öffentliche Links,
+        OpenStreetMap, Daten auf dem Gerät, Notion-Import, Löschen, Rechte).
+        Name, Anschrift, E-Mail, Supabase-Region, Aufsichtsbehörde und Datum
+        stehen als Platzhalter in `features/legal/operator.ts`; solange einer
+        fehlt, sind sie markiert und oben steht ein Hinweis. Keine
+        Rechtsberatung: vor Veröffentlichung prüfen lassen.
+      - Tests: Vitest `legal-page.test.ts`, Playwright `account.e2e.ts`.
 34. **Export:** Seiten und Datenbanken als Markdown + CSV in einer ZIP-Datei
     (wie der Notion-Export, von nodi wieder importierbar; Nutzer,
     2026-10-25).

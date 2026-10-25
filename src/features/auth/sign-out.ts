@@ -15,7 +15,7 @@ export function syncBeforeSignOut(userId: string): Promise<number> {
 /**
  * Step 2, after sync succeeded or the user chose to discard: sign out, then
  * delete this account's local data on this device. If signing out fails,
- * nothing is deleted.
+ * nothing is deleted. Deleting the account (package 33) ends the same way.
  */
 export async function signOutAndDeleteLocalData(userId: string, signOut: () => Promise<void>): Promise<void> {
     const engine = syncEngineFor(userId);

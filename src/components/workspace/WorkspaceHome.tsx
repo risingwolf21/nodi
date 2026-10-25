@@ -25,6 +25,7 @@ import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-doc
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
+import { DeleteAccountDialog } from "@/features/auth/DeleteAccountDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
 import { SearchDialog } from "@/features/search/components/SearchDialog";
 import { Dialog } from "@/components/ui/dialog";
@@ -45,7 +46,7 @@ function cleanUpRevokedCopies(userId: string): void {
 }
 
 export default function WorkspaceHome() {
-    const { user, offline: authOffline, signOut } = useAuth();
+    const { user, offline: authOffline, signOut, deleteAccount } = useAuth();
 
     const {
         workspaces,
@@ -103,6 +104,7 @@ export default function WorkspaceHome() {
     // "Verschieben nach …"; with a target when a page was dragged to another section (ask first).
     const [movePageDialog, setMovePageDialog] = useState<{ page: Page; target?: MoveTarget } | null>(null);
     const [membersOpen, setMembersOpen] = useState(false);
+    const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
 
     // Workspaces and page tree are cached for reading only (CLAUDE.md §2).
@@ -310,6 +312,7 @@ export default function WorkspaceHome() {
                             accountEmail={user?.email ?? null}
                             signingOut={signOutStep.kind !== "idle"}
                             onSignOut={() => void handleSignOut()}
+                            onDeleteAccount={() => setDeleteAccountOpen(true)}
                             onSelect={(id) => openPage(id)}
                             onCreatePage={(parentId, section, kind) => void createPage(parentId, section, kind)}
                             onOpenMembers={() => setMembersOpen(true)}
@@ -419,6 +422,15 @@ export default function WorkspaceHome() {
                     unsyncedPages={signOutStep.unsyncedPages}
                     onCancel={() => setSignOutStep({ kind: "idle" })}
                     onDiscardAndSignOut={() => signOutAndDeleteLocalData(user.id, signOut)}
+                />
+            )}
+
+            {deleteAccountOpen && user && (
+                <DeleteAccountDialog
+                    offline={authOffline}
+                    onCancel={() => setDeleteAccountOpen(false)}
+                    // Like signing out: the local data of the account goes as well (package 33).
+                    onDelete={(password) => signOutAndDeleteLocalData(user.id, () => deleteAccount(password))}
                 />
             )}
 

@@ -95,6 +95,11 @@ export type FakeBackend = {
     favorites: string[];
     /** Comments of pages (package 31a), as the server stores them. */
     comments: FakeComment[];
+    /** "Passwort vergessen?" requests (package 33b), oldest first. */
+    passwordResets: { email: string; redirectTo: string | null }[];
+    /** New passwords set with updateUser. */
+    newPasswords: string[];
+    accountDeleted: boolean;
 };
 
 export type FakeComment = {
@@ -156,6 +161,9 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         recurrenceRuns: [],
         favorites: [],
         comments: [],
+        passwordResets: [],
+        newPasswords: [],
+        accountDeleted: false,
         ...initial,
     };
 }
@@ -193,6 +201,20 @@ function session() {
             created_at: "2026-10-01T10:00:00Z",
         },
     };
+}
+
+/** The part of the link from a password reset e-mail that supabase-js reads (implicit flow). */
+export function recoveryHash(): string {
+    const { access_token, refresh_token, expires_in, expires_at, token_type } = session();
+    const params = new URLSearchParams({
+        access_token,
+        refresh_token,
+        expires_in: String(expires_in),
+        expires_at: String(expires_at),
+        token_type,
+        type: "recovery",
+    });
+    return `#${params.toString()}`;
 }
 
 /** Starts the app signed in, as if the session were stored from an earlier visit. */
@@ -324,7 +346,14 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         // No session: the address still has to be confirmed.
         return json({ ...session().user, identities: [{ id: "identity" }] });
     }
-    if (path === "/auth/v1/user") return json(session().user);
+    if (path === "/auth/v1/recover") {
+        backend.passwordResets.push({ email: text(requestBody(route), "email"), redirectTo: query.get("redirect_to") });
+        return json({});
+    }
+    if (path === "/auth/v1/user") {
+        if (method === "PUT") backend.newPasswords.push(text(requestBody(route), "password"));
+        return json(session().user);
+    }
     if (path === "/auth/v1/logout") return route.fulfill({ status: 204, headers: CORS });
 
     // Workspaces and page tree
@@ -411,6 +440,10 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         );
     }
 
+    if (path === "/rest/v1/rpc/delete_account") {
+        backend.accountDeleted = true;
+        return route.fulfill({ status: 204, headers: CORS });
+    }
     if (path === "/rest/v1/rpc/list_page_comments") {
         const pageId = text(requestBody(route), "p_page_id");
         return json(backend.comments.filter((item) => item.page_id === pageId));

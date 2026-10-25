@@ -18,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set when the stored session could not be renewed for lack of network.
     const [offlineAccount, setOfflineAccount] = useState<Account | null>(null);
     const [loading, setLoading] = useState(true);
+    const [passwordRecovery, setPasswordRecovery] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((event, nextSession) => {
             setSession(nextSession);
+            if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
 
             if (nextSession) {
                 rememberAccount(toAccount(nextSession));
@@ -144,6 +146,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOfflineAccount(null);
     }
 
+    async function requestPasswordReset(email: string) {
+        // The link leads back into the app (GitHub Pages: below /nodi/).
+        const redirectTo = new URL(import.meta.env.BASE_URL, location.origin).href;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+    }
+
+    async function updatePassword(password: string) {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setPasswordRecovery(false);
+    }
+
+    async function deleteAccount(password: string) {
+        const email = session?.user.email;
+        if (!email) throw new Error("Zum Löschen des Kontos ist eine Internetverbindung nötig.");
+
+        // Deleting is final: the password confirms that the person at the device owns the account.
+        const { error: passwordError } = await supabase.auth.signInWithPassword({ email, password });
+        if (passwordError) {
+            throw new Error(
+                passwordError.code === "invalid_credentials" ? "Das Passwort stimmt nicht." : passwordError.message,
+            );
+        }
+
+        const { error } = await supabase.rpc("delete_account");
+        if (error) throw new Error("Das Konto konnte nicht gelöscht werden. Bitte versuche es erneut.");
+
+        // The account no longer exists on the server: only the session on this device remains.
+        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+        if (signOutError) console.error("Could not end the local session:", signOutError);
+        localStorage.removeItem(authStorageKey);
+        localStorage.removeItem(`${authStorageKey}-user`);
+        forgetAccount();
+        setSession(null);
+        setOfflineAccount(null);
+    }
+
     const user = session ? toAccount(session) : offlineAccount;
 
     return (
@@ -156,6 +196,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 signIn,
                 signUp,
                 signOut,
+                requestPasswordReset,
+                passwordRecovery,
+                updatePassword,
+                deleteAccount,
             }}
         >
             {children}
