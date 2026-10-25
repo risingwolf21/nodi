@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { zipSync } from "fflate";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { databaseRepository } from "@/features/databases/services/database-repository";
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { downloadPageFile } from "@/features/files/services/page-files";
@@ -30,7 +31,7 @@ type ExportState =
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** Export as Markdown and files in a ZIP, readable by nodi's import (package 34a). Loaded on demand. */
+/** Export as Markdown and files in a ZIP, readable by nodi's import (packages 34a, 34b). Loaded on demand. */
 export default function ExportDialog({ userId, pages, rootIds, label, fileName, onClose }: ExportDialogProps) {
     const [state, setState] = useState<ExportState>({ kind: "ready" });
     const zipName = `${safeName(fileName)} ${today()}.zip`;
@@ -51,6 +52,7 @@ export default function ExportDialog({ userId, pages, rootIds, label, fileName, 
                         (await store.get(pageId))?.content ??
                         (await remoteDocumentRepository.fetch(pageId)).document?.content ??
                         [],
+                    loadDatabase: (databaseId) => databaseRepository.load(databaseId),
                     downloadFile: downloadPageFile,
                     blocksToMarkdown,
                 },
@@ -77,8 +79,8 @@ export default function ExportDialog({ userId, pages, rootIds, label, fileName, 
                 Exportieren
             </h2>
             <p className="text-sm text-muted-foreground">
-                {label} mit allen Unterseiten, Bildern und Anhängen als ZIP-Datei mit Markdown, wie ein Notion-Export.
-                nodi kann sie über „Aus Notion importieren“ wieder einlesen.
+                {label} mit allen Unterseiten, Datenbanken, Bildern und Anhängen als ZIP-Datei mit Markdown und CSV, wie
+                ein Notion-Export. nodi kann sie über „Aus Notion importieren“ wieder einlesen.
             </p>
 
             {state.kind === "running" && (
@@ -92,6 +94,8 @@ export default function ExportDialog({ userId, pages, rootIds, label, fileName, 
                 <div role="status" className="space-y-2 text-sm">
                     <p>
                         Fertig: {state.result.pages === 1 ? "1 Seite" : `${state.result.pages} Seiten`},{" "}
+                        {state.result.databases > 0 &&
+                            `${state.result.databases === 1 ? "1 Datenbank" : `${state.result.databases} Datenbanken`}, `}
                         {state.result.attachments === 1 ? "1 Datei" : `${state.result.attachments} Dateien`}.
                     </p>
                     {state.result.problems.length > 0 && (
