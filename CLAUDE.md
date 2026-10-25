@@ -339,6 +339,7 @@ src/
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
+    export/                 # Paket 34: export-tree, export-markdown, build-export; ExportDialog (nachgeladen)
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -2530,6 +2531,46 @@ nicht gewünscht.
 34. **Export:** Seiten und Datenbanken als Markdown + CSV in einer ZIP-Datei
     (wie der Notion-Export, von nodi wieder importierbar; Nutzer,
     2026-10-25).
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Export einer Seite (mit
+      Unterseiten) und des ganzen Workspace (Backup). (2) Bilder und Anhänge
+      kommen mit in die ZIP-Datei.
+    - **Aufteilung:** 34a Seiten (Markdown, Dateien, Baum, Menüs), 34b
+      Datenbanken (CSV, Einträge).
+    - **Umsetzung 34a** (nur Frontend, keine Migration;
+      `src/features/export/`):
+      - Aufbau wie ein älterer Notion-Export, damit der Import ihn liest
+        (`export-tree.ts`): jede Seite `Titel <id ohne Bindestriche>.md`,
+        Unterseiten und Dateien im Ordner `Titel <id>/`, Geschwister nach
+        Titel; Namen ohne `\/:*?"<>|`, höchstens 80 Zeichen, leer „Ohne
+        Titel“. Links relativ und kodiert (auch Klammern). Vorlagen werden
+        nicht exportiert; Datenbanken sind als `….csv` eingeplant (34b).
+      - Text (`export-markdown.ts`): nodis eigene Blöcke werden vorher zu
+        BlockNote-Standardblöcken, dann wandelt BlockNote um
+        (`blocksToMarkdownLossy`, Editor ohne Ansicht in
+        `blocks-to-markdown.ts`). `# Titel` zuerst; Seitenlinks werden Links
+        auf die exportierte Seite (sonst ihr Titel als Text); ein
+        Datenbank-Block wird ein Link allein in der Zeile auf die `.csv`;
+        Spalten stehen nacheinander; Callouts werden `<aside>Emoji Text …
+        </aside>` (in anderen Blöcken ein Absatz mit Emoji);
+        Kommentar-Markierungen entfallen; `nodi-file:`-Bilder und Anhänge
+        zeigen auf die Datei im Ordner der Seite (gleiche Namen: „ (2)“).
+      - Ablauf (`build-export.ts`): Seite für Seite, Text zuerst aus der
+        Kopie auf dem Gerät (kann ungesyncte Änderungen enthalten), sonst
+        vom Server; Dateien per signierter URL (`downloadPageFile`), eine
+        nach der anderen. Was nicht klappt, steht in der Liste der Hinweise
+        (die Seite wird trotzdem mit Titel exportiert). ZIP per `fflate`
+        (`zipSync`), Download `Name JJJJ-MM-TT.zip`.
+      - Oberfläche: Seitenmenü „Exportieren“ (Seite mit Unterseiten, nur
+        eigener Workspace) und Workspace-Menü „Workspace exportieren“ (alle
+        obersten Seiten; nur online). `ExportDialog` ist nachgeladen:
+        Fortschritt „Seite n von m“, Ergebnis, Hinweise, „Erneut
+        herunterladen“.
+      - Verlustbehaftet wie Markdown: Farben, Ausrichtung, Titelbilder,
+        Icons, Kommentare und Seiteneinstellungen sind nicht im Export.
+      - Tests: Vitest (`export-tree`, `export-markdown`, `build-export` mit
+        Rundweg über `planNotionImport`), Playwright `export.e2e.ts`
+        (Download, Inhalt der ZIP, erneuter Import mit Bild, Seitenlink und
+        Callout; Workspace-Export).
 35. **Speicher aufräumen:** Dateien endgültig gelöschter Seiten und Konten
     aus dem Storage entfernen.
 
