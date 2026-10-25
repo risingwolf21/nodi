@@ -30,8 +30,8 @@ export type ExportItem = {
 
 /**
  * The pages to export: the given roots with everything below them, parents
- * first, siblings by title. A database's entries belong to the database and
- * are left to it (package 34b); templates are not exported.
+ * first, siblings by title. A database's entries are pages in its folder
+ * (their values are in its CSV, package 34b); templates are not exported.
  */
 export function planExport(pages: readonly Page[], rootIds: readonly string[]): ExportItem[] {
     const childrenOf = new Map<string, Page[]>();
@@ -53,7 +53,6 @@ export function planExport(pages: readonly Page[], rootIds: readonly string[]): 
             path: `${prefix}${base}.${page.kind === "database" ? "csv" : "md"}`,
             folder: `${prefix}${base}`,
         });
-        if (page.kind === "database") return;
         for (const child of [...(childrenOf.get(page.id) ?? [])].sort(byTitle))
             visit(child, `${prefix}${base}`, depth + 1);
     };

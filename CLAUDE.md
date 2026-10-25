@@ -339,7 +339,7 @@ src/
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
-    export/                 # Paket 34: export-tree, export-markdown, build-export; ExportDialog (nachgeladen)
+    export/                 # Paket 34: export-tree, export-markdown, export-csv, build-export; ExportDialog (nachgeladen)
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -2543,7 +2543,7 @@ nicht gewünscht.
         Unterseiten und Dateien im Ordner `Titel <id>/`, Geschwister nach
         Titel; Namen ohne `\/:*?"<>|`, höchstens 80 Zeichen, leer „Ohne
         Titel“. Links relativ und kodiert (auch Klammern). Vorlagen werden
-        nicht exportiert; Datenbanken sind als `….csv` eingeplant (34b).
+        nicht exportiert; Datenbanken werden `….csv` (34b).
       - Text (`export-markdown.ts`): nodis eigene Blöcke werden vorher zu
         BlockNote-Standardblöcken, dann wandelt BlockNote um
         (`blocksToMarkdownLossy`, Editor ohne Ansicht in
@@ -2571,6 +2571,30 @@ nicht gewünscht.
         Rundweg über `planNotionImport`), Playwright `export.e2e.ts`
         (Download, Inhalt der ZIP, erneuter Import mit Bild, Seitenlink und
         Callout; Workspace-Export).
+    - **Umsetzung 34b** (nur Frontend, keine Migration):
+      - Eine Datenbank wird `Titel <id>.csv`, ihre Einträge (ohne Vorlagen)
+        `.md` im Ordner `Titel <id>/` wie Seiten, ihre Unterseiten darunter.
+        Eigenschaften, Werte und Ansichten lädt `databaseRepository.load`
+        vom Server; berechnet wird wie in der App (`buildRows`: Formeln,
+        Rollups, Zeiten).
+      - CSV (`export-csv.ts`, RFC 4180): „Name“ (Titel) zuerst, dann die
+        Eigenschaften in ihrer Reihenfolge (Buttons nicht), Zeilen in der
+        Reihenfolge der Datenbank (`position`). Werte in den Formen, die der
+        Import wieder erkennt: Checkbox `Yes`/`No`, Zahlen mit Symbol
+        (`€12.5`, `15%`), Tag `JJJJ-MM-TT`, Uhrzeit in UTC
+        `JJJJ-MM-TT HH:MM (GMT+0)`, Zeitraum mit „→“, Auswahl per Name,
+        Verknüpfungen `Titel (Pfad.md)` (nur exportierte Einträge),
+        Dateien & Medien als Link auf die Datei im Ordner des Eintrags;
+        Formeln und Rollups als Ergebnis, alles andere als angezeigter Text.
+      - Wie beim Notion-Export gehen beim Weg zurück verloren: Ansichten
+        (der Import leitet Board und Kalender ab), Formel- und
+        Rollup-Ausdrücke (feste Werte), Optionsfarben, Personen und Dateien
+        (Text). Verknüpfungen kommen als Verknüpfung zurück.
+      - Kann eine Datenbank nicht geladen werden, fehlt ihre CSV (Hinweis);
+        die Einträge werden trotzdem exportiert.
+      - Tests: Vitest `export-csv.test.ts` (Rundweg über `parseCsv`,
+        `inferColumn`, `columnValue`), `build-export.test.ts`, Playwright
+        `export.e2e.ts` (Datenbank exportieren und wieder importieren).
 35. **Speicher aufräumen:** Dateien endgültig gelöschter Seiten und Konten
     aus dem Storage entfernen.
 
