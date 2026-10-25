@@ -410,7 +410,8 @@ supabase/
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
-                            # Zeitleiste (P32d), Buttons (P32f)
+                            # Zeitleiste (P32d), Buttons (P32f),
+                            # Konto löschen (P33a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2471,6 +2472,38 @@ nicht gewünscht.
         „Seite anlegen“, „Seite öffnen“, Werte anderer Typen.
       - Tests: Vitest `database-model.test.ts`, Playwright
         `database-buttons.e2e.ts`.
+
+### Plan ab Paket 33 (Nutzer, 2026-10-25)
+
+33. **Konto und Rechtliches:** Passwort zurücksetzen, Konto löschen,
+    Impressum und Datenschutzerklärung. Aufteilung: 33a Datenbank, 33b
+    Oberfläche.
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Eigene Workspaces mit
+      anderen Mitgliedern gehen beim Löschen des Kontos an das Mitglied,
+      das am längsten dabei ist; private Seiten der Person werden gelöscht.
+      (2) Impressum und Datenschutzerklärung als Vorlage mit Platzhaltern
+      aus den tatsächlichen Datenflüssen; Name, Anschrift und Kontakt trägt
+      der Nutzer ein (keine Rechtsberatung).
+    - **Umsetzung 33a** (`20261025090000_delete_account.sql`):
+      - RPC `delete_account()` (nur `authenticated`, sonst `42501`): eigene
+        Workspaces ohne andere Mitglieder werden samt Seiten gelöscht (auch
+        private Seiten früherer Mitglieder, die niemand mehr erreicht), mit
+        Mitgliedern gehen sie an das zuerst beigetretene (`joined_at`, Rolle
+        `owner`). In jedem Workspace endet die Mitgliedschaft wie bei
+        `leave_workspace` (geteilte Seiten an den Workspace-Owner). Danach
+        werden die übrigen Seiten der Person gelöscht (privat, mit allem
+        darunter), ihre Freigaben beendet, `created_by` bleibender Seiten auf
+        deren Owner gesetzt und `auth.users` gelöscht; Kommentare,
+        Favoriten, Mitgliedschaften und öffentliche Links gehen per Kaskade
+        mit.
+      - Dateien im Storage bleiben vorerst liegen (Paket 35).
+      - pgTAP: `delete_account.test.sql`; zusätzlich über die lokale
+        Supabase-API geprüft (Konto weg, alter Token abgelehnt).
+34. **Export:** Seiten und Datenbanken als Markdown + CSV in einer ZIP-Datei
+    (wie der Notion-Export, von nodi wieder importierbar; Nutzer,
+    2026-10-25).
+35. **Speicher aufräumen:** Dateien endgültig gelöschter Seiten und Konten
+    aus dem Storage entfernen.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
