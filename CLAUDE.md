@@ -260,6 +260,7 @@ vite.config.ts
 .github/workflows/
   ci.yml                    # Lint, Build, DB-Migrationen, pgTAP-Tests
   deploy.yml                # GitHub Pages, nur bei Push auf `production`
+  purge-deleted-files.yml   # täglich: Dateien gelöschter Seiten entfernen (35b)
 src/
   App.tsx
   main.tsx
@@ -267,7 +268,8 @@ src/
   vite-env.d.ts
   components/
     LoadErrorBoundary.tsx   # Fehler beim Nachladen: Hinweis + „Neu laden“
-    auth/AuthForm.tsx
+    auth/AuthForm.tsx       # Anmelden, Registrieren, Passwort vergessen (33b)
+    auth/NewPasswordForm.tsx # neues Passwort nach dem Link aus der E-Mail (33b)
     editor/BlockEditor.tsx  # nachgeladen; Status, Hinweise, BlockNote (de)
     editor/EditorFrame.tsx  # Rahmen einer Seite: Top-Leiste + Textspalte
     editor/editor-theme.ts  # BlockNote-Theme (Editor und öffentliche Ansicht)
@@ -290,6 +292,8 @@ src/
     auth/
       sign-out.ts           # Logout-Policy: syncen, dann lokale Daten löschen
       SignOutDialog.tsx     # Warnung bei ungesyncten Änderungen
+      DeleteAccountDialog.tsx # Konto löschen mit Passwort (33b)
+    legal/                  # Impressum/Datenschutz unter ?seite= (33b); Angaben in operator.ts
     databases/              # Paket 14b
       types.ts              # Eigenschaften, Werte, Ansichten, Filter/Sortierung
       database-model.ts     # Parser, Werte lesen/formatieren, Filter, Sortierung (Vitest)
@@ -336,6 +340,7 @@ src/
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
+    export/                 # Paket 34: export-tree, export-markdown, export-csv, build-export; ExportDialog (nachgeladen)
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -392,6 +397,7 @@ design/
   README.md                 # wie die PNGs erzeugt werden
 supabase/
   config.toml
+  functions/purge-deleted-files/ # Edge Function: Dateien gelöschter Seiten (35b)
   migrations/               # profiles, workspaces, pages, page_shares,
                             # Spaltenschutz (P2), save_page_document (P6),
                             # nur noch per RPC schreibbar (P8),
@@ -410,7 +416,8 @@ supabase/
                             # Suche (P27), Rückverweise (P28),
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
-                            # Zeitleiste (P32d), Buttons (P32f)
+                            # Zeitleiste (P32d), Buttons (P32f),
+                            # Konto löschen (P33a), Speicher aufräumen (P35a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -875,7 +882,8 @@ Deployment-Ziel: `https://risingwolf21.github.io/nodi/`.
   Schlüssel aus; `verify-database` spielt alle Migrationen auf eine
   frische Datenbank und führt `db lint` und die pgTAP-Tests aus. Erst
   danach verknüpft `migrate` das Supabase-Projekt und führt
-  `supabase db push --yes` aus (nur fehlende Migrationen). Schlägt ein
+  `supabase db push --yes` aus (nur fehlende Migrationen) und deployt
+  danach die Edge Function `purge-deleted-files` (seit 35b). Schlägt ein
   Job fehl, bleiben Datenbank und Seite unverändert. Benötigte Secrets:
   `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
   `SUPABASE_PROJECT_ID`. Laufende Deploys werden nicht abgebrochen
@@ -2471,6 +2479,186 @@ nicht gewünscht.
         „Seite anlegen“, „Seite öffnen“, Werte anderer Typen.
       - Tests: Vitest `database-model.test.ts`, Playwright
         `database-buttons.e2e.ts`.
+
+### Plan ab Paket 33 (Nutzer, 2026-10-25)
+
+33. **Konto und Rechtliches:** Passwort zurücksetzen, Konto löschen,
+    Impressum und Datenschutzerklärung. Aufteilung: 33a Datenbank, 33b
+    Oberfläche.
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Eigene Workspaces mit
+      anderen Mitgliedern gehen beim Löschen des Kontos an das Mitglied,
+      das am längsten dabei ist; private Seiten der Person werden gelöscht.
+      (2) Impressum und Datenschutzerklärung als Vorlage mit Platzhaltern
+      aus den tatsächlichen Datenflüssen; Name, Anschrift und Kontakt trägt
+      der Nutzer ein (keine Rechtsberatung).
+    - **Umsetzung 33a** (`20261025090000_delete_account.sql`):
+      - RPC `delete_account()` (nur `authenticated`, sonst `42501`): eigene
+        Workspaces ohne andere Mitglieder werden samt Seiten gelöscht (auch
+        private Seiten früherer Mitglieder, die niemand mehr erreicht), mit
+        Mitgliedern gehen sie an das zuerst beigetretene (`joined_at`, Rolle
+        `owner`). In jedem Workspace endet die Mitgliedschaft wie bei
+        `leave_workspace` (geteilte Seiten an den Workspace-Owner). Danach
+        werden die übrigen Seiten der Person gelöscht (privat, mit allem
+        darunter), ihre Freigaben beendet, `created_by` bleibender Seiten auf
+        deren Owner gesetzt und `auth.users` gelöscht; Kommentare,
+        Favoriten, Mitgliedschaften und öffentliche Links gehen per Kaskade
+        mit.
+      - Dateien im Storage bleiben vorerst liegen (Paket 35).
+      - pgTAP: `delete_account.test.sql`; zusätzlich über die lokale
+        Supabase-API geprüft (Konto weg, alter Token abgelehnt).
+    - **Umsetzung 33b** (nur Frontend, keine Migration):
+      - Login: „Passwort vergessen?“ → `resetPasswordForEmail` mit
+        `redirectTo` = App-URL (`BASE_URL`, auf GitHub Pages
+        `https://risingwolf21.github.io/nodi/`); dieselbe Antwort, ob es das
+        Konto gibt oder nicht. Der Link meldet über `#…&type=recovery` an
+        (`PASSWORD_RECOVERY` im `AuthProvider`), die App fragt dann zuerst
+        nach dem neuen Passwort (`NewPasswordForm`, `updateUser`, „Später“).
+        **Im Supabase-Dashboard** muss die App-URL unter Authentication → URL
+        Configuration als Redirect-URL eingetragen sein.
+      - Workspace-Menü → „Konto löschen …“ (`DeleteAccountDialog`): Folgen,
+        Passwort zur Bestätigung (erneutes `signInWithPassword`, „Das Passwort
+        stimmt nicht.“), nur online. Danach `delete_account`, lokale Sitzung
+        beenden (`signOut({ scope: "local" })`) und wie beim Abmelden alle
+        lokalen Datenbanken des Kontos löschen (`signOutAndDeleteLocalData`).
+      - Impressum und Datenschutzerklärung unter `?seite=impressum` bzw.
+        `?seite=datenschutz` (wie `?p=` ohne Anmeldung, `main.tsx`), verlinkt
+        auf der Login-Seite und im Workspace-Menü (`LegalLinks`). Inhalt in
+        `features/legal/LegalPage.tsx` aus den tatsächlichen Datenflüssen
+        (GitHub Pages, Supabase, Klartext, Teilen/öffentliche Links,
+        OpenStreetMap, Daten auf dem Gerät, Notion-Import, Löschen, Rechte).
+        Name, Anschrift, E-Mail, Supabase-Region, Aufsichtsbehörde und Datum
+        stehen als Platzhalter in `features/legal/operator.ts`; solange einer
+        fehlt, sind sie markiert und oben steht ein Hinweis. Keine
+        Rechtsberatung: vor Veröffentlichung prüfen lassen.
+      - Tests: Vitest `legal-page.test.ts`, Playwright `account.e2e.ts`.
+34. **Export:** Seiten und Datenbanken als Markdown + CSV in einer ZIP-Datei
+    (wie der Notion-Export, von nodi wieder importierbar; Nutzer,
+    2026-10-25).
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Export einer Seite (mit
+      Unterseiten) und des ganzen Workspace (Backup). (2) Bilder und Anhänge
+      kommen mit in die ZIP-Datei.
+    - **Aufteilung:** 34a Seiten (Markdown, Dateien, Baum, Menüs), 34b
+      Datenbanken (CSV, Einträge).
+    - **Umsetzung 34a** (nur Frontend, keine Migration;
+      `src/features/export/`):
+      - Aufbau wie ein älterer Notion-Export, damit der Import ihn liest
+        (`export-tree.ts`): jede Seite `Titel <id ohne Bindestriche>.md`,
+        Unterseiten und Dateien im Ordner `Titel <id>/`, Geschwister nach
+        Titel; Namen ohne `\/:*?"<>|`, höchstens 80 Zeichen, leer „Ohne
+        Titel“. Links relativ und kodiert (auch Klammern). Vorlagen werden
+        nicht exportiert; Datenbanken werden `….csv` (34b).
+      - Text (`export-markdown.ts`): nodis eigene Blöcke werden vorher zu
+        BlockNote-Standardblöcken, dann wandelt BlockNote um
+        (`blocksToMarkdownLossy`, Editor ohne Ansicht in
+        `blocks-to-markdown.ts`). `# Titel` zuerst; Seitenlinks werden Links
+        auf die exportierte Seite (sonst ihr Titel als Text); ein
+        Datenbank-Block wird ein Link allein in der Zeile auf die `.csv`;
+        Spalten stehen nacheinander; Callouts werden `<aside>Emoji Text …
+        </aside>` (in anderen Blöcken ein Absatz mit Emoji);
+        Kommentar-Markierungen entfallen; `nodi-file:`-Bilder und Anhänge
+        zeigen auf die Datei im Ordner der Seite (gleiche Namen: „ (2)“).
+      - Ablauf (`build-export.ts`): Seite für Seite, Text zuerst aus der
+        Kopie auf dem Gerät (kann ungesyncte Änderungen enthalten), sonst
+        vom Server; Dateien per signierter URL (`downloadPageFile`), eine
+        nach der anderen. Was nicht klappt, steht in der Liste der Hinweise
+        (die Seite wird trotzdem mit Titel exportiert). ZIP per `fflate`
+        (`zipSync`), Download `Name JJJJ-MM-TT.zip`.
+      - Oberfläche: Seitenmenü „Exportieren“ (Seite mit Unterseiten, nur
+        eigener Workspace) und Workspace-Menü „Workspace exportieren“ (alle
+        obersten Seiten; nur online). `ExportDialog` ist nachgeladen:
+        Fortschritt „Seite n von m“, Ergebnis, Hinweise, „Erneut
+        herunterladen“.
+      - Verlustbehaftet wie Markdown: Farben, Ausrichtung, Titelbilder,
+        Icons, Kommentare und Seiteneinstellungen sind nicht im Export.
+      - Tests: Vitest (`export-tree`, `export-markdown`, `build-export` mit
+        Rundweg über `planNotionImport`), Playwright `export.e2e.ts`
+        (Download, Inhalt der ZIP, erneuter Import mit Bild, Seitenlink und
+        Callout; Workspace-Export).
+    - **Umsetzung 34b** (nur Frontend, keine Migration):
+      - Eine Datenbank wird `Titel <id>.csv`, ihre Einträge (ohne Vorlagen)
+        `.md` im Ordner `Titel <id>/` wie Seiten, ihre Unterseiten darunter.
+        Eigenschaften, Werte und Ansichten lädt `databaseRepository.load`
+        vom Server; berechnet wird wie in der App (`buildRows`: Formeln,
+        Rollups, Zeiten).
+      - CSV (`export-csv.ts`, RFC 4180): „Name“ (Titel) zuerst, dann die
+        Eigenschaften in ihrer Reihenfolge (Buttons nicht), Zeilen in der
+        Reihenfolge der Datenbank (`position`). Werte in den Formen, die der
+        Import wieder erkennt: Checkbox `Yes`/`No`, Zahlen mit Symbol
+        (`€12.5`, `15%`), Tag `JJJJ-MM-TT`, Uhrzeit in UTC
+        `JJJJ-MM-TT HH:MM (GMT+0)`, Zeitraum mit „→“, Auswahl per Name,
+        Verknüpfungen `Titel (Pfad.md)` (nur exportierte Einträge),
+        Dateien & Medien als Link auf die Datei im Ordner des Eintrags;
+        Formeln und Rollups als Ergebnis, alles andere als angezeigter Text.
+      - Wie beim Notion-Export gehen beim Weg zurück verloren: Ansichten
+        (der Import leitet Board und Kalender ab), Formel- und
+        Rollup-Ausdrücke (feste Werte), Optionsfarben, Personen und Dateien
+        (Text). Verknüpfungen kommen als Verknüpfung zurück.
+      - Kann eine Datenbank nicht geladen werden, fehlt ihre CSV (Hinweis);
+        die Einträge werden trotzdem exportiert.
+      - Tests: Vitest `export-csv.test.ts` (Rundweg über `parseCsv`,
+        `inferColumn`, `columnValue`), `build-export.test.ts`, Playwright
+        `export.e2e.ts` (Datenbank exportieren und wieder importieren).
+35. **Speicher aufräumen:** Dateien endgültig gelöschter Seiten und Konten
+    aus dem Storage entfernen.
+    - **Entschieden (Nutzer, 2026-10-25):** (1) Warteschlange in der
+      Datenbank und eine Edge Function, die über die Storage-API löscht
+      (`storage.objects` erlaubt kein direktes Löschen); der
+      Service-Role-Key bleibt in der Edge Function. (2) Angestoßen von der
+      App nach „Endgültig löschen“, „Papierkorb leeren“ und „Konto löschen“
+      und zusätzlich einmal täglich von einem GitHub-Workflow.
+    - **Aufteilung:** 35a Datenbank, 35b Edge Function, Deploy, täglicher
+      Lauf, Aufrufe in der App.
+    - **Umsetzung 35a** (`20261025100000_page_file_cleanup.sql`):
+      - Tabelle `page_file_deletions (page_id, queued_at)`: Der Trigger
+        `queue_page_file_deletion` (nach `delete` auf `pages`, je Zeile)
+        trägt jede endgültig gelöschte Seite ein, auch Unterseiten (Kaskade)
+        und Seiten aus `delete_account`. RLS ohne Policies, keine Rechte für
+        `anon`/`authenticated`.
+      - `next_page_file_deletions(limit)` (nur `service_role`): entfernt
+        zuerst erledigte Einträge (keine Dateien mehr im Ordner, oder eine
+        Seite mit dieser ID gibt es wieder; deren Dateien bleiben) und
+        liefert dann bis zu `limit` (1–1000) Pfade im Bucket `page-files`,
+        die noch zu löschen sind. Doppelt löschen schadet nicht; ein
+        abgebrochener Lauf macht beim nächsten Aufruf weiter.
+      - Die Migration trägt einmalig die Seiten ein, deren Dateien heute
+        schon verwaist sind (Ordner ohne Seite).
+      - pgTAP: `page_file_cleanup.test.sql`.
+    - **Umsetzung 35b** (Edge Function, Workflows, App; keine Migration):
+      - Edge Function `supabase/functions/purge-deleted-files/index.ts`
+        (Deno, ohne Abhängigkeiten, nur `fetch`): bis zu zehn Runden
+        `next_page_file_deletions(1000)` → Storage-API
+        `DELETE /storage/v1/object/page-files` (`prefixes`), Antwort
+        `{removed}`. Schlüssel: `SUPABASE_SECRET_KEYS.default` (neue Keys,
+        nur im `apikey`-Header), sonst `SUPABASE_SERVICE_ROLE_KEY`
+        (Legacy-JWT, auch als `Authorization`). Nur `POST` (sonst 405),
+        CORS für die App.
+      - Ohne JWT-Prüfung (`[functions.purge-deleted-files] verify_jwt =
+false` in `supabase/config.toml`, beim Deploy `--no-verify-jwt`):
+        Die App ruft sie nach dem Löschen auch ohne Sitzung auf (Konto
+        gelöscht), der tägliche Lauf mit dem Publishable Key. Bewusst offen:
+        Sie löscht nur Dateien von Seiten, die es nicht mehr gibt, und
+        verrät nur eine Anzahl; ein Aufruf macht höchstens 10 000 Dateien.
+      - App: `requestDeletedFilesCleanup()`
+        (`features/files/services/purge-deleted-files.ts`, nur anstoßen,
+        Fehler in der Konsole) nach „Endgültig löschen“, „Papierkorb leeren“
+        (wenn etwas gelöscht wurde) und „Konto löschen“.
+      - Deploy (`deploy.yml`, Job `migrate`): nach `db push` folgt
+        `supabase functions deploy purge-deleted-files --no-verify-jwt
+--use-api` (ohne Docker); keine neuen Secrets.
+      - Täglicher Lauf `.github/workflows/purge-deleted-files.yml` (03:23
+        UTC und von Hand): `POST` mit `VITE_SUPABASE_URL` und
+        `VITE_SUPABASE_PUBLISHABLE_KEY` aus den Repository-Secrets. GitHub
+        pausiert Zeitpläne nach 60 Tagen ohne Aktivität im Repository; die
+        Aufrufe der App räumen weiter auf.
+      - ESLint lässt `supabase/functions` aus (Deno, nicht im tsconfig der
+        App). Geprüft lokal mit `supabase functions serve` gegen die lokale
+        Supabase: Datei einer gelöschten Seite entfernt, Warteschlange leer,
+        zweiter Aufruf `{removed: 0}`, `GET` → 405, neuer Secret Key nur im
+        `apikey`-Header von REST und Storage angenommen.
+      - Datenschutzerklärung (Abschnitt 8): Dateien gelöschter Seiten werden
+        automatisch entfernt.
+      - Tests: Playwright `trash.e2e.ts`, `account.e2e.ts` (Aufruf der
+        Function im Fake-Backend).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -78,6 +78,12 @@ jobs:
       - name: Push migrations
         run: supabase db push --yes
 
+      # Nach den Migrationen: die Function nutzt next_page_file_deletions (Paket 35).
+      # Ohne JWT-Prüfung (auch in supabase/config.toml): sie löscht nur Dateien
+      # gelöschter Seiten; App und täglicher Lauf rufen sie ohne Nutzer auf.
+      - name: Deploy Edge Functions
+        run: supabase functions deploy purge-deleted-files --no-verify-jwt --use-api --project-ref "$SUPABASE_PROJECT_ID"
+
   build:
     name: Lint, test and build
     runs-on: ubuntu-latest

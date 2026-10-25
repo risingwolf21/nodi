@@ -6,7 +6,8 @@ import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-    globalIgnores(["dist", "dist-e2e", "test-results", "playwright-report"]),
+    // supabase/functions runs on Deno (Edge Functions), outside the app's tsconfig.
+    globalIgnores(["dist", "dist-e2e", "test-results", "playwright-report", "supabase/functions"]),
     {
         files: ["**/*.{ts,tsx}"],
         extends: [

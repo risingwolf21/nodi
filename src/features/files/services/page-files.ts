@@ -41,3 +41,21 @@ export async function signedFileUrl(path: string): Promise<string> {
     if (error) throw toStorageError(error, "Die Datei konnte nicht geladen werden.");
     return data.signedUrl;
 }
+
+/** The content of a file, for the export (package 34a). */
+export async function downloadPageFile(path: string): Promise<Uint8Array> {
+    const url = await signedFileUrl(path);
+    let response: Response;
+    try {
+        response = await fetch(url);
+    } catch {
+        throw new RemoteRequestError("offline", "Die Datei konnte nicht geladen werden. Keine Internetverbindung.");
+    }
+    if (!response.ok) {
+        throw new RemoteRequestError(
+            classifyRequestError({ status: response.status }),
+            "Die Datei konnte nicht geladen werden.",
+        );
+    }
+    return new Uint8Array(await response.arrayBuffer());
+}

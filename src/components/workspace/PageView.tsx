@@ -39,6 +39,8 @@ type PageViewProps = {
     onArchive: (page: Page) => void;
     /** Adds the page to the favorites or removes it (package 30b); undefined where that is not possible. */
     onSetFavorite?: (pageId: string, favorite: boolean) => Promise<void>;
+    /** The page with its subpages as a ZIP file (package 34a). */
+    onExport?: (page: Page) => void;
     /** Only for the page owner. */
     onShare?: (page: Page) => void;
     /** Only for root pages of the owner. */
@@ -90,6 +92,7 @@ export function PageView({
     onUpdate,
     onArchive,
     onSetFavorite,
+    onExport,
     onShare,
     onMoveSection,
     onMove,
@@ -202,6 +205,16 @@ export function PageView({
                             }}
                         >
                             {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
+                        </MenuItem>
+                    )}
+                    {onExport && (
+                        <MenuItem
+                            onSelect={() => {
+                                setMenuOpen(false);
+                                onExport(page);
+                            }}
+                        >
+                            Exportieren
                         </MenuItem>
                     )}
                     <MenuItem onSelect={toggleFullWidth}>

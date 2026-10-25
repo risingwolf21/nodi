@@ -404,3 +404,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Package 35b: called by the app and a daily GitHub workflow without a user JWT;
+# it only deletes files of pages that no longer exist.
+[functions.purge-deleted-files]
+verify_jwt = false
