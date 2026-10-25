@@ -76,7 +76,8 @@ test("Landkarte zeigt Marker mit Quellenangabe, Titel nur als Text; Klick öffne
     expect(backend.tiles).toBeGreaterThan(0);
     await expect(page.locator("main")).toContainText("1 Eintrag ohne Ort");
 
-    await markers.nth(1).hover({ force: true });
+    // Like the click below: a hover could miss the marker while the map still zooms to fit.
+    await markers.nth(1).dispatchEvent("mouseover");
     await expect(page.locator(".leaflet-tooltip")).toHaveText("<img src=x onerror=window.__xss=1>");
     expect(await page.evaluate(() => document.querySelectorAll(".leaflet-tooltip img").length)).toBe(0);
 

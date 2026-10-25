@@ -17,7 +17,8 @@ test("Suche: Strg+K, Titel und Texte online; offline Titel und gespeicherte Seit
     });
     await openApp(page, context, backend);
 
-    // Online: the server finds the text; Enter opens the page.
+    // Online: the server finds the text; Enter opens the page. The shortcut works once the app is there.
+    await expect(page.getByRole("button", { name: "Suchen" })).toBeVisible();
     await page.keyboard.press("Control+k");
     const dialog = page.getByRole("dialog", { name: "Suchen" });
     await dialog.getByLabel("Suchen").fill("rom");
