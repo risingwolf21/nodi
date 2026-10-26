@@ -28,6 +28,7 @@ export type FakePage = {
     created_at: string;
     is_template?: boolean;
     cover?: string | null;
+    default_template_id?: string | null;
 };
 
 export type FakeProperty = {

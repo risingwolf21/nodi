@@ -23,6 +23,8 @@ export type Page = {
     created_at: string;
     /** A template: of its database for an entry (package 26), else for new pages (38b); missing means no. */
     is_template?: boolean;
+    /** For a database: the template "Neu" uses (package 38c); missing or null means none. */
+    default_template_id?: string | null;
     /** Cover above the title (package 30c): "gradient:<name>" or a `nodi-file:` image; missing or null means none. */
     cover?: string | null;
     /** In the user's favorites (package 30b); missing means no. */
@@ -30,7 +32,7 @@ export type Page = {
 };
 
 /** Page settings that can be changed after creation. */
-export type PageSettings = Partial<Pick<Page, "icon" | "full_width" | "cover" | "is_template">>;
+export type PageSettings = Partial<Pick<Page, "icon" | "full_width" | "cover" | "is_template" | "default_template_id">>;
 
 export type StoredPage = Page & {
     is_archived: boolean;

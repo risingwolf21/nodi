@@ -224,6 +224,12 @@ export default function WorkspaceHome() {
     // A new entry stays in the table (its name gets the focus there).
     async function createEntry(databaseId: string): Promise<string> {
         const database = pages.find((item) => item.id === databaseId);
+        // With a default template (package 38c), as long as it is still one of this database.
+        const templateId = database?.default_template_id;
+        const template = templateId
+            ? pages.find((item) => item.id === templateId && item.parent_id === databaseId && item.is_template)
+            : undefined;
+        if (template) return (await createEntryFromTemplate(template.id)).id;
         const entry = await createWorkspacePage("", databaseId, database?.visibility ?? "private");
         return entry.id;
     }
@@ -407,6 +413,8 @@ export default function WorkspaceHome() {
                                         : {
                                               onCreateFromTemplate: async (templateId) =>
                                                   (await createEntryFromTemplate(templateId)).id,
+                                              onSetDefault: (templateId) =>
+                                                  updatePage(page.id, { default_template_id: templateId }),
                                               onCreateTemplate: async () =>
                                                   (
                                                       await createWorkspacePage("", page.id, page.visibility, "page", {
