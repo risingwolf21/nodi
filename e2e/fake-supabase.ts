@@ -106,8 +106,21 @@ export type FakeBackend = {
     accountDeleted: boolean;
     /** Calls of the Edge Function purge-deleted-files. */
     fileCleanups: number;
+    /** Rows of list_my_mentions (package 37); the app marks them read. */
+    mentions: FakeMention[];
     /** Channels the app joined over Realtime (package 36); `sendPageActivity` reaches them. */
     realtimeChannels: { socket: WebSocketRoute; topic: string; joinRef: string }[];
+};
+
+export type FakeMention = {
+    id: string;
+    page_id: string;
+    workspace_id: string;
+    page_title: string;
+    page_icon: string | null;
+    mentioned_by_email: string;
+    mentioned_at: string;
+    read_at: string | null;
 };
 
 export type FakeComment = {
@@ -175,6 +188,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         newPasswords: [],
         accountDeleted: false,
         fileCleanups: 0,
+        mentions: [],
         realtimeChannels: [],
         ...initial,
     };
@@ -271,6 +285,24 @@ function fileFromMultipart(body: Buffer, contentType: string): Buffer {
         index = next;
     }
     return body;
+}
+
+/** Tells the app over Realtime that its mentions changed (package 37); filter 2 of the channel. */
+export function sendMentionChange(backend: FakeBackend): void {
+    for (const { socket, topic, joinRef } of backend.realtimeChannels) {
+        if (topic !== "realtime:page-activity") continue;
+        const data = {
+            schema: "public",
+            table: "page_mentions",
+            commit_timestamp: new Date().toISOString(),
+            type: "INSERT",
+            columns: [{ name: "id", type: "uuid" }],
+            record: { id: crypto.randomUUID() },
+            old_record: {},
+            errors: null,
+        };
+        socket.send(JSON.stringify([joinRef, null, topic, "postgres_changes", { ids: [2], data }]));
+    }
 }
 
 /** Tells the app over Realtime that a page changed, as the server's page_activity does (package 36). */
@@ -808,6 +840,15 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         });
         hits.sort((a, b) => Number(b.inTitle) - Number(a.inTitle));
         return json(hits.map(({ id, title, snippet }) => ({ id, title, snippet })));
+    }
+    if (path === "/rest/v1/rpc/list_my_mentions") return json(backend.mentions);
+    if (path === "/rest/v1/page_mentions" && method === "PATCH") {
+        const readAt = text(requestBody(route), "read_at");
+        const id = query.get("id")?.replace("eq.", "");
+        for (const mention of backend.mentions) {
+            if ((!id || mention.id === id) && mention.read_at === null) mention.read_at = readAt;
+        }
+        return route.fulfill({ status: 204, headers: CORS });
     }
     if (path === "/rest/v1/rpc/list_workspace_members") {
         return json([

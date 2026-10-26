@@ -14,7 +14,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
+import { AtSign, Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -40,6 +40,7 @@ import { fileCacheFor } from "@/features/files/services/file-cache";
 import { createFileUrlResolver } from "@/features/files/services/file-url-resolver";
 import { signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
 import { onPageActivity } from "@/features/realtime/page-activity";
+import { personName } from "@/features/mentions/mentions";
 
 type FrameProps = {
     topBarStart: ReactNode;
@@ -64,8 +65,9 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 const SUPERSEDED_NOTICE_MS = 8000;
 // A live change is loaded after this pause, so saves in a row cause one load.
 const LIVE_REFRESH_DELAY_MS = 1000;
-// The "@" menu shows this many pages; typing narrows them down.
+// The "@" menu shows this many pages and people; typing narrows them down.
 const PAGE_LINK_CHOICES = 12;
+const PEOPLE_CHOICES = 5;
 
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
@@ -276,8 +278,28 @@ function EditorContent({
     // A stable component: a new one on each render would remount the toolbar.
     const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
 
-    const pageLinkItems = (query: string) => {
+    // "@" offers people first (package 37), then pages (28), like Notion.
+    const mentionItems = (query: string) => {
         const needle = query.trim().toLocaleLowerCase("de");
+        const people = databaseBlocks.people
+            .filter((person) => person.userId !== userId && person.email.toLocaleLowerCase("de").includes(needle))
+            .slice(0, PEOPLE_CHOICES)
+            .map((person) => ({
+                title: personName(person.email),
+                subtext: person.email,
+                group: "Person erwähnen",
+                icon: <AtSign size={18} />,
+                onItemClick: () => {
+                    editor.insertInlineContent([
+                        { type: "mention", props: { userId: person.userId, label: person.email } },
+                        " ",
+                    ]);
+                },
+            }));
+        return [...people, ...pageLinkItems(needle)];
+    };
+
+    const pageLinkItems = (needle: string) => {
         return databaseBlocks.pages
             .filter((page) => !page.is_template && page.id !== pageId)
             .filter((page) => displayTitle(page).toLocaleLowerCase("de").includes(needle))
@@ -415,10 +437,10 @@ function EditorContent({
                             )
                         }
                     />
-                    {/* "@" links a page (package 28). */}
+                    {/* "@" mentions a person (package 37) or links a page (28). */}
                     <SuggestionMenuController
                         triggerCharacter="@"
-                        getItems={(query) => Promise.resolve(pageLinkItems(query))}
+                        getItems={(query) => Promise.resolve(mentionItems(query))}
                     />
                 </BlockNoteView>
             </DatabaseBlockContext>

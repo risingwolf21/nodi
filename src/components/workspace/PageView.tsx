@@ -12,6 +12,7 @@ import { displayTitle } from "@/features/pages/page-display";
 import type { PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
+import type { WorkspaceMember } from "@/features/pages/services/workspace-members";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -48,6 +49,8 @@ type PageViewProps = {
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
     userId: string | undefined;
+    /** Who can be mentioned with "@" (package 37). */
+    people: WorkspaceMember[];
     /** The page's children: a database's entries, an entry's subpages. */
     entries: Page[];
     /** For a database: its templates (package 26); undefined where they cannot be used. */
@@ -97,6 +100,7 @@ export function PageView({
     onMoveSection,
     onMove,
     userId,
+    people,
     entries,
     onCreateEntry,
     onCreateSubpage,
@@ -378,6 +382,7 @@ export function PageView({
                         onOpenPage: onSelect,
                         onCreateEntry,
                         onRenameEntry: onRename,
+                        people,
                     }}
                 />
             </Suspense>
