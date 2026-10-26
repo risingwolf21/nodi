@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutTemplate, Pencil, Plus } from "lucide-react";
+import { Check, LayoutTemplate, Pencil, Plus } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { displayTitle } from "@/features/pages/page-display";
 import type { Page } from "@/features/pages/types";
@@ -10,16 +10,20 @@ export type TemplateActions = {
     onCreateFromTemplate: (templateId: string) => Promise<string>;
     /** A new, empty template; returns its id. */
     onCreateTemplate: () => Promise<string>;
+    /** The template "Neu" uses, or none (package 38c). */
+    onSetDefault: (templateId: string | null) => Promise<void>;
 };
 
-/** "Vorlagen" in the toolbar of a database: new entries from a template, editing and adding templates. */
+/** "Vorlagen" in the toolbar of a database: new entries from a template, the default, editing and adding templates. */
 export function TemplatesMenu({
     templates,
+    defaultTemplateId,
     actions,
     onOpen,
     onError,
 }: {
     templates: Page[];
+    defaultTemplateId: string | null;
     actions: TemplateActions;
     onOpen: (pageId: string) => void;
     onError: (message: string) => void;
@@ -34,6 +38,15 @@ export function TemplatesMenu({
             onError(err instanceof Error ? err.message : "Das hat nicht geklappt.");
         }
     }
+
+    function setDefault(templateId: string | null) {
+        setOpen(false);
+        actions.onSetDefault(templateId).catch((err: unknown) => {
+            onError(err instanceof Error ? err.message : "Die Standardvorlage konnte nicht gespeichert werden.");
+        });
+    }
+
+    const defaultTemplate = templates.find((template) => template.id === defaultTemplateId);
 
     return (
         <div className="relative">
@@ -62,6 +75,21 @@ export function TemplatesMenu({
                         </div>
                         <button
                             type="button"
+                            aria-pressed={template.id === defaultTemplateId}
+                            aria-label={`„${displayTitle(template)}“ als Standard für „Neu“`}
+                            title="Standard für „Neu“"
+                            onClick={() => setDefault(template.id === defaultTemplateId ? null : template.id)}
+                            className="flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                            <Check
+                                className={
+                                    template.id === defaultTemplateId ? "size-3.5 text-brand" : "size-3.5 opacity-30"
+                                }
+                                aria-hidden="true"
+                            />
+                        </button>
+                        <button
+                            type="button"
                             aria-label={`Vorlage „${displayTitle(template)}“ bearbeiten`}
                             onClick={() => {
                                 setOpen(false);
@@ -73,6 +101,13 @@ export function TemplatesMenu({
                         </button>
                     </div>
                 ))}
+                {templates.length > 0 && (
+                    <p className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+                        {defaultTemplate
+                            ? `„Neu“ beginnt mit „${displayTitle(defaultTemplate)}“.`
+                            : "„Neu“ legt leere Einträge an. Mit ✓ wird eine Vorlage zum Standard."}
+                    </p>
+                )}
                 {templates.length > 0 && <div className="my-1 border-t" />}
                 <MenuItem onSelect={() => void run(actions.onCreateTemplate)}>
                     <Plus className="size-4" aria-hidden="true" />

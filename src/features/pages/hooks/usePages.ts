@@ -52,6 +52,7 @@ export function parseServerPages(data: unknown): StoredPage[] {
 // Columns of a page in the tree (StoredPage).
 export const PAGE_COLUMNS =
     "id,title,parent_id,owner_id,visibility,is_archived,icon,full_width,kind,position,created_at,is_template,cover," +
+    "default_template_id," +
     // Only the user's own favorites (RLS), package 30b.
     "favorites:page_favorites(created_at)";
 
@@ -69,6 +70,7 @@ export const toPage = ({
     is_template,
     favorite,
     cover,
+    default_template_id,
 }: StoredPage): Page => ({
     id,
     title,
@@ -83,6 +85,7 @@ export const toPage = ({
     ...(is_template ? { is_template } : {}),
     ...(favorite ? { favorite } : {}),
     ...(cover ? { cover } : {}),
+    ...(default_template_id ? { default_template_id } : {}),
 });
 
 export type NewPageOptions = {

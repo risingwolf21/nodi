@@ -2827,6 +2827,22 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
       - Noch nicht: Unterseiten der Vorlage mitkopieren, Vorlagen beim
         Anlegen wählen („+“ mit Vorlage), Vorlagen in geteilten Seiten
         anderer Workspaces.
+    - **Umsetzung 38c** (nur Frontend, keine Migration):
+      - `Page.default_template_id` wird mit dem Seitenbaum geladen und gecacht
+        (alte Caches: keine).
+      - Menü „Vorlagen“ der Datenbank: je Vorlage ein ✓ („… als Standard für
+        „Neu““, `aria-pressed`), erneuter Klick nimmt den Standard weg;
+        darunter, womit „Neu“ beginnt. Gespeichert per `updatePage` (nur mit
+        Schreibrecht, online).
+      - „Neu“ in allen Ansichten und in Datenbank-Blöcken
+        (`WorkspaceHome.createEntry`): Ist der Standard noch eine Vorlage
+        dieser Datenbank, entsteht der Eintrag per
+        `create_entry_from_template`, sonst leer. Der Wert einer
+        Board-Spalte oder eines Kalendertags wird danach gesetzt und gewinnt.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `entry-templates.e2e.ts`.
+      - Noch nicht: Standard je Ansicht (wie Notion), Standardvorlage für
+        Seiten außerhalb von Datenbanken.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

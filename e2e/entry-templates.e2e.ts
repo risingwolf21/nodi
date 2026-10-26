@@ -42,3 +42,45 @@ test("Vorlagen: anlegen, bearbeiten und daraus neue Einträge machen; die Ansich
     await expect(page.getByRole("note")).toContainText("Vorlage in „Besprechungen“");
     expect(backend.pages.filter((item) => item.is_template).length).toBe(2);
 });
+
+test("Standardvorlage: „Neu“ beginnt mit der gewählten Vorlage, bis man sie wieder abwählt", async ({
+    page,
+    context,
+}) => {
+    const backend = createBackend({
+        pages: [
+            fakePage("db", "Besprechungen", { kind: "database" }),
+            fakePage("tpl", "Wochentreffen", { parent_id: "db", position: 1, is_template: true }),
+        ],
+        properties: [{ id: "place", databaseId: "db", name: "Ort", type: "text", options: {}, position: 1 }],
+        values: [{ pageId: "tpl", propertyId: "place", value: "Raum 2", updatedAt: "2026-10-01T10:00:00Z" }],
+        views: [{ id: "v1", databaseId: "db", name: "Liste", type: "list", config: {}, position: 1 }],
+    });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Besprechungen", exact: true }).click();
+
+    // Make the template the default.
+    await page.getByRole("button", { name: "Vorlagen" }).click();
+    await page.getByRole("button", { name: "„Wochentreffen“ als Standard für „Neu“" }).click();
+    await expect.poll(() => backend.pages.find((item) => item.id === "db")?.default_template_id).toBe("tpl");
+
+    // "Neu" makes an entry from it and opens it.
+    await page.getByRole("button", { name: "Neu", exact: true }).click();
+    await expect.poll(() => backend.pages.filter((item) => item.title === "Wochentreffen").length).toBe(2);
+    await expect(page.getByRole("textbox", { name: "Seitentitel" })).toHaveValue("Wochentreffen");
+    await expect(page.getByRole("region", { name: "Eigenschaften" })).toContainText("Raum 2");
+
+    // Without a default, "Neu" is empty again.
+    await page
+        .getByRole("button", { name: /Besprechungen/ })
+        .first()
+        .click();
+    await page.getByRole("button", { name: "Vorlagen" }).click();
+    const toggle = page.getByRole("button", { name: "„Wochentreffen“ als Standard für „Neu“" });
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
+    await expect.poll(() => backend.pages.find((item) => item.id === "db")?.default_template_id).toBeNull();
+    await page.getByRole("button", { name: "Neu", exact: true }).click();
+    await expect.poll(() => backend.pages.length).toBe(4);
+    await expect(page.getByRole("textbox", { name: "Seitentitel" })).toHaveValue("");
+});

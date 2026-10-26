@@ -58,6 +58,7 @@ export function parseStoredPages(value: unknown): StoredPage[] | null {
                   favorite,
                   favorites,
                   cover,
+                  default_template_id,
               }: StoredPage & { favorites?: unknown }) => ({
                   id,
                   title,
@@ -76,6 +77,8 @@ export function parseStoredPages(value: unknown): StoredPage[] | null {
                   ...(is_template === true ? { is_template: true } : {}),
                   // Before package 30c there were no covers.
                   ...(typeof cover === "string" && cover ? { cover } : {}),
+                  // Before package 38c there were no default templates.
+                  ...(typeof default_template_id === "string" && default_template_id ? { default_template_id } : {}),
                   // The server embeds the user's own favorite rows (package 30b), the cache keeps the flag.
                   ...(favorite === true || (Array.isArray(favorites) && favorites.length > 0)
                       ? { favorite: true }
