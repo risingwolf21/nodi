@@ -59,3 +59,12 @@ export async function downloadPageFile(path: string): Promise<Uint8Array> {
     }
     return new Uint8Array(await response.arrayBuffer());
 }
+
+/** Copies a file to another path, e.g. a template's file to a new page (package 38b); Storage checks both pages. */
+export async function copyPageFile(from: string, to: string): Promise<void> {
+    const { error } = await supabase.storage.from(BUCKET).copy(from, to);
+    if (error) {
+        console.error("Datei konnte nicht kopiert werden:", error);
+        throw toStorageError(error, "Die Dateien der Vorlage konnten nicht kopiert werden.");
+    }
+}

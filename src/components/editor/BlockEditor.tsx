@@ -24,6 +24,7 @@ import { editorTheme } from "@/components/editor/editor-theme";
 import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
 import { editorSchema } from "@/components/editor/editor-schema";
 import { CommentButton } from "@/components/editor/CommentButton";
+import { TemplateChoices, type PageTemplates } from "@/components/editor/TemplateChoices";
 import { displayTitle } from "@/features/pages/page-display";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
@@ -35,12 +36,14 @@ import {
     type SessionStatus,
 } from "@/features/editor/services/page-document-session";
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
+import { templateContent } from "@/features/editor/template-content";
 import type { DocumentContent } from "@/features/editor/types";
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { createFileUrlResolver } from "@/features/files/services/file-url-resolver";
-import { signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
+import { copyPageFile, signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
 import { onPageActivity } from "@/features/realtime/page-activity";
 import { personName } from "@/features/mentions/mentions";
+import type { Page } from "@/features/pages/types";
 
 type FrameProps = {
     topBarStart: ReactNode;
@@ -50,6 +53,8 @@ type FrameProps = {
     renderHeader: (canEdit: boolean) => ReactNode;
     /** What "Datenbank" blocks need from the app (package 19c). */
     databaseBlocks: DatabaseBlockApp;
+    /** Offered while the page is empty (package 38b); undefined where templates do not apply. */
+    templates?: PageTemplates;
 };
 
 /** The part of a database block's context that does not come from the editor. */
@@ -148,6 +153,15 @@ function toEditorBlocks(content: DocumentContent): DocumentContent {
     return content.length > 0 ? content : [{ type: "paragraph" }];
 }
 
+/** Nothing written yet: no blocks, or the one empty paragraph the editor starts with. */
+function isEmptyDocument(content: DocumentContent): boolean {
+    if (content.length === 0) return true;
+    if (content.length > 1) return false;
+    const [block] = content;
+    const noContent = block.content === undefined || (Array.isArray(block.content) && block.content.length === 0);
+    return block.type === "paragraph" && noContent && (block.children ?? []).length === 0;
+}
+
 function EditorContent({
     userId,
     pageId,
@@ -158,6 +172,7 @@ function EditorContent({
     fullWidth,
     renderHeader,
     databaseBlocks,
+    templates,
 }: FrameProps & {
     userId: string;
     pageId: string;
@@ -169,6 +184,9 @@ function EditorContent({
     );
     const [canEdit, setCanEdit] = useState(initial.document.canEdit);
     const [showSupersededNotice, setShowSupersededNotice] = useState(false);
+    const [empty, setEmpty] = useState(() => isEmptyDocument(initial.document.content));
+    const [applyingTemplate, setApplyingTemplate] = useState(false);
+    const [templateError, setTemplateError] = useState("");
 
     const session = useRef<PageDocumentSession | null>(null);
     // Content set by sync is not a user edit and must not be saved again.
@@ -257,9 +275,36 @@ function EditorContent({
     }, [showSupersededNotice]);
 
     useEditorChange(() => {
+        setEmpty(isEmptyDocument(editor.document));
         if (applyingRemoteContent.current) return;
         session.current?.recordEdit(editor.document);
     }, editor);
+
+    // A template's text becomes the page's text like typing it (package 38b);
+    // its files are copied into this page's folder first.
+    async function applyTemplate(template: Page) {
+        if (!templates) return;
+        setApplyingTemplate(true);
+        setTemplateError("");
+        try {
+            const local = await store.get(template.id);
+            const source = local
+                ? local.content
+                : ((await remoteDocumentRepository.fetch(template.id)).document?.content ?? []);
+            const copy = templateContent(source, pageId);
+            if (!copy) throw new Error("Die Vorlage ist kein gültiges Dokument.");
+            for (const file of copy.files) await copyPageFile(file.from, file.to);
+            // Left meanwhile, or typed: the page keeps what it has.
+            if (!session.current || !isEmptyDocument(editor.document)) return;
+            editor.replaceBlocks(editor.document, toEditorBlocks(copy.content));
+            await templates.onApply(template);
+        } catch (err) {
+            console.error("Vorlage konnte nicht übernommen werden:", err);
+            setTemplateError(err instanceof Error ? err.message : "Die Vorlage konnte nicht übernommen werden.");
+        } finally {
+            setApplyingTemplate(false);
+        }
+    }
 
     // Pages to link: known pages (not templates), title matches first, a few at a time.
     // Columns (package 32e): each column starts with an empty paragraph, the cursor in the first.
@@ -444,6 +489,14 @@ function EditorContent({
                     />
                 </BlockNoteView>
             </DatabaseBlockContext>
+            {templates && templates.pages.length > 0 && empty && canEdit !== false && !databaseBlocks.readOnly && (
+                <TemplateChoices
+                    templates={templates.pages}
+                    busy={applyingTemplate}
+                    error={templateError}
+                    onChoose={(template) => void applyTemplate(template)}
+                />
+            )}
         </EditorFrame>
     );
 }

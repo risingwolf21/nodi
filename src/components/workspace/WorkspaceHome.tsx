@@ -13,7 +13,8 @@ import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog
 import { MovePageDialog } from "@/features/pages/components/MovePageDialog";
 import type { MoveTarget, PositionUpdate } from "@/features/pages/page-hierarchy";
 import { Sidebar } from "@/features/pages/components/Sidebar";
-import { findAncestors } from "@/features/pages/page-hierarchy";
+import { findAncestors, pageTemplates } from "@/features/pages/page-hierarchy";
+import { NEW_PAGE_TITLE } from "@/features/pages/page-display";
 import type { Page, PageKind, PageSection } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
@@ -41,7 +42,6 @@ import { PageView } from "./PageView";
 const NotionImportDialog = lazy(() => import("@/features/import/components/NotionImportDialog"));
 const ExportDialog = lazy(() => import("@/features/export/components/ExportDialog"));
 
-const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
 
 /** Local copies of pages that are no longer readable go at the next contact with the server. */
@@ -126,6 +126,7 @@ export default function WorkspaceHome() {
     const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
     // Database blocks in a text may show databases shared from elsewhere.
     const knownPages = useMemo(() => [...pages, ...sharedPages], [pages, sharedPages]);
+    const workspacePageTemplates = useMemo(() => pageTemplates(pages), [pages]);
 
     // Sends edits that are still waiting, also those of pages not open now.
     const userId = user?.id;
@@ -422,6 +423,8 @@ export default function WorkspaceHome() {
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                                 knownPages={knownPages}
+                                // Templates of the page's own workspace (package 38b).
+                                pageTemplates={sharedPage ? [] : workspacePageTemplates}
                                 // Entries of other workspaces keep their order (for now).
                                 onReorderPages={sharedPage ? undefined : reorderPages}
                             />

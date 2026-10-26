@@ -278,6 +278,7 @@ src/
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
+    editor/TemplateChoices.tsx # „Mit einer Vorlage beginnen“ auf leeren Seiten (38b)
     editor/PersonMention.tsx # Erwähnung einer Person im Text („@“, 37)
                             # editor-schema.tsx auch: Spalten (columns/column, 32e)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
@@ -326,6 +327,7 @@ src/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
       types.ts              # Dokument-, Versions- und Sync-Typen
       document-sync.ts      # Validierung, LWW-Vergleich, Fehlerklassen
+      template-content.ts   # Text einer Seitenvorlage: neue IDs, Dateien kopieren (38b)
       services/
         local-document-store.ts      # IndexedDB `nodi-<userId>`
         remote-document-repository.ts # Supabase: laden, RPC speichern
@@ -2799,6 +2801,32 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
         keine mehr, legt die App leere Einträge an.
       - pgTAP: `page_templates.test.sql`, `entry_templates.test.sql`
         angepasst.
+    - **Umsetzung 38b** (nur Frontend, keine Migration):
+      - Seitenmenü „Als Vorlage verwenden“ / „Keine Vorlage mehr“ (Seiten,
+        keine Datenbanken; Einträge werden so Vorlage ihrer Datenbank). In
+        der Seitenleiste steht „Vorlage“ hinter dem Titel, auf der Vorlage
+        ein Hinweis.
+      - Eine leere Seite (kein Text) außerhalb von Datenbanken zeigt unter
+        dem Editor „Mit einer Vorlage beginnen“ mit den Seitenvorlagen des
+        Workspace (`pageTemplates`: Vorlagen, die kein Eintrag sind; nur mit
+        Schreibrecht und online). Ein Klick übernimmt den Text wie Tippen
+        (lokal speichern, Sync, LWW) und danach Titel (wenn leer oder
+        „Unbenannte Seite“), Icon und Titelbild, wenn die Seite keins hat.
+      - `template-content.ts`: neue Block-IDs, ohne Kommentar-Markierungen;
+        Bilder und Anhänge (`nodi-file:`) und ein Titelbild aus dem
+        Datei-Speicher werden in den Ordner der neuen Seite kopiert
+        (`copyPageFile`, Storage prüft Lesen der Vorlage und Schreiben der
+        Seite; gegen die lokale Supabase geprüft). Sonst sähen Leser der neuen
+        Seite die Dateien nicht, und sie verschwänden mit der Vorlage.
+      - Der Text der Vorlage kommt aus der Kopie auf dem Gerät, sonst vom
+        Server. Wird währenddessen getippt, bleibt die Seite, wie sie ist.
+      - Export: Seitenvorlagen werden wie Seiten exportiert (nur Vorlagen von
+        Datenbanken nicht).
+      - Tests: Vitest (`template-content.test.ts`, `page-hierarchy.test.ts`,
+        `export-tree.test.ts`), Playwright `page-templates.e2e.ts`.
+      - Noch nicht: Unterseiten der Vorlage mitkopieren, Vorlagen beim
+        Anlegen wählen („+“ mit Vorlage), Vorlagen in geteilten Seiten
+        anderer Workspaces.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
