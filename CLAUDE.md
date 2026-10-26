@@ -2776,6 +2776,29 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
         Seite, gelesen).
       - Noch nicht: Erwähnungen in Kommentaren, Namen statt E-Mail (es gibt
         noch keine Profilnamen), Erwähnungen von Daten.
+38. **Seitenvorlagen und Standardvorlage** (Thema „Vorlagen & Teilen“).
+    - **Entschieden (Nutzer, 2026-10-26):** Aus dem Thema nur Seitenvorlagen
+      (auch außerhalb von Datenbanken) und eine Standardvorlage je Datenbank
+      für „Neu“. Vorlagen anlegen und ändern darf, wer Schreibrecht hat (wie
+      Paket 26). Öffentliche Links mit Unterseiten, `noindex`, Titelbilder
+      öffentlich und in der Galerie vorerst nicht.
+    - **Annahmen:** Eine Seitenvorlage bleibt eine Seite im Baum (Rechte,
+      Bereich, Teilen wie jede Seite). Angewendet wird sie auf eine neue,
+      leere Seite: Text, und Titel, Icon und Titelbild, sofern dort noch
+      keins ist; Unterseiten der Vorlage werden nicht kopiert.
+    - **Aufteilung:** 38a Datenbank, 38b Seitenvorlagen (Oberfläche), 38c
+      Standardvorlage (Oberfläche).
+    - **Umsetzung 38a** (`20261026110000_page_templates.sql`):
+      - `is_template` an jeder Seite außer Datenbanken (`22023`); Verschieben
+        in eine Datenbank oder heraus lässt eine Vorlage Vorlage.
+      - `create_entry_from_template` nur noch für Vorlagen in einer Datenbank
+        (`22023`).
+      - `pages.default_template_id`: nur an Datenbanken, nur eine Vorlage
+        dieser Datenbank (Trigger, `22023`), ändern mit Schreibrecht (RLS wie
+        jede Einstellung); Löschen der Vorlage leert es. Ist die Vorlage
+        keine mehr, legt die App leere Einträge an.
+      - pgTAP: `page_templates.test.sql`, `entry_templates.test.sql`
+        angepasst.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

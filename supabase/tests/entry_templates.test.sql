@@ -20,12 +20,12 @@ values ('d0000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaa
 insert into public.database_properties (id, database_id, name, type)
 values ('f0000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'Ort', 'text');
 
--- 1-3: templates are entries
+-- 1-3: entries are templates (pages outside a database too since package 38a)
 select throws_ok(
-  $$insert into public.pages (workspace_id, owner_id, created_by, title, is_template)
+  $$insert into public.pages (workspace_id, owner_id, created_by, title, kind, is_template)
     values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111',
-            '11111111-1111-4111-8111-111111111111', 'Lose', true)$$,
-  '22023', null, 'A page outside a database is no template'
+            '11111111-1111-4111-8111-111111111111', 'Lose', 'database', true)$$,
+  '22023', null, 'A database is no template'
 );
 select lives_ok(
   $$insert into public.pages (id, workspace_id, parent_id, owner_id, created_by, title, icon, is_template, position)
