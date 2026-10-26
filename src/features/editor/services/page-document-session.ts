@@ -190,6 +190,11 @@ export class PageDocumentSession {
         });
     }
 
+    /** True if this mutation is the one shown (e.g. a live update about our own save). */
+    holdsMutation(mutationId: string): boolean {
+        return this.current?.mutationId === mutationId;
+    }
+
     /** The user asks again after an error. */
     retry(): Promise<void> {
         return Promise.all([this.options.sync.retryNow(), this.refresh()]).then(() => undefined);

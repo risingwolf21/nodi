@@ -20,6 +20,7 @@ import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
+import { startPageActivity } from "@/features/realtime/page-activity";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
 import { fileCacheFor } from "@/features/files/services/file-cache";
@@ -132,6 +133,9 @@ export default function WorkspaceHome() {
         engine.start();
         return () => engine.stop();
     }, [userId]);
+
+    // Changes by others and other devices arrive live (package 36).
+    useEffect(() => (userId ? startPageActivity() : undefined), [userId]);
 
     // On phones the app fits the area above the keyboard (package 20).
     useEffect(() => trackVirtualKeyboard(), []);

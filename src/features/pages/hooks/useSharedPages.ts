@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
+import { useActivityReload } from "@/features/realtime/useActivityReload";
 import { isDatabaseEntry } from "../page-hierarchy";
 import { pageTreeCacheFor } from "../services/page-tree-cache";
 import type { Page, PageSettings, StoredPage } from "../types";
@@ -50,6 +51,11 @@ export function useSharedPages(
 
     // A stable dependency for the effect below.
     const workspaceKey = workspaceIds?.join(",");
+    // Shared pages changed, or a new share (package 36); own workspaces are usePages' job.
+    const liveReloads = useActivityReload(
+        (activity) =>
+            activity.change === "page" && workspaceIds !== undefined && !workspaceIds.includes(activity.workspaceId),
+    );
 
     useEffect(() => {
         if (!userId || workspaceKey === undefined) return;
@@ -98,7 +104,7 @@ export function useSharedPages(
         return () => {
             active = false;
         };
-    }, [userId, workspaceKey, reloadCount]);
+    }, [userId, workspaceKey, reloadCount, liveReloads]);
 
     // Keeps the cache in step with what the server confirmed, including
     // the changes below. A cached list is never written back.
