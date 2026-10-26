@@ -5,6 +5,7 @@ import { CalloutIcon } from "./CalloutIcon";
 import { CommentMark } from "./CommentMark";
 import { DatabaseBlock } from "./DatabaseBlock";
 import { PageLink } from "./PageLink";
+import { PersonMention } from "./PersonMention";
 
 /**
  * A "Datenbank" block (package 19c): an existing database with views of its
@@ -88,6 +89,20 @@ const pageLink = createReactInlineContentSpec(
     },
 );
 
+/** A person mentioned with "@" (package 37); the server notifies newly mentioned people. */
+const mention = createReactInlineContentSpec(
+    {
+        type: "mention",
+        propSchema: { userId: { default: "" }, label: { default: "" } },
+        content: "none",
+    },
+    {
+        render: ({ inlineContent }) => (
+            <PersonMention userId={inlineContent.props.userId} label={inlineContent.props.label} />
+        ),
+    },
+);
+
 /** Text with a comment (package 31b): the value is the id of its thread in page_comments. */
 const commentStyle = createReactStyleSpec(
     { type: "comment", propSchema: "string" },
@@ -95,8 +110,8 @@ const commentStyle = createReactStyleSpec(
 );
 
 /**
- * The blocks of Nodi's documents: BlockNote's own, the database block and the callout; page links in the
- * text; comments on text.
+ * The blocks of Nodi's documents: BlockNote's own, the database block and the callout; page links and
+ * mentions in the text; comments on text.
  */
 export const editorSchema = BlockNoteSchema.create({
     blockSpecs: {
@@ -106,6 +121,6 @@ export const editorSchema = BlockNoteSchema.create({
         columns: columnsBlock(),
         column: columnBlock(),
     },
-    inlineContentSpecs: { ...defaultInlineContentSpecs, pageLink },
+    inlineContentSpecs: { ...defaultInlineContentSpecs, pageLink, mention },
     styleSpecs: { ...defaultStyleSpecs, comment: commentStyle },
 });

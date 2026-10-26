@@ -39,6 +39,17 @@ describe("pageMarkdown", () => {
         expect(markdown).toContain('"text":"Gelöscht"');
     });
 
+    it("writes a mentioned person as their name", () => {
+        const markdown = pageMarkdown(
+            "Reise",
+            [paragraph([{ type: "mention", props: { userId: "u2", label: "anna@nodi.test" } }])],
+            links,
+            asJson,
+        );
+        expect(markdown).toContain('"text":"@anna"');
+        expect(markdown).not.toContain("mention");
+    });
+
     it("makes a database block a link on its own and drops comment marks", () => {
         const markdown = pageMarkdown(
             "Reise",

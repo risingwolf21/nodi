@@ -16,6 +16,7 @@ export type PageActivity = {
 
 const CHANGES: ReadonlySet<string> = new Set<PageChange>(["page", "document", "properties", "comments"]);
 const listeners = new Set<(activity: PageActivity) => void>();
+const mentionListeners = new Set<() => void>();
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -45,6 +46,12 @@ export function announcePageActivity(activity: PageActivity): void {
     for (const listener of listeners) listener(activity);
 }
 
+/** Calls the listener when the own mentions change (package 37); returns the unsubscribe. */
+export function onMentionChange(listener: () => void): () => void {
+    mentionListeners.add(listener);
+    return () => mentionListeners.delete(listener);
+}
+
 /**
  * One subscription per tab while signed in (WorkspaceHome). Changes missed
  * while disconnected come with the reloads on "online" and when the app is
@@ -56,6 +63,10 @@ export function startPageActivity(): () => void {
         .on("postgres_changes", { event: "*", schema: "public", table: "page_activity" }, (payload) => {
             const activity = parsePageActivity(payload.new);
             if (activity) announcePageActivity(activity);
+        })
+        // Realtime sends only the caller's own mentions on pages they may read.
+        .on("postgres_changes", { event: "*", schema: "public", table: "page_mentions" }, () => {
+            for (const listener of mentionListeners) listener();
         })
         .subscribe((status, error) => {
             if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {

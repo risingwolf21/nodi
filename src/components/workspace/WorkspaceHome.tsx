@@ -30,6 +30,9 @@ import { DeleteAccountDialog } from "@/features/auth/DeleteAccountDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
 import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
 import { SearchDialog } from "@/features/search/components/SearchDialog";
+import { MentionsDialog } from "@/features/mentions/components/MentionsDialog";
+import { useMentions } from "@/features/mentions/hooks/useMentions";
+import { useWorkspaceMembers } from "@/features/pages/hooks/useWorkspaceMembers";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
@@ -142,6 +145,11 @@ export default function WorkspaceHome() {
 
     // Ctrl/⌘+K opens the search (package 27), as in Notion.
     const [searchOpen, setSearchOpen] = useState(false);
+    // Mentions of the user (package 37): the list and the members for "@".
+    const online = !(readOnly || authOffline);
+    const mentions = useMentions(user?.id, online);
+    const [mentionsOpen, setMentionsOpen] = useState(false);
+    const workspaceMembersForMentions = useWorkspaceMembers(workspaceId, online);
     useEffect(() => {
         function openSearch(event: KeyboardEvent) {
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -335,6 +343,8 @@ export default function WorkspaceHome() {
                                 });
                             }}
                             onSearch={() => setSearchOpen(true)}
+                            unreadMentions={mentions.unread}
+                            onMentions={() => setMentionsOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
@@ -383,6 +393,8 @@ export default function WorkspaceHome() {
                                         : undefined
                                 }
                                 userId={user?.id}
+                                // Mentions name members of the page's own workspace.
+                                people={sharedPage ? [] : workspaceMembersForMentions}
                                 entries={(sharedPage ? sharedPages : pages).filter(
                                     (item) => item.parent_id === page.id,
                                 )}
@@ -551,6 +563,32 @@ export default function WorkspaceHome() {
                         />
                     </Suspense>
                 </LoadErrorBoundary>
+            )}
+
+            {mentionsOpen && (
+                <MentionsDialog
+                    mentions={mentions.mentions}
+                    error={mentions.error}
+                    onOpen={(mention) => {
+                        setMentionsOpen(false);
+                        mentions.markRead(mention.id).catch((err: unknown) => {
+                            console.error("Erwähnung konnte nicht als gelesen markiert werden:", err);
+                        });
+                        if (
+                            mention.workspaceId !== workspaceId &&
+                            workspaces.some((item) => item.id === mention.workspaceId)
+                        ) {
+                            changeWorkspace(mention.workspaceId);
+                        }
+                        openPage(mention.pageId);
+                    }}
+                    onMarkAllRead={() => {
+                        mentions.markAllRead().catch((err: unknown) => {
+                            console.error("Erwähnungen konnten nicht als gelesen markiert werden:", err);
+                        });
+                    }}
+                    onClose={() => setMentionsOpen(false)}
+                />
             )}
 
             {searchOpen && user && (

@@ -278,6 +278,7 @@ src/
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
+    editor/PersonMention.tsx # Erwähnung einer Person im Text („@“, 37)
                             # editor-schema.tsx auch: Spalten (columns/column, 32e)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
@@ -342,6 +343,7 @@ src/
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
     export/                 # Paket 34: export-tree, export-markdown, export-csv, build-export; ExportDialog (nachgeladen)
     realtime/               # Paket 36: page-activity.ts (Realtime-Abo), useActivityReload.ts
+    mentions/               # Paket 37: mentions.ts, services/page-mentions.ts, useMentions, MentionsDialog
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -2749,6 +2751,31 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
         dessen, der erwähnt hat. Realtime (`postgres_changes`) prüft dieselbe
         Policy; Löschen (Seite, Konto) verrät nur die zufällige ID der Zeile.
       - pgTAP: `page_mentions.test.sql`.
+    - **Umsetzung 37b** (nur Frontend, keine Migration;
+      `src/features/mentions/`):
+      - Inline-Inhalt `mention` im Editor-Schema (`PersonMention`): zeigt
+        „@“ und den Teil der E-Mail vor dem „@“ (`personName`), die volle
+        Adresse im Tooltip; Name aus den Mitgliedern des Workspace, sonst
+        `label` (öffentliche Ansicht, ausgetretene Person).
+      - „@“ im Text bietet zuerst Mitglieder des Workspace der Seite an
+        (höchstens 5, ohne einen selbst; „Person erwähnen“), dann Seiten wie
+        bisher. Mitglieder lädt `useWorkspaceMembers` (nur online; geteilte
+        Seiten anderer Workspaces: keine Personen), über den Kontext des
+        Editors (`DatabaseBlockContext.people`).
+      - Seitenleiste: „Erwähnungen“ unter „Suchen“ mit Zahl der ungelesenen;
+        `MentionsDialog` (neueste zuerst, ungelesene fett mit Punkt, „Alle als
+        gelesen markieren“). Klick markiert gelesen und öffnet die Seite,
+        wechselt dafür bei Bedarf in den eigenen Workspace der Seite.
+        `useMentions`: nur online (ein Hinweis, kein Inhalt; nichts offline),
+        lädt neu bei Änderungen über Realtime (zweiter Filter auf
+        `page_mentions` im Kanal `page-activity`) und bei `online`.
+      - Export: Erwähnungen werden Text „@name“.
+      - Tests: Vitest `mentions.test.ts`, `export-markdown.test.ts`,
+        Playwright `mentions.e2e.ts`; zusätzlich mit zwei Konten gegen die
+        lokale Supabase geprüft (A erwähnt B, B sieht es live, öffnet die
+        Seite, gelesen).
+      - Noch nicht: Erwähnungen in Kommentaren, Namen statt E-Mail (es gibt
+        noch keine Profilnamen), Erwähnungen von Daten.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
