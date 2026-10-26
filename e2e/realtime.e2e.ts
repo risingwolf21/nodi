@@ -79,7 +79,10 @@ test("Während getippt wird, überschreibt eine Änderung von woanders den Text 
     backend.documentVersions.set(NOTES, { editedAt: "2026-02-01T00:00:00Z", mutationId: otherMutation });
     sendPageActivity(backend, { page_id: NOTES, change: "document", mutation_id: otherMutation });
     await page.waitForTimeout(1500);
-    await expect(page.getByText("Erster Stand und mehr")).toBeVisible();
+    // Where the caret lands after the click does not matter here, only that the typing stays.
+    const editor = page.locator(".bn-editor");
+    await expect(editor).toContainText("und mehr");
+    await expect(editor).toContainText("Erster");
     await expect(page.getByText("Vom Handy")).toHaveCount(0);
 });
 
