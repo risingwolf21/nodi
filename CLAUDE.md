@@ -339,6 +339,8 @@ src/
     files/                  # Paket 15b
       file-reference.ts     # Verweis `nodi-file:<pfad>`, Pfad, Dateiname (Vitest)
       services/page-files.ts        # Storage: hochladen, signierte URL
+      services/upload-progress.ts   # laufende Uploads; components/UploadProgress.tsx (39)
+      image-resize.ts               # Fotos verkleinern vor dem Hochladen (39, Vitest)
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
@@ -2843,6 +2845,33 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
         `entry-templates.e2e.ts`.
       - Noch nicht: Standard je Ansicht (wie Notion), Standardvorlage für
         Seiten außerhalb von Datenbanken.
+
+### Mobil & Dateien (Nutzer, 2026-10-26)
+
+- **Entschieden (Nutzer, 2026-10-26):** Alle vier Teile, in dieser
+  Reihenfolge: 39 Bilder verkleinern (höchstens 2560 px, JPEG 85 %) mit
+  Fortschrittsanzeige, 40 nicht mehr verwendete Dateien löschen, 41 Ziehen
+  auf Touch-Geräten, 42 Titelbild in der Galerie.
+
+39. **Bilder verkleinern, Fortschritt beim Hochladen** (nur Frontend, keine
+    Migration):
+    - `features/files/image-resize.ts`: JPEG, WebP und PNG werden verkleinert,
+      wenn die längste Seite über 2560 px liegt oder die Datei über 2 MB hat
+      (`shrinkTarget`), und als JPEG mit 85 % gespeichert (`.jpg`). Bleiben
+      unverändert: kleinere Bilder, GIF, SVG, PNG mit Transparenz, Bilder,
+      die der Browser nicht lesen kann (z. B. HEIC außer in Safari), und wenn
+      die Kopie nicht kleiner wäre. Die Ausrichtung des Fotos bleibt
+      (`imageOrientation: "from-image"`); Metadaten (Ort, Kamera) entfallen.
+    - Gilt für jedes Hochladen über `uploadPageFile`: Editor, Titelbild,
+      Dateien & Medien und Notion-Import. Die 10-MB-Grenze gilt nach dem
+      Verkleinern.
+    - Hochladen per `XMLHttpRequest` (wie storage-js, `FormData`, gleiche
+      Header), weil `fetch` keinen Fortschritt meldet. `upload-progress.ts`
+      führt die laufenden Uploads, `UploadProgress` zeigt sie unten in der
+      App (Name, Prozent, Balken; mehrere: Anzahl und Mittelwert).
+    - Tests: Vitest `image-resize.test.ts`, `upload-progress.test.ts`,
+      Playwright „Große Fotos werden … verkleinert“ (`page-files.e2e.ts`).
+    - Noch nicht: Abbrechen eines Uploads, Verkleinern in einem Worker.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

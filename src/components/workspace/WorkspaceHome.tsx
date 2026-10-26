@@ -27,6 +27,7 @@ import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-doc
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
+import { UploadProgress } from "@/features/files/components/UploadProgress";
 import { DeleteAccountDialog } from "@/features/auth/DeleteAccountDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
 import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
@@ -467,6 +468,8 @@ export default function WorkspaceHome() {
                     {visibleError}
                 </p>
             )}
+
+            <UploadProgress />
 
             {signOutStep.kind === "confirm" && user && (
                 <SignOutDialog
