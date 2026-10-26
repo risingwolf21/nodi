@@ -67,6 +67,7 @@ const database: DatabaseData = {
     ],
     documentEditedAt: {},
     documentPreview: {},
+    documentImage: {},
     canEdit: true,
 };
 

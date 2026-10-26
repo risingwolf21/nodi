@@ -202,5 +202,7 @@ export type DatabaseData = {
     documentEditedAt: Record<string, string>;
     /** Start of an entry's text as plain text, per entry id (feed). */
     documentPreview: Record<string, string>;
+    /** First image in the start of an entry's text, per entry id (gallery, package 42). */
+    documentImage: Record<string, string>;
     canEdit: boolean;
 };

@@ -416,6 +416,8 @@ export function parseCachedDatabase(value: unknown): DatabaseData | null {
             values: parseValues(value.values),
             documentEditedAt: stringRecord(value.documentEditedAt),
             documentPreview: stringRecord(value.documentPreview),
+            // Before package 42 there were no gallery images.
+            documentImage: stringRecord(value.documentImage),
             canEdit: value.canEdit === true,
         };
     } catch {
@@ -1203,6 +1205,17 @@ export function previewText(blocks: unknown[]): string {
         .filter(Boolean)
         .join("\n");
     return text.length > PREVIEW_LENGTH ? `${text.slice(0, PREVIEW_LENGTH).trimEnd()} …` : text;
+}
+
+/** The URL of the first image among the first blocks (gallery card, package 42). */
+export function previewImage(blocks: unknown[]): string | null {
+    for (const block of blocks) {
+        if (isObject(block) && block.type === "image" && isObject(block.props)) {
+            const url = block.props.url;
+            if (typeof url === "string" && url !== "") return url;
+        }
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------------------

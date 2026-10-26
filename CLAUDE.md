@@ -306,7 +306,7 @@ src/
       components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
       components/BoardView.tsx       # Board: Spalten je Option, Ziehen setzt den Wert (14c)
       components/ListView.tsx        # Liste (14c)
-      components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
+      components/GalleryView.tsx     # Galerie mit Titelbild (14c, 42); EntryCard.tsx: Karte/Werte
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
       components/CalendarView.tsx    # Kalender: Monat/Woche, Ziehen (14d, 32b)
       components/TimelineView.tsx    # Zeitleiste (32d); GroupedRows.tsx: Gruppen in Tabelle/Liste (32c)
@@ -2921,6 +2921,19 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       Seitenleiste ordnen ohne Öffnen, Wischen zieht nicht, Board mit Wert und
       Scrollen am Rand, Kalender). Auf echten iOS-/Android-Geräten noch nicht
       geprüft.
+42. **Titelbild in der Galerie** (nur Frontend, keine Migration):
+    - Eine Karte der Galerie zeigt oben das Titelbild des Eintrags
+      (`Page.cover`: Farbverlauf oder Bild), sonst das erste Bild unter den
+      ersten drei Blöcken seines Textes (`previewImage`; dieselbe Abfrage wie
+      die Vorschau im Feed, `document->0..2`). Ohne beides bleibt die Karte
+      wie bisher.
+    - `DatabaseData.documentImage` (URL je Eintrag) wird mit der Datenbank
+      gecacht (alte Caches: keine). Bilder kommen wie das Titelbild einer
+      Seite zuerst aus dem Bild-Cache, sind also nach einmaligem Ansehen
+      offline zu sehen.
+    - Tests: Vitest `database-model.test.ts`, Playwright `gallery.e2e.ts`.
+    - Noch nicht: Wahl der Vorschau je Ansicht (Titelbild, Inhalt, Dateien,
+      keine), Bilder weiter unten im Text, Bilder aus „Dateien & Medien“.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

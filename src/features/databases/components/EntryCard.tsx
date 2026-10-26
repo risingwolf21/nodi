@@ -1,4 +1,4 @@
-import type { DragEvent } from "react";
+import type { DragEvent, ReactNode } from "react";
 import { CheckSquare, FileText, Square } from "lucide-react";
 import { displayTitle } from "@/features/pages/page-display";
 import { cn } from "@/lib/utils";
@@ -61,11 +61,13 @@ type EntryCardProps = {
     onOpen: () => void;
     /** Board: cards can be dragged into another column. */
     onDragStart?: (event: DragEvent<HTMLButtonElement>) => void;
+    /** Gallery: the cover or first image, across the top of the card (package 42). */
+    media?: ReactNode;
     className?: string;
 };
 
 /** An entry as a card (board, gallery): opens the entry on click. */
-export function EntryCard({ row, properties, onOpen, onDragStart, className }: EntryCardProps) {
+export function EntryCard({ row, properties, onOpen, onDragStart, media, className }: EntryCardProps) {
     return (
         <button
             type="button"
@@ -77,6 +79,7 @@ export function EntryCard({ row, properties, onOpen, onDragStart, className }: E
                 className,
             )}
         >
+            {media && <span className="-mx-2.5 -mt-2.5 mb-1 block overflow-hidden rounded-t-md">{media}</span>}
             <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
                 <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
                     {row.page.icon ?? <FileText className="size-4 text-muted-foreground" />}
