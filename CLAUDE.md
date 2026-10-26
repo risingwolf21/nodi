@@ -419,7 +419,7 @@ supabase/
                             # Titelbilder (P30c), Kommentare (P31a/b),
                             # Zeitleiste (P32d), Buttons (P32f),
                             # Konto löschen (P33a), Speicher aufräumen (P35a),
-                            # Echtzeit (P36a)
+                            # Echtzeit (P36a), Erwähnungen (P37a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2731,6 +2731,24 @@ mutation_id, changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
     - **Entschieden (Nutzer, 2026-10-26):** Erwähnung im Text und ein
       Hinweis in der App („Erwähnungen“ in der Seitenleiste, live, ungelesene
       markiert); keine E-Mails.
+    - **Aufteilung:** 37a Datenbank, 37b Oberfläche.
+    - **Umsetzung 37a** (`20261026100000_page_mentions.sql`):
+      - Im Dokument ist eine Erwähnung Inline-Inhalt
+        `{type: "mention", props: {userId, label}}`.
+      - Tabelle `page_mentions (id, page_id, user_id, mentioned_by,
+mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
+        `record_page_mentions` (nach Speichern des Dokuments) legt sie für neu
+        Erwähnte an (nicht in der vorigen Fassung, nicht der Autor, nur
+        bestehende Konten) bzw. macht sie wieder ungelesen; entfernte
+        Erwähnungen lassen die Zeile stehen. `document_mentions(document)`
+        liest die IDs (ungültige entfallen).
+      - Sichtbar nur der erwähnten Person und nur, solange sie die Seite lesen
+        darf; ändern kann sie nur `read_at` (Spaltenrecht). RPC
+        `list_my_mentions(limit)`: eigene Erwähnungen auf lesbaren Seiten
+        außerhalb des Papierkorbs, neueste zuerst, mit Workspace, Titel, Icon und E-Mail
+        dessen, der erwähnt hat. Realtime (`postgres_changes`) prüft dieselbe
+        Policy; Löschen (Seite, Konto) verrät nur die zufällige ID der Zeile.
+      - pgTAP: `page_mentions.test.sql`.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
