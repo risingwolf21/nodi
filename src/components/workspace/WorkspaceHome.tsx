@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { startTouchDrag } from "@/lib/touch-drag";
 import { trackVirtualKeyboard } from "@/lib/virtual-keyboard";
 import { PageActionsDialog, type PageActionMode } from "@/features/pages/components/PageActionsDialog";
 import { ShareDialog } from "@/features/pages/components/ShareDialog";
@@ -144,6 +145,8 @@ export default function WorkspaceHome() {
 
     // On phones the app fits the area above the keyboard (package 20).
     useEffect(() => trackVirtualKeyboard(), []);
+    // Drag by long press on touch screens (package 41).
+    useEffect(() => startTouchDrag(), []);
 
     // Ctrl/⌘+K opens the search (package 27), as in Notion.
     const [searchOpen, setSearchOpen] = useState(false);
