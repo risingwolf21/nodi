@@ -5,6 +5,8 @@ create extension if not exists pgtap with schema extensions;
 select plan(14);
 
 -- A owns workspace W with private page P; B is mentioned, C is a stranger.
+-- Saves get rising edit times: within one transaction now() is the same, and
+-- Last-Write-Wins would pick between equal times by the random mutation id.
 insert into auth.users (id, email, email_confirmed_at) values
   ('11111111-1111-4111-8111-111111111111', 'a@nodi.test', now()),
   ('22222222-2222-4222-8222-222222222222', 'b@nodi.test', now()),
@@ -37,7 +39,7 @@ set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 select public.save_page_document('b0000000-0000-4000-8000-000000000001',
   pg_temp.with_mentions('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111',
     '99999999-9999-4999-8999-999999999999', 'kein-uuid'),
-  now(), gen_random_uuid());
+  now() - interval '4 minutes', gen_random_uuid());
 reset role;
 select results_eq(
   $$select user_id, mentioned_by, read_at is null from public.page_mentions$$,
@@ -90,19 +92,19 @@ select isnt((select read_at from public.page_mentions), null, 'Others cannot cha
 set local role authenticated;
 set local request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 select public.save_page_document('b0000000-0000-4000-8000-000000000001',
-  pg_temp.with_mentions('22222222-2222-4222-8222-222222222222'), now(), gen_random_uuid());
+  pg_temp.with_mentions('22222222-2222-4222-8222-222222222222'), now() - interval '3 minutes', gen_random_uuid());
 reset role;
 select isnt((select read_at from public.page_mentions), null, 'A mention that was there already stays read');
 
 -- 12-13: removed and mentioned again, it is new
 set local role authenticated;
-select public.save_page_document('b0000000-0000-4000-8000-000000000001', pg_temp.with_mentions(variadic '{}'::text[]), now(),
+select public.save_page_document('b0000000-0000-4000-8000-000000000001', pg_temp.with_mentions(variadic '{}'::text[]), now() - interval '2 minutes',
   gen_random_uuid());
 reset role;
 select is((select count(*)::int from public.page_mentions), 1, 'Removing a mention keeps the row');
 set local role authenticated;
 select public.save_page_document('b0000000-0000-4000-8000-000000000001',
-  pg_temp.with_mentions('22222222-2222-4222-8222-222222222222'), now(), gen_random_uuid());
+  pg_temp.with_mentions('22222222-2222-4222-8222-222222222222'), now() - interval '1 minute', gen_random_uuid());
 reset role;
 select is((select read_at from public.page_mentions), null, 'Mentioned again, it is unread again');
 
