@@ -101,6 +101,7 @@ create or replace function public.list_my_mentions(p_limit integer default 50)
 returns table (
   id uuid,
   page_id uuid,
+  workspace_id uuid,
   page_title text,
   page_icon text,
   mentioned_by_email text,
@@ -112,7 +113,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select m.id, m.page_id, p.title, p.icon, u.email::text, m.mentioned_at, m.read_at
+  select m.id, m.page_id, p.workspace_id, p.title, p.icon, u.email::text, m.mentioned_at, m.read_at
   from public.page_mentions m
   join public.pages p on p.id = m.page_id
   left join auth.users u on u.id = m.mentioned_by

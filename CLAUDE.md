@@ -2745,7 +2745,7 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
       - Sichtbar nur der erwähnten Person und nur, solange sie die Seite lesen
         darf; ändern kann sie nur `read_at` (Spaltenrecht). RPC
         `list_my_mentions(limit)`: eigene Erwähnungen auf lesbaren Seiten
-        außerhalb des Papierkorbs, neueste zuerst, mit Titel, Icon und E-Mail
+        außerhalb des Papierkorbs, neueste zuerst, mit Workspace, Titel, Icon und E-Mail
         dessen, der erwähnt hat. Realtime (`postgres_changes`) prüft dieselbe
         Policy; Löschen (Seite, Konto) verrät nur die zufällige ID der Zeile.
       - pgTAP: `page_mentions.test.sql`.
