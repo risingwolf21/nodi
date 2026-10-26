@@ -1,6 +1,8 @@
 import { classifyRequestError, RemoteRequestError } from "@/lib/request-errors";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabasePublishableKey, supabaseUrl } from "@/lib/supabase";
 import { fileReference, fileStoragePath, MAX_FILE_BYTES } from "../file-reference";
+import { shrinkImage } from "../image-resize";
+import { trackUpload } from "./upload-progress";
 
 const BUCKET = "page-files";
 // Used once right away (download or display), so a short lifetime suffices.
@@ -16,18 +18,53 @@ function toStorageError(error: unknown, message: string): RemoteRequestError {
     return new RemoteRequestError(reason, reason === "offline" ? `${message} Keine Internetverbindung.` : message);
 }
 
-/** Uploads a file of a page and returns the reference stored in the document. */
-export async function uploadPageFile(pageId: string, file: File): Promise<string> {
+/**
+ * Sends the file as storage-js does, but with XMLHttpRequest: fetch reports
+ * no upload progress (package 39).
+ */
+function sendFile(path: string, file: File, accessToken: string, onProgress: (fraction: number) => void) {
+    return new Promise<void>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", `${supabaseUrl.replace(/\/+$/, "")}/storage/v1/object/${BUCKET}/${path}`);
+        request.setRequestHeader("apikey", supabasePublishableKey);
+        request.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+        request.setRequestHeader("x-upsert", "false");
+        request.upload.onprogress = (event) => {
+            if (event.lengthComputable) onProgress(event.loaded / event.total);
+        };
+        const fail = (status: number) => {
+            console.error("Datei konnte nicht hochgeladen werden:", status, request.responseText);
+            reject(toStorageError({ status }, "Die Datei konnte nicht hochgeladen werden."));
+        };
+        request.onload = () => (request.status >= 200 && request.status < 300 ? resolve() : fail(request.status));
+        request.onerror = () => fail(0);
+        const form = new FormData();
+        form.append("cacheControl", "3600");
+        form.append("", file);
+        request.send(form);
+    });
+}
+
+/**
+ * Uploads a file of a page and returns the reference stored in the document.
+ * Photos are made smaller first (package 39); the notice at the bottom shows
+ * the progress.
+ */
+export async function uploadPageFile(pageId: string, original: File): Promise<string> {
+    const file = await shrinkImage(original);
     if (file.size > MAX_FILE_BYTES) {
         throw new RemoteRequestError("permanent", "Die Datei ist größer als 10 MB.");
     }
+    const { data } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new RemoteRequestError("auth", "Bitte melde dich erneut an, um Dateien hochzuladen.");
+
     const path = fileStoragePath(pageId, file.name);
-    const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
-    if (error) {
-        console.error("Datei konnte nicht hochgeladen werden:", error);
-        throw toStorageError(error, "Die Datei konnte nicht hochgeladen werden.");
+    const upload = trackUpload(file.name);
+    try {
+        await sendFile(path, file, accessToken, upload.progress);
+    } finally {
+        upload.done();
     }
     return fileReference(path);
 }
