@@ -1,7 +1,7 @@
 // A fake Supabase backend for the browser tests: answers the requests the
 // app makes, from an in-memory state each test sets up and inspects.
 // Nothing reaches a real server; OpenStreetMap is faked as well.
-import type { BrowserContext, Route } from "@playwright/test";
+import type { BrowserContext, Route, WebSocketRoute } from "@playwright/test";
 
 /** Must match VITE_SUPABASE_URL of the test build (playwright.config.ts). */
 export const SUPABASE_URL = "http://fake.localhost:54321";
@@ -85,6 +85,10 @@ export type FakeBackend = {
     files: Map<string, Buffer>;
     /** Documents saved with save_page_document, by page id. */
     savedDocuments: Map<string, unknown>;
+    /** Version of a saved document (edit time, mutation); default 2026-01-01 without a mutation. */
+    documentVersions: Map<string, { editedAt: string; mutationId: string | null }>;
+    /** Requests for a page's document, per page. */
+    documentFetches: Map<string, number>;
     /** Pages behind a public link, by token. */
     publicPages: Map<string, { title: string; icon: string | null; full_width: boolean; document: unknown[] }>;
     /** Rules of recurring entries (package 25), as the app stored them. */
@@ -102,6 +106,8 @@ export type FakeBackend = {
     accountDeleted: boolean;
     /** Calls of the Edge Function purge-deleted-files. */
     fileCleanups: number;
+    /** Channels the app joined over Realtime (package 36); `sendPageActivity` reaches them. */
+    realtimeChannels: { socket: WebSocketRoute; topic: string; joinRef: string }[];
 };
 
 export type FakeComment = {
@@ -158,6 +164,8 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         tiles: 0,
         files: new Map(),
         savedDocuments: new Map(),
+        documentVersions: new Map(),
+        documentFetches: new Map(),
         publicPages: new Map(),
         recurrences: [],
         recurrenceRuns: [],
@@ -167,6 +175,7 @@ export function createBackend(initial: Partial<FakeBackend> = {}): FakeBackend {
         newPasswords: [],
         accountDeleted: false,
         fileCleanups: 0,
+        realtimeChannels: [],
         ...initial,
     };
 }
@@ -264,6 +273,28 @@ function fileFromMultipart(body: Buffer, contentType: string): Buffer {
     return body;
 }
 
+/** Tells the app over Realtime that a page changed, as the server's page_activity does (package 36). */
+export function sendPageActivity(
+    backend: FakeBackend,
+    row: { page_id: string; workspace_id?: string; change: string; mutation_id?: string | null },
+): void {
+    const record = { workspace_id: WORKSPACE, mutation_id: null, actor: OWNER, ...row };
+    for (const { socket, topic, joinRef } of backend.realtimeChannels) {
+        if (topic !== "realtime:page-activity") continue;
+        const data = {
+            schema: "public",
+            table: "page_activity",
+            commit_timestamp: new Date().toISOString(),
+            type: "UPDATE",
+            columns: Object.keys(record).map((name) => ({ name, type: name === "change" ? "text" : "uuid" })),
+            record,
+            old_record: {},
+            errors: null,
+        };
+        socket.send(JSON.stringify([joinRef, null, topic, "postgres_changes", { ids: [1], data }]));
+    }
+}
+
 // A transparent 1×1 PNG for map tiles.
 const TILE = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
@@ -274,6 +305,33 @@ export async function installFakeSupabase(context: BrowserContext, backend: Fake
     await context.route(`${SUPABASE_URL}/**`, (route) => {
         if (backend.offline) return route.abort("internetdisconnected");
         return answer(route, backend);
+    });
+
+    // Realtime speaks Phoenix over a WebSocket; text frames are [join_ref, ref, topic, event, payload].
+    await context.routeWebSocket(/\/realtime\/v1\/websocket/, (socket) => {
+        socket.onMessage((message) => {
+            if (typeof message !== "string") return;
+            const [joinRef, ref, topic, event, payload] = JSON.parse(message) as [
+                string | null,
+                string | null,
+                string,
+                string,
+                { config?: { postgres_changes?: object[] } },
+            ];
+            const reply = (response: object) =>
+                socket.send(JSON.stringify([joinRef, ref, topic, "phx_reply", { status: "ok", response }]));
+            if (event === "phx_join") {
+                if (joinRef) backend.realtimeChannels.push({ socket, topic, joinRef });
+                // The server confirms each postgres_changes filter with an id.
+                const changes = (payload.config?.postgres_changes ?? []).map((filter, index) => ({
+                    ...filter,
+                    id: index + 1,
+                }));
+                reply({ postgres_changes: changes });
+            } else {
+                reply({});
+            }
+        });
     });
 
     await context.route("https://tile.openstreetmap.org/**", (route) => {
@@ -682,6 +740,10 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
     if (path === "/rest/v1/rpc/save_page_document") {
         const body = requestBody(route);
         backend.savedDocuments.set(text(body, "p_page_id"), body.p_document);
+        backend.documentVersions.set(text(body, "p_page_id"), {
+            editedAt: text(body, "p_edited_at"),
+            mutationId: text(body, "p_mutation_id"),
+        });
         return json([{ applied: true, stored_edited_at: body.p_edited_at, stored_mutation_id: body.p_mutation_id }]);
     }
     if (path === "/rest/v1/rpc/get_public_page") {
@@ -711,9 +773,20 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
     // the test saved, else empty. The version is old: a local copy always wins.
     if (path === "/rest/v1/page_documents") {
         if (query.get("select")?.includes("block0")) return json(backend.previews);
-        const saved = backend.savedDocuments.get(query.get("page_id")?.replace("eq.", "") ?? "");
+        const pageId = query.get("page_id")?.replace("eq.", "") ?? "";
+        backend.documentFetches.set(pageId, (backend.documentFetches.get(pageId) ?? 0) + 1);
+        const saved = backend.savedDocuments.get(pageId);
+        const version = backend.documentVersions.get(pageId);
         return json(
-            saved ? [{ document: saved, client_updated_at: "2026-01-01T00:00:00Z", last_mutation_id: null }] : [],
+            saved
+                ? [
+                      {
+                          document: saved,
+                          client_updated_at: version?.editedAt ?? "2026-01-01T00:00:00Z",
+                          last_mutation_id: version?.mutationId ?? null,
+                      },
+                  ]
+                : [],
         );
     }
     if (path === "/rest/v1/rpc/can_edit_page") return json(true);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createDueRecurringEntries } from "@/features/databases/services/recurring-entries";
 import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
+import { useActivityReload } from "@/features/realtime/useActivityReload";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import {
@@ -169,6 +170,14 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
     // Server data shown for this workspace: a reload does not show the cache first.
     const shownFromServerFor = useRef("");
     const reloadCount = useServerReload(fromCache || error !== "");
+    // Pages changed elsewhere in this workspace (package 36).
+    const liveReloads = useActivityReload(
+        (activity) => activity.change === "page" && activity.workspaceId === workspaceId,
+    );
+    const liveReloadsLoaded = useRef(0);
+    // Pages created here; a live reload that started before one of them is not shown
+    // (it would drop it until the next change; the Notion import creates many in a row).
+    const localCreates = useRef(0);
     // After a move the server decides what changed below the page (section, owner, position).
     const [movesToLoad, setMovesToLoad] = useState(0);
     // The newest pages for createPage, which may run several times before
@@ -180,6 +189,10 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
 
     useEffect(() => {
         let active = true;
+        const live = liveReloads !== liveReloadsLoaded.current;
+        liveReloadsLoaded.current = liveReloads;
+        const createsAtStart = localCreates.current;
+        const current = () => active && (!live || localCreates.current === createsAtStart);
 
         function show(storedPages: StoredPage[], cached: boolean) {
             setPages(storedPages.filter((page) => !page.is_archived).map(toPage));
@@ -223,10 +236,10 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                         return parseServerPages(response.data);
                     },
                     cacheFirst: shownFromServerFor.current !== workspaceId,
-                    isActive: () => active,
+                    isActive: current,
                     show,
                 });
-                if (!active) return;
+                if (!current()) return;
                 setError(
                     result === "none"
                         ? "Die Seiten sind offline noch nicht verfügbar. Öffne Nodi einmal mit Internetverbindung."
@@ -247,7 +260,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         return () => {
             active = false;
         };
-    }, [workspaceId, userId, reloadCount, movesToLoad]);
+    }, [workspaceId, userId, reloadCount, movesToLoad, liveReloads]);
 
     // While another workspace loads, its predecessor's tree is not shown.
     const showsCurrentWorkspace = shownWorkspaceId === workspaceId;
@@ -325,6 +338,7 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
 
             setError("");
 
+            localCreates.current += 1;
             const response = await supabase.from("pages").insert({
                 id: createdPage.id,
                 workspace_id: workspaceId,

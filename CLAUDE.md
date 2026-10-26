@@ -341,6 +341,7 @@ src/
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
     export/                 # Paket 34: export-tree, export-markdown, export-csv, build-export; ExportDialog (nachgeladen)
+    realtime/               # Paket 36: page-activity.ts (Realtime-Abo), useActivityReload.ts
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -2695,6 +2696,37 @@ mutation_id, changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
         ein Fremder nichts).
       - Noch nicht: Live-Hinweis auf endgültig gelöschte Seiten und entzogene
         Freigaben (bleibt beim Bereinigen beim Start bzw. `online`).
+    - **Umsetzung 36b** (nur Frontend, keine Migration;
+      `src/features/realtime/`):
+      - `startPageActivity()` (in `WorkspaceHome`, je Konto und Tab): ein
+        Kanal `page-activity` mit `postgres_changes` auf `page_activity`;
+        Zeilen werden geprüft (`parsePageActivity`) und an Zuhörer verteilt
+        (`onPageActivity`). Verpasstes (Verbindung weg) holen wie bisher
+        `online` und „App wieder sichtbar“ nach.
+      - `useActivityReload(passt, beschäftigt?)`: zählt passende Änderungen
+        nach 1 s Ruhe (mehrere hintereinander = ein Laden) und ist wie
+        `useServerReload` eine Abhängigkeit des Ladens; solange
+        `beschäftigt` gilt, wartet es.
+      - Seitenbaum (`usePages`): `page` im aktuellen Workspace. Ein
+        Live-Laden, das vor einem hier angelegten Eintrag begann, wird nicht
+        angezeigt (sonst fehlte die neue Seite bis zur nächsten Änderung; der
+        Notion-Import legt viele hintereinander an). „Mit mir geteilt“: `page`
+        aus anderen Workspaces (auch neue Freigaben).
+      - Offene Seite (`BlockEditor`): `document` dieser Seite →
+        `session.refresh()` nach 1 s, also nur über eine synchronisierte
+        Kopie und ohne laufendes Tippen (wie beim Abgleich nach dem Öffnen;
+        LWW bleibt). Die eigene Speicherung kommt auch zurück; hält die Seite
+        dieselbe Mutation (`holdsMutation`), wird nichts geladen.
+      - Datenbanken (`useDatabase`, auch Blöcke): `properties` der Datenbank;
+        wartet, solange hier Werte unterwegs sind. Kommentare
+        (`PageComments`): `comments` der Seite; Entwürfe bleiben.
+      - Tests: Vitest `page-activity.test.ts`, Playwright `realtime.e2e.ts`
+        (das Fake-Backend spricht Realtime über `routeWebSocket`: Baum, Text,
+        eigene Mutation lädt nichts, Kommentar, Tippen gewinnt, Werte);
+        zusätzlich in Chromium gegen die lokale Supabase mit Realtime geprüft
+        (Umbenennen, Text und Kommentar von „einem anderen Gerät“ erscheinen).
+      - Noch nicht: Live für Rückverweise, Suche und Favoriten; Hinweis, wer
+        gerade auf der Seite ist.
 37. **Erwähnungen von Personen** („@Name“ im Text).
     - **Entschieden (Nutzer, 2026-10-26):** Erwähnung im Text und ein
       Hinweis in der App („Erwähnungen“ in der Seitenleiste, live, ungelesene

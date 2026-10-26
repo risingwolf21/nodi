@@ -3,6 +3,7 @@ import { Check, MessageSquare, RotateCcw } from "lucide-react";
 import { commentMarks, onCommentRequest, onShowThread, type CommentRequest } from "../comment-marks";
 import { groupThreads, MAX_COMMENT_LENGTH, type CommentThread, type PageComment } from "../comment-threads";
 import { pageComments } from "../services/page-comments";
+import { useActivityReload } from "@/features/realtime/useActivityReload";
 
 const dateFormat = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
@@ -32,6 +33,8 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
     const [pending, setPending] = useState<CommentRequest | null>(null);
     const pendingRef = useRef<CommentRequest | null>(null);
     const [shownThreadId, setShownThreadId] = useState<string | null>(null);
+    // Comments written elsewhere (package 36); drafts here stay.
+    const liveReloads = useActivityReload((activity) => activity.change === "comments" && activity.pageId === pageId);
 
     useEffect(() => {
         if (!online) return;
@@ -49,7 +52,7 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
         return () => {
             current = false;
         };
-    }, [pageId, online, reloads]);
+    }, [pageId, online, reloads, liveReloads]);
 
     // The marks in the text show the threads of this page only.
     const threads = useMemo(() => (loaded?.pageId === pageId ? groupThreads(loaded.comments) : []), [loaded, pageId]);

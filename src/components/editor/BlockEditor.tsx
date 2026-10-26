@@ -39,6 +39,7 @@ import type { DocumentContent } from "@/features/editor/types";
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { createFileUrlResolver } from "@/features/files/services/file-url-resolver";
 import { signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
+import { onPageActivity } from "@/features/realtime/page-activity";
 
 type FrameProps = {
     topBarStart: ReactNode;
@@ -61,6 +62,8 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
+// A live change is loaded after this pause, so saves in a row cause one load.
+const LIVE_REFRESH_DELAY_MS = 1000;
 // The "@" menu shows this many pages; typing narrows them down.
 const PAGE_LINK_CHOICES = 12;
 
@@ -218,6 +221,15 @@ function EditorContent({
         // A hint only; the request itself shows whether the server answers.
         // Unsynced edits are resent by the sync engine.
         const refreshWhenOnline = () => void current.refresh();
+        // Saved elsewhere (another device or person, package 36): load it unless typing here.
+        // Our own save comes back too; its mutation is the one shown.
+        let liveTimer: ReturnType<typeof setTimeout> | null = null;
+        const stopLive = onPageActivity((activity) => {
+            if (activity.change !== "document" || activity.pageId !== pageId) return;
+            if (activity.mutationId && current.holdsMutation(activity.mutationId)) return;
+            if (liveTimer) clearTimeout(liveTimer);
+            liveTimer = setTimeout(() => void current.refresh(), LIVE_REFRESH_DELAY_MS);
+        });
 
         document.addEventListener("visibilitychange", flushWhenHidden);
         window.addEventListener("pagehide", flush);
@@ -227,6 +239,8 @@ function EditorContent({
             document.removeEventListener("visibilitychange", flushWhenHidden);
             window.removeEventListener("pagehide", flush);
             window.removeEventListener("online", refreshWhenOnline);
+            stopLive();
+            if (liveTimer) clearTimeout(liveTimer);
             disposed = true;
             session.current = null;
             void current.dispose();
