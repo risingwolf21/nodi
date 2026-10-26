@@ -37,10 +37,12 @@ select throws_ok(
 );
 
 -- 4: saving the text is a document change
-select public.save_page_document('b0000000-0000-4000-8000-000000000001', '[]', now(), gen_random_uuid());
-select is(
-  (select change from public.page_activity where page_id = 'b0000000-0000-4000-8000-000000000001'),
-  'document', 'Saving the text is a document change'
+select public.save_page_document('b0000000-0000-4000-8000-000000000001', '[]', now(),
+  '0a000000-0000-4000-8000-000000000001');
+select results_eq(
+  $$select change, mutation_id from public.page_activity where page_id = 'b0000000-0000-4000-8000-000000000001'$$,
+  $$values ('document', '0a000000-0000-4000-8000-000000000001'::uuid)$$,
+  'Saving the text is a document change with the stored mutation'
 );
 
 -- 5-7: properties and values are changes of the database

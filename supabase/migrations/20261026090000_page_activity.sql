@@ -13,6 +13,8 @@
 --   deleted rows and would send their keys to every subscriber. A row of a
 --   page deleted for good stays and is readable by nobody.
 -- - `actor`: who made the change (as updated_by already shows readers).
+-- - `mutation_id`: for 'document', the mutation now stored; a client that
+--   holds it (its own save) does not need to load the text again.
 --
 -- Backward compatible: a new table and triggers; nothing the app sends
 -- changes.
@@ -22,6 +24,7 @@ create table public.page_activity (
   workspace_id uuid not null,
   change text not null check (change in ('page', 'document', 'properties', 'comments')),
   actor uuid,
+  mutation_id uuid,
   changed_at timestamptz not null default now()
 );
 
@@ -36,26 +39,31 @@ to authenticated
 using (public.can_read_page(page_id));
 
 -- Records a change of a page; nothing for a page that no longer exists.
-create or replace function public.touch_page_activity(target_page_id uuid, change_kind text)
+create or replace function public.touch_page_activity(
+  target_page_id uuid,
+  change_kind text,
+  stored_mutation_id uuid default null
+)
 returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
 begin
-  insert into public.page_activity (page_id, workspace_id, change, actor, changed_at)
-  select p.id, p.workspace_id, change_kind, (select auth.uid()), now()
+  insert into public.page_activity (page_id, workspace_id, change, actor, mutation_id, changed_at)
+  select p.id, p.workspace_id, change_kind, (select auth.uid()), stored_mutation_id, now()
   from public.pages p
   where p.id = target_page_id
   on conflict (page_id) do update
     set workspace_id = excluded.workspace_id,
         change = excluded.change,
         actor = excluded.actor,
+        mutation_id = excluded.mutation_id,
         changed_at = excluded.changed_at;
 end;
 $$;
 
-revoke execute on function public.touch_page_activity(uuid, text) from public, anon, authenticated;
+revoke execute on function public.touch_page_activity(uuid, text, uuid) from public, anon, authenticated;
 
 create or replace function public.page_activity_from_pages()
 returns trigger
@@ -76,7 +84,7 @@ security definer
 set search_path = ''
 as $$
 begin
-  perform public.touch_page_activity(new.page_id, 'document');
+  perform public.touch_page_activity(new.page_id, 'document', new.last_mutation_id);
   return null;
 end;
 $$;

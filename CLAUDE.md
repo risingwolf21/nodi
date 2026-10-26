@@ -2676,11 +2676,13 @@ vor dem Start genauer geschnitten).
     - **Aufteilung:** 36a Datenbank, 36b App.
     - **Umsetzung 36a** (`20261026090000_page_activity.sql`):
       - Tabelle `page_activity (page_id, workspace_id, change, actor,
-changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
+mutation_id, changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
         (Zeile in `pages`, neue Freigabe), `document` (Text), `properties`
         (Eigenschaften, Ansichten, Block-Ansichten und Werte; die Zeile gehört
         der Datenbank, bei Werten der Datenbank des Eintrags), `comments`.
-        Gesetzt nur von Triggern (`touch_page_activity`, security definer).
+        Bei `document` steht die gespeicherte Mutation-ID dabei: Wer sie schon
+        hat (eigenes Speichern), lädt den Text nicht neu. Gesetzt nur von
+        Triggern (`touch_page_activity`, security definer).
       - Realtime (`postgres_changes`, Publication `supabase_realtime`) prüft
         die Select-Policy `can_read_page(page_id)` je Empfänger: Eine Änderung
         erreicht nur, wer die Seite lesen darf, auch über Freigaben aus
