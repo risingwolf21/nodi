@@ -6,6 +6,7 @@ import {
     findArchivedAncestors,
     moveProblem,
     pagesInSection,
+    pageTemplates,
     placeBefore,
     withoutDatabaseEntries,
 } from "./page-hierarchy";
@@ -228,6 +229,20 @@ describe("withoutDatabaseEntries", () => {
             page("ideas", { parent_id: "notes" }),
         ];
         expect(withoutDatabaseEntries(pages).map((item) => item.id)).toEqual(["tasks", "notes", "ideas"]);
+    });
+});
+
+describe("pageTemplates", () => {
+    it("lists templates outside databases by title", () => {
+        const page = (id: string, extra: Partial<Page> = {}): Page => ({ ...project, id, title: id, ...extra });
+        const pages = [
+            page("tasks", { kind: "database" }),
+            page("Bug", { parent_id: "tasks", is_template: true }),
+            page("Protokoll", { is_template: true }),
+            page("Notiz"),
+            page("Agenda", { parent_id: "Notiz", is_template: true }),
+        ];
+        expect(pageTemplates(pages).map((item) => item.id)).toEqual(["Agenda", "Protokoll"]);
     });
 });
 

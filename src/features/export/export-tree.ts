@@ -31,7 +31,7 @@ export type ExportItem = {
 /**
  * The pages to export: the given roots with everything below them, parents
  * first, siblings by title. A database's entries are pages in its folder
- * (their values are in its CSV, package 34b); templates are not exported.
+ * (their values are in its CSV, package 34b); their templates are not exported.
  */
 export function planExport(pages: readonly Page[], rootIds: readonly string[]): ExportItem[] {
     const childrenOf = new Map<string, Page[]>();
@@ -45,7 +45,9 @@ export function planExport(pages: readonly Page[], rootIds: readonly string[]): 
     const items: ExportItem[] = [];
     const visit = (page: Page, folder: string, depth: number) => {
         // The tree has no cycles (move_page checks), the limit only guards against bad data.
-        if (depth > 50 || page.is_template) return;
+        if (depth > 50) return;
+        // Entry templates are not exported; page templates are pages like others (package 38b).
+        if (page.is_template && page.parent_id !== null && byId.get(page.parent_id)?.kind === "database") return;
         const base = exportBaseName(page);
         const prefix = folder ? `${folder}/` : "";
         items.push({

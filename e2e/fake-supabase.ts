@@ -27,6 +27,7 @@ export type FakePage = {
     position: number | null;
     created_at: string;
     is_template?: boolean;
+    cover?: string | null;
 };
 
 export type FakeProperty = {
@@ -783,7 +784,7 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         return json(publicPage ? [publicPage] : []);
     }
 
-    // Storage: upload, signed URL, download of the signed URL.
+    // Storage: upload, copy, signed URL, download of the signed URL.
     const upload = /^\/storage\/v1\/object\/page-files\/(.+)$/.exec(path);
     if (upload && method === "POST") {
         const filePath = decodeURIComponent(upload[1]);
@@ -791,6 +792,13 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         const raw = request.postDataBuffer() ?? Buffer.alloc(0);
         backend.files.set(filePath, fileFromMultipart(raw, request.headers()["content-type"] ?? ""));
         return json({ Key: `page-files/${filePath}`, Id: crypto.randomUUID() });
+    }
+    if (path === "/storage/v1/object/copy" && method === "POST") {
+        const body = requestBody(route);
+        const file = backend.files.get(text(body, "sourceKey"));
+        if (!file) return json({ statusCode: "404", error: "not_found", message: "Object not found" }, 400);
+        backend.files.set(text(body, "destinationKey"), file);
+        return json({ Key: `page-files/${text(body, "destinationKey")}` });
     }
     const signed = /^\/storage\/v1\/object\/sign\/page-files\/(.+)$/.exec(path);
     if (signed) {

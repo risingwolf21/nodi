@@ -120,6 +120,11 @@ export function PageTreeItem({
                             ))}
                     </span>
                     <span className="truncate">{displayTitle(page)}</span>
+                    {page.is_template && (
+                        <span className="shrink-0 rounded bg-muted px-1 text-[0.7rem] text-muted-foreground">
+                            Vorlage
+                        </span>
+                    )}
                 </button>
 
                 {!readOnly && (
