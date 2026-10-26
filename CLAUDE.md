@@ -417,7 +417,8 @@ supabase/
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
                             # Zeitleiste (P32d), Buttons (P32f),
-                            # Konto löschen (P33a), Speicher aufräumen (P35a)
+                            # Konto löschen (P33a), Speicher aufräumen (P35a),
+                            # Echtzeit (P36a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2659,6 +2660,43 @@ false` in `supabase/config.toml`, beim Deploy `--no-verify-jwt`):
         automatisch entfernt.
       - Tests: Playwright `trash.e2e.ts`, `account.e2e.ts` (Aufruf der
         Function im Fake-Backend).
+
+### Plan ab Paket 36 (Nutzer, 2026-10-26)
+
+Reihenfolge nach Wahl des Nutzers: 36 Echtzeit, 37 Erwähnungen von Personen,
+danach Vorlagen & Teilen, Mobil & Dateien, Suche & Leistung (Pakete werden
+vor dem Start genauer geschnitten).
+
+36. **Echtzeit:** Änderungen anderer (und anderer Geräte) erscheinen ohne
+    Neuladen: Seitentext, Seitenbaum, Datenbanken, Kommentare.
+    - **Entschieden (Nutzer, 2026-10-26):** Live-Aktualisieren, kein
+      gleichzeitiges Tippen: Eine offene Seite lädt den neuen Stand, solange
+      dort nicht getippt wird; die Konfliktregel bleibt LWW, Offline-Sync und
+      Warteschlange bleiben unverändert.
+    - **Aufteilung:** 36a Datenbank, 36b App.
+    - **Umsetzung 36a** (`20261026090000_page_activity.sql`):
+      - Tabelle `page_activity (page_id, workspace_id, change, actor,
+changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
+        (Zeile in `pages`, neue Freigabe), `document` (Text), `properties`
+        (Eigenschaften, Ansichten, Block-Ansichten und Werte; die Zeile gehört
+        der Datenbank, bei Werten der Datenbank des Eintrags), `comments`.
+        Gesetzt nur von Triggern (`touch_page_activity`, security definer).
+      - Realtime (`postgres_changes`, Publication `supabase_realtime`) prüft
+        die Select-Policy `can_read_page(page_id)` je Empfänger: Eine Änderung
+        erreicht nur, wer die Seite lesen darf, auch über Freigaben aus
+        anderen Workspaces. Kein Fremdschlüssel und kein Löschen: Für
+        gelöschte Zeilen prüft Realtime keine Rechte und schickte ihre
+        Schlüssel an alle. Zeilen endgültig gelöschter Seiten bleiben und sind
+        für niemanden lesbar.
+      - pgTAP: `page_activity.test.sql`; zusätzlich gegen die lokale Supabase
+        mit Realtime geprüft (Owner bekommt Anlegen, Text und Umbenennen,
+        ein Fremder nichts).
+      - Noch nicht: Live-Hinweis auf endgültig gelöschte Seiten und entzogene
+        Freigaben (bleibt beim Bereinigen beim Start bzw. `online`).
+37. **Erwähnungen von Personen** („@Name“ im Text).
+    - **Entschieden (Nutzer, 2026-10-26):** Erwähnung im Text und ein
+      Hinweis in der App („Erwähnungen“ in der Seitenleiste, live, ungelesene
+      markiert); keine E-Mails.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
