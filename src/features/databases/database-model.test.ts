@@ -23,6 +23,7 @@ import {
     parseViewConfig,
     parseViews,
     placeProperty,
+    previewImage,
     previewText,
     readValue,
     rowsByDay,
@@ -110,6 +111,7 @@ const data: DatabaseData = {
     ],
     documentEditedAt: { b: "2026-10-09T10:00:00Z" },
     documentPreview: { b: "Erste Zeile" },
+    documentImage: {},
     canEdit: true,
 };
 
@@ -236,6 +238,17 @@ describe("feed", () => {
         ];
         expect(previewText(blocks)).toBe("Titel\nSiehe Link");
         expect(previewText([{ content: [{ type: "text", text: "x".repeat(400) }] }])).toHaveLength(282);
+    });
+
+    it("finds the first image among the first blocks for the gallery", () => {
+        expect(
+            previewImage([
+                { type: "paragraph", content: [] },
+                { type: "image", props: { url: "" } },
+                { type: "image", props: { url: "nodi-file:a/b-bild.png" } },
+            ]),
+        ).toBe("nodi-file:a/b-bild.png");
+        expect(previewImage([{ type: "paragraph" }, null])).toBeNull();
     });
 });
 

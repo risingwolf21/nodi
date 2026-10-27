@@ -520,6 +520,8 @@ export function DatabaseView({
                     rows={rows}
                     properties={columns}
                     editable={editable}
+                    images={data.documentImage}
+                    userId={userId}
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
                 />
