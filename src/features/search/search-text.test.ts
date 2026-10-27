@@ -32,6 +32,21 @@ describe("search on the device", () => {
         expect(documentText(document)).toBe("Hotel Rom buchen Zelle");
     });
 
+    it("counts the titles of page links and the labels of mentions as text, like the server", () => {
+        const document = [
+            {
+                type: "paragraph",
+                content: [
+                    { type: "text", text: "Siehe", styles: {} },
+                    { type: "pageLink", props: { pageId: "p1", title: "Einkaufsliste" } },
+                    { type: "text", text: "mit", styles: {} },
+                    { type: "mention", props: { userId: "u2", label: "anna@nodi.test" } },
+                ],
+            },
+        ];
+        expect(documentText(document)).toBe("Siehe Einkaufsliste mit anna@nodi.test");
+    });
+
     it("finds titles first, then texts, with a snippet; at least two characters", () => {
         const pages = [page("a", "Notizen"), page("b", "Reise nach Rom"), page("c", "Einkauf")];
         const texts = new Map([["a", "Im Mai: Hotel in Rom buchen"]]);

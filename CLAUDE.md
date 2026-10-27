@@ -427,7 +427,8 @@ supabase/
                             # Zeitleiste (P32d), Buttons (P32f),
                             # Konto löschen (P33a), Speicher aufräumen (P35a),
                             # Echtzeit (P36a), Erwähnungen (P37a),
-                            # Seitenvorlagen (P38a), ungenutzte Dateien (P40)
+                            # Seitenvorlagen (P38a), ungenutzte Dateien (P40),
+                            # Suche in Werten (P43)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2210,8 +2211,8 @@ nicht gewünscht.
         dem Gerät gespeicherten Dokumente (`LocalDocumentStore.listAll`,
         `documentText`), mit Hinweis.
       - Tests: Vitest `search-text.test.ts`, Playwright `search.e2e.ts`.
-      - Noch nicht: Suche in Datenbank-Werten (Eigenschaften), Filter nach
-        Workspace oder Typ, Rangfolge nach Relevanz.
+      - Noch nicht: Filter nach Workspace oder Typ, Rangfolge nach Relevanz
+        (Datenbank-Werte und Seitenlinks findet die Suche seit Paket 43).
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
     Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
     exportierte Seiten echte Seitenlinks.
@@ -2235,8 +2236,8 @@ nicht gewünscht.
         Text). Links auf nicht importierte Seiten bleiben Text.
       - Tests: Vitest (`import-blocks`, `notion-import`), Playwright
         `page-links.e2e.ts`.
-      - Noch nicht: Erwähnungen von Personen und Daten, Seitenlinks in der
-        Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
+      - Noch nicht: Erwähnungen von Daten, Rückverweise offline (Personen
+        seit 37, Seitenlinks in der Suche seit 43).
 29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
     Dateien & Medien im Datei-Speicher (Paket 15).
     - **Umsetzung 29** (`20261020150000_person_and_files_properties.sql`):
@@ -2934,6 +2935,35 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
     - Tests: Vitest `database-model.test.ts`, Playwright `gallery.e2e.ts`.
     - Noch nicht: Wahl der Vorschau je Ansicht (Titelbild, Inhalt, Dateien,
       keine), Bilder weiter unten im Text, Bilder aus „Dateien & Medien“.
+
+### Suche & Leistung (Nutzer, 2026-10-26)
+
+- **Entschieden (Nutzer, 2026-10-26):** Aus dem Thema nur die Suche in
+  Werten; die Suche findet weiter alles Lesbare (auch geteilte Seiten anderer
+  Workspaces). Filter, Rangfolge, schnellere Rechte-Abfragen und App-Start
+  vorerst nicht.
+
+43. **Suche in Werten** (`20261026130000_search_property_values.sql`):
+    - `page_documents.search_text` enthält jetzt auch den Titel jedes
+      Seitenlinks und das `label` (E-Mail) jeder Erwähnung, in der Reihenfolge
+      des Dokuments (`document_search_text`, ersetzt `document_plain_text`).
+      Die generierte Spalte wird dafür gelöscht und neu angelegt (vor
+      PostgreSQL 17 lässt sich ihr Ausdruck nicht ändern); der Text wird für
+      alle Zeilen neu berechnet, `updated_at` bleibt.
+    - `search_pages` (Signatur und Spalten unverändert) findet Einträge auch
+      über ihre Werte: Text, URL, E-Mail, Namen gewählter Optionen (Auswahl,
+      Mehrfachauswahl, Status) und die Adresse eines Orts
+      (`property_value_search_text`). Ausschnitt ist dann „Eigenschaft: Wert“
+      (der erste passende Wert in Reihenfolge der Eigenschaften), außer der
+      Text des Eintrags trifft auch. Zahlen, Daten, Checkboxen, Verknüpfungen
+      und Option-IDs werden nicht durchsucht. RLS entscheidet wie bisher.
+    - App: `documentText` (Suche auf dem Gerät) zählt Seitenlinks und
+      Erwähnungen wie der Server.
+    - Tests: pgTAP `search_property_values.test.sql` (auch mit Bestandsdaten
+      gegen die lokale Supabase geprüft), Vitest `search-text.test.ts`.
+    - Noch nicht: Werte offline durchsuchen (offline weiter nur Titel und
+      gespeicherte Seiten), Formel- und Rollup-Ergebnisse (werden in der App
+      berechnet).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
