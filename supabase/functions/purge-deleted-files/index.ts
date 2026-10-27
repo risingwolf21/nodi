@@ -1,15 +1,18 @@
 // Package 35b: deletes the files of pages deleted for good (queue and
 // next_page_file_deletions in 20261025100000_page_file_cleanup.sql).
+// Package 40: then the files nothing has referred to for 30 days
+// (next_unused_page_files in 20261026120000_unused_page_files.sql).
 //
 // Called by the app after deleting pages or the account and once a day by
 // GitHub Actions. Open without a JWT (config.toml, verify_jwt = false): it
-// only removes files whose page no longer exists and answers with a count,
-// so a caller can neither choose what is deleted nor learn anything.
+// only removes files whose page no longer exists or that nothing has
+// referred to for 30 days, and answers with a count, so a caller can neither
+// choose what is deleted nor learn anything.
 // Plain fetch against the REST and Storage APIs: no dependency to load.
 
 const BUCKET = "page-files";
-// next_page_file_deletions returns at most 1000 paths; a call handles at most
-// ROUNDS of them. The rest waits for the next call.
+// Each source returns at most 1000 paths; a call handles at most ROUNDS of
+// them per source. The rest waits for the next call.
 const BATCH_SIZE = 1000;
 const ROUNDS = 10;
 
@@ -41,14 +44,17 @@ function serverHeaders(key: string): Record<string, string> {
     return headers;
 }
 
-async function nextPaths(url: string, headers: Record<string, string>): Promise<string[]> {
-    const response = await fetch(`${url}/rest/v1/rpc/next_page_file_deletions`, {
+// The two lists of files to delete, each returned in batches by a server function.
+const SOURCES = ["next_page_file_deletions", "next_unused_page_files"] as const;
+
+async function nextPaths(url: string, headers: Record<string, string>, source: string): Promise<string[]> {
+    const response = await fetch(`${url}/rest/v1/rpc/${source}`, {
         method: "POST",
         headers,
         body: JSON.stringify({ p_limit: BATCH_SIZE }),
     });
     const body: unknown = await response.json();
-    if (!response.ok || !isPathList(body)) throw new Error(`next_page_file_deletions: ${response.status}`);
+    if (!response.ok || !isPathList(body)) throw new Error(`${source}: ${response.status}`);
     return body;
 }
 
@@ -76,11 +82,13 @@ Deno.serve(async (request) => {
 
     let removed = 0;
     try {
-        for (let round = 0; round < ROUNDS; round += 1) {
-            const paths = await nextPaths(url, headers);
-            if (paths.length === 0) break;
-            await removeFiles(url, headers, paths);
-            removed += paths.length;
+        for (const source of SOURCES) {
+            for (let round = 0; round < ROUNDS; round += 1) {
+                const paths = await nextPaths(url, headers, source);
+                if (paths.length === 0) break;
+                await removeFiles(url, headers, paths);
+                removed += paths.length;
+            }
         }
     } catch (error) {
         console.error("purge-deleted-files:", error);

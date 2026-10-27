@@ -425,7 +425,8 @@ supabase/
                             # Titelbilder (P30c), Kommentare (P31a/b),
                             # Zeitleiste (P32d), Buttons (P32f),
                             # Konto löschen (P33a), Speicher aufräumen (P35a),
-                            # Echtzeit (P36a), Erwähnungen (P37a)
+                            # Echtzeit (P36a), Erwähnungen (P37a),
+                            # Seitenvorlagen (P38a), ungenutzte Dateien (P40)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2872,6 +2873,31 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
     - Tests: Vitest `image-resize.test.ts`, `upload-progress.test.ts`,
       Playwright „Große Fotos werden … verkleinert“ (`page-files.e2e.ts`).
     - Noch nicht: Abbrechen eines Uploads, Verkleinern in einem Worker.
+40. **Nicht mehr verwendete Dateien löschen** (`20261026120000_unused_page_files.sql`,
+    Edge Function):
+    - **Entschieden (Nutzer, 2026-10-26):** gelöscht wird eine Datei, auf die
+      seit 30 Tagen nichts mehr verweist; Verweise zählen von überall in nodi
+      (nicht nur von der eigenen Seite).
+    - Verweise (`referenced_file_paths`): jeder `nodi-file:`-Text in einem
+      Dokument (auch Kopien in anderen Seiten und Seiten im Papierkorb),
+      Titelbilder und Werte von „Dateien & Medien“. Dateien endgültig
+      gelöschter Seiten bleiben Sache von Paket 35.
+    - Tabelle `unused_page_files (name, unused_since)`: wann eine Datei zuerst
+      ohne Verweis gesehen wurde; ein neuer Verweis (Rückgängig, anderes
+      Gerät) löscht die Zeile, die 30 Tage beginnen neu. Nur der Server liest
+      sie.
+    - `next_unused_page_files(limit)` (nur `service_role`): sieht sich alle
+      Dateien höchstens einmal je Stunde an (die Edge Function kann jeder
+      aufrufen) und immer, bevor sie fällige Dateien liefert; eine seit dem
+      letzten Blick wieder verwendete Datei wird so nie geliefert.
+    - Edge Function `purge-deleted-files`: nach den Dateien gelöschter Seiten
+      auch die fälligen ungenutzten (je höchstens 10 Runden à 1000), Antwort
+      wie bisher `{removed}`. Datenschutzerklärung (Abschnitt 8) ergänzt.
+    - Nicht geschützt: lokale Änderungen, die länger als 30 Tage nicht
+      synchronisiert werden und eine Datei wieder einfügen.
+    - Tests: pgTAP `unused_page_files.test.sql`; zusätzlich mit `supabase
+functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
+      nach 30 Tagen gelöscht, verwendete bleibt, Liste danach leer).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
