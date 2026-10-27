@@ -1,17 +1,20 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, MoreHorizontal, Star, Table2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, LayoutTemplate, MoreHorizontal, Star, Table2 } from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { PageComments } from "@/features/comments/components/PageComments";
+import { templateCover } from "@/features/editor/template-content";
+import { copyPageFile } from "@/features/files/services/page-files";
 import { Backlinks } from "@/features/pages/components/Backlinks";
 import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
-import { displayTitle } from "@/features/pages/page-display";
+import { displayTitle, NEW_PAGE_TITLE } from "@/features/pages/page-display";
 import type { PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
+import type { WorkspaceMember } from "@/features/pages/services/workspace-members";
 
 // BlockNote makes up most of the bundle; load it only when a page is opened.
 const BlockEditor = lazy(() => import("@/components/editor/BlockEditor"));
@@ -48,6 +51,8 @@ type PageViewProps = {
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
     userId: string | undefined;
+    /** Who can be mentioned with "@" (package 37). */
+    people: WorkspaceMember[];
     /** The page's children: a database's entries, an entry's subpages. */
     entries: Page[];
     /** For a database: its templates (package 26); undefined where they cannot be used. */
@@ -60,6 +65,8 @@ type PageViewProps = {
     databases?: Page[];
     /** All pages the app knows, for the databases shown as blocks in the text. */
     knownPages: Page[];
+    /** Page templates offered on an empty page (package 38b); empty where none apply. */
+    pageTemplates: Page[];
     /** New manual order of a database's entries (package 32a); undefined where it cannot change. */
     onReorderPages?: (updates: PositionUpdate[]) => Promise<void>;
 };
@@ -97,12 +104,14 @@ export function PageView({
     onMoveSection,
     onMove,
     userId,
+    people,
     entries,
     onCreateEntry,
     onCreateSubpage,
     templateActions,
     databases,
     knownPages,
+    pageTemplates,
     onReorderPages,
 }: PageViewProps) {
     // The nearest ancestor is the parent: below a database the page is an entry.
@@ -124,6 +133,28 @@ export function PageView({
         setFavorite(page.id, !page.favorite).catch((err: unknown) => {
             setMenuError(err instanceof Error ? err.message : "Die Favoriten konnten nicht geändert werden.");
         });
+    }
+
+    function toggleTemplate() {
+        setMenuOpen(false);
+        setMenuError("");
+        onUpdate(page.id, { is_template: !page.is_template }).catch((err: unknown) => {
+            setMenuError(err instanceof Error ? err.message : "Die Vorlage konnte nicht geändert werden.");
+        });
+    }
+
+    // After its text: the template's title, icon and cover where the page has none yet.
+    async function applyTemplateSettings(template: Page) {
+        const untitled = !page.title.trim() || page.title === NEW_PAGE_TITLE;
+        if (untitled && template.title.trim()) await onRename(page.id, template.title);
+        const settings: PageSettings = {};
+        if (!page.icon && template.icon) settings.icon = template.icon;
+        if (!page.cover && template.cover) {
+            const copy = templateCover(template.cover, page.id);
+            for (const file of copy.files) await copyPageFile(file.from, file.to);
+            settings.cover = copy.cover;
+        }
+        if (Object.keys(settings).length > 0) await onUpdate(page.id, settings);
     }
 
     const topBarStart = (
@@ -217,6 +248,12 @@ export function PageView({
                             Exportieren
                         </MenuItem>
                     )}
+                    {page.kind === "page" && (
+                        <MenuItem onSelect={toggleTemplate}>
+                            <LayoutTemplate className="size-4" />
+                            {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
+                        </MenuItem>
+                    )}
                     <MenuItem onSelect={toggleFullWidth}>
                         <span className="flex-1">Volle Breite</span>
                         {page.full_width && <Check className="size-4 text-brand" />}
@@ -294,6 +331,11 @@ export function PageView({
                 <p className="mb-4 px-[var(--page-gutter)] text-sm text-muted-foreground" role="note">
                     Vorlage in „{displayTitle(database)}“: Neue Einträge aus dieser Vorlage bekommen ihren Text und ihre
                     Eigenschaften.
+                </p>
+            )}
+            {!database && page.is_template && (
+                <p className="mb-4 px-[var(--page-gutter)] text-sm text-muted-foreground" role="note">
+                    Vorlage: Neue, leere Seiten können mit ihrem Text, Icon und Titelbild beginnen.
                 </p>
             )}
             {database && (
@@ -378,7 +420,16 @@ export function PageView({
                         onOpenPage: onSelect,
                         onCreateEntry,
                         onRenameEntry: onRename,
+                        people,
                     }}
+                    templates={
+                        database || page.is_template
+                            ? undefined
+                            : {
+                                  pages: pageTemplates.filter((template) => template.id !== page.id),
+                                  onApply: applyTemplateSettings,
+                              }
+                    }
                 />
             </Suspense>
         </LoadErrorBoundary>

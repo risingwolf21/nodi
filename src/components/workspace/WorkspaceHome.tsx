@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { startTouchDrag } from "@/lib/touch-drag";
 import { trackVirtualKeyboard } from "@/lib/virtual-keyboard";
 import { PageActionsDialog, type PageActionMode } from "@/features/pages/components/PageActionsDialog";
 import { ShareDialog } from "@/features/pages/components/ShareDialog";
@@ -13,22 +14,28 @@ import { MoveSectionDialog } from "@/features/pages/components/MoveSectionDialog
 import { MovePageDialog } from "@/features/pages/components/MovePageDialog";
 import type { MoveTarget, PositionUpdate } from "@/features/pages/page-hierarchy";
 import { Sidebar } from "@/features/pages/components/Sidebar";
-import { findAncestors } from "@/features/pages/page-hierarchy";
+import { findAncestors, pageTemplates } from "@/features/pages/page-hierarchy";
+import { NEW_PAGE_TITLE } from "@/features/pages/page-display";
 import type { Page, PageKind, PageSection } from "@/features/pages/types";
 import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
+import { startPageActivity } from "@/features/realtime/page-activity";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
 import { deleteRevokedLocalCopies } from "@/features/editor/services/revoked-documents";
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { SyncStatusIndicator } from "@/features/editor/components/SyncStatusIndicator";
 import { SignOutDialog } from "@/features/auth/SignOutDialog";
+import { UploadProgress } from "@/features/files/components/UploadProgress";
 import { DeleteAccountDialog } from "@/features/auth/DeleteAccountDialog";
 import { signOutAndDeleteLocalData, syncBeforeSignOut } from "@/features/auth/sign-out";
 import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
 import { SearchDialog } from "@/features/search/components/SearchDialog";
+import { MentionsDialog } from "@/features/mentions/components/MentionsDialog";
+import { useMentions } from "@/features/mentions/hooks/useMentions";
+import { useWorkspaceMembers } from "@/features/pages/hooks/useWorkspaceMembers";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { PageView } from "./PageView";
@@ -37,7 +44,6 @@ import { PageView } from "./PageView";
 const NotionImportDialog = lazy(() => import("@/features/import/components/NotionImportDialog"));
 const ExportDialog = lazy(() => import("@/features/export/components/ExportDialog"));
 
-const NEW_PAGE_TITLE = "Unbenannte Seite";
 const NEW_DATABASE_TITLE = "Unbenannte Datenbank";
 
 /** Local copies of pages that are no longer readable go at the next contact with the server. */
@@ -122,6 +128,7 @@ export default function WorkspaceHome() {
     const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
     // Database blocks in a text may show databases shared from elsewhere.
     const knownPages = useMemo(() => [...pages, ...sharedPages], [pages, sharedPages]);
+    const workspacePageTemplates = useMemo(() => pageTemplates(pages), [pages]);
 
     // Sends edits that are still waiting, also those of pages not open now.
     const userId = user?.id;
@@ -133,11 +140,21 @@ export default function WorkspaceHome() {
         return () => engine.stop();
     }, [userId]);
 
+    // Changes by others and other devices arrive live (package 36).
+    useEffect(() => (userId ? startPageActivity() : undefined), [userId]);
+
     // On phones the app fits the area above the keyboard (package 20).
     useEffect(() => trackVirtualKeyboard(), []);
+    // Drag by long press on touch screens (package 41).
+    useEffect(() => startTouchDrag(), []);
 
     // Ctrl/⌘+K opens the search (package 27), as in Notion.
     const [searchOpen, setSearchOpen] = useState(false);
+    // Mentions of the user (package 37): the list and the members for "@".
+    const online = !(readOnly || authOffline);
+    const mentions = useMentions(user?.id, online);
+    const [mentionsOpen, setMentionsOpen] = useState(false);
+    const workspaceMembersForMentions = useWorkspaceMembers(workspaceId, online);
     useEffect(() => {
         function openSearch(event: KeyboardEvent) {
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -211,6 +228,12 @@ export default function WorkspaceHome() {
     // A new entry stays in the table (its name gets the focus there).
     async function createEntry(databaseId: string): Promise<string> {
         const database = pages.find((item) => item.id === databaseId);
+        // With a default template (package 38c), as long as it is still one of this database.
+        const templateId = database?.default_template_id;
+        const template = templateId
+            ? pages.find((item) => item.id === templateId && item.parent_id === databaseId && item.is_template)
+            : undefined;
+        if (template) return (await createEntryFromTemplate(template.id)).id;
         const entry = await createWorkspacePage("", databaseId, database?.visibility ?? "private");
         return entry.id;
     }
@@ -331,6 +354,8 @@ export default function WorkspaceHome() {
                                 });
                             }}
                             onSearch={() => setSearchOpen(true)}
+                            unreadMentions={mentions.unread}
+                            onMentions={() => setMentionsOpen(true)}
                             onRename={(item) => setActivePageAction({ page: item, mode: "rename" })}
                             onArchive={(item) => setActivePageAction({ page: item, mode: "archive" })}
                             onRestore={restorePage}
@@ -379,6 +404,8 @@ export default function WorkspaceHome() {
                                         : undefined
                                 }
                                 userId={user?.id}
+                                // Mentions name members of the page's own workspace.
+                                people={sharedPage ? [] : workspaceMembersForMentions}
                                 entries={(sharedPage ? sharedPages : pages).filter(
                                     (item) => item.parent_id === page.id,
                                 )}
@@ -390,6 +417,8 @@ export default function WorkspaceHome() {
                                         : {
                                               onCreateFromTemplate: async (templateId) =>
                                                   (await createEntryFromTemplate(templateId)).id,
+                                              onSetDefault: (templateId) =>
+                                                  updatePage(page.id, { default_template_id: templateId }),
                                               onCreateTemplate: async () =>
                                                   (
                                                       await createWorkspacePage("", page.id, page.visibility, "page", {
@@ -406,6 +435,8 @@ export default function WorkspaceHome() {
                                 // Relations stay within the workspace (package 17d).
                                 databases={sharedPage ? undefined : pages.filter((item) => item.kind === "database")}
                                 knownPages={knownPages}
+                                // Templates of the page's own workspace (package 38b).
+                                pageTemplates={sharedPage ? [] : workspacePageTemplates}
                                 // Entries of other workspaces keep their order (for now).
                                 onReorderPages={sharedPage ? undefined : reorderPages}
                             />
@@ -440,6 +471,8 @@ export default function WorkspaceHome() {
                     {visibleError}
                 </p>
             )}
+
+            <UploadProgress />
 
             {signOutStep.kind === "confirm" && user && (
                 <SignOutDialog
@@ -547,6 +580,32 @@ export default function WorkspaceHome() {
                         />
                     </Suspense>
                 </LoadErrorBoundary>
+            )}
+
+            {mentionsOpen && (
+                <MentionsDialog
+                    mentions={mentions.mentions}
+                    error={mentions.error}
+                    onOpen={(mention) => {
+                        setMentionsOpen(false);
+                        mentions.markRead(mention.id).catch((err: unknown) => {
+                            console.error("Erwähnung konnte nicht als gelesen markiert werden:", err);
+                        });
+                        if (
+                            mention.workspaceId !== workspaceId &&
+                            workspaces.some((item) => item.id === mention.workspaceId)
+                        ) {
+                            changeWorkspace(mention.workspaceId);
+                        }
+                        openPage(mention.pageId);
+                    }}
+                    onMarkAllRead={() => {
+                        mentions.markAllRead().catch((err: unknown) => {
+                            console.error("Erwähnungen konnten nicht als gelesen markiert werden:", err);
+                        });
+                    }}
+                    onClose={() => setMentionsOpen(false)}
+                />
             )}
 
             {searchOpen && user && (

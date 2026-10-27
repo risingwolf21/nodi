@@ -31,6 +31,17 @@ async function chooseFile(page: Page, name: string, content: Buffer | { size: nu
     );
 }
 
+/** Width and height from the frame header (SOF) of a JPEG. */
+function jpegSize(bytes: Buffer): [number, number] | null {
+    let offset = 2;
+    while (offset + 9 < bytes.length && bytes[offset] === 0xff) {
+        const marker = bytes[offset + 1];
+        if (marker >= 0xc0 && marker <= 0xc3) return [bytes.readUInt16BE(offset + 7), bytes.readUInt16BE(offset + 5)];
+        offset += 2 + bytes.readUInt16BE(offset + 2);
+    }
+    return null;
+}
+
 async function insertImageBlock(page: Page) {
     await page.locator(".bn-editor").first().click();
     await page.keyboard.press("Control+End");
@@ -109,4 +120,54 @@ test("Die öffentliche Ansicht zeigt Bilder der Seite und speichert nichts", asy
     await expect(image).toHaveAttribute("src", /\/storage\/v1\/object\/sign\/page-files\//);
     await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(2);
     expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
+});
+
+test("Große Fotos werden vor dem Hochladen verkleinert, der Fortschritt ist zu sehen", async ({ page, context }) => {
+    const backend = createBackend({ pages: [fakePage("b0000000-0000-4000-8000-000000000001", "Fotos")] });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Fotos", exact: true }).click();
+
+    // The upload waits until the notice has been seen.
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/storage/v1/object/page-files/**", async (route) => {
+        await released;
+        await route.fallback();
+    });
+
+    await insertImageBlock(page);
+    await page.locator("input[type=file]").first().waitFor({ state: "attached" });
+    // A 4000×3000 photo made in the page (noise, so it is heavy like a real one).
+    await page.evaluate(async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 4000;
+        canvas.height = 3000;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Kein Canvas");
+        const pixels = context.createImageData(4000, 3000);
+        for (let index = 0; index < pixels.data.length; index += 1) {
+            pixels.data[index] = index % 4 === 3 ? 255 : Math.floor(Math.random() * 256);
+        }
+        context.putImageData(pixels, 0, 0);
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.95));
+        if (!blob) throw new Error("Kein Bild");
+        const input = document.querySelector<HTMLInputElement>("input[type=file]");
+        if (!input) throw new Error("Kein Datei-Feld");
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([blob], "IMG_0001.jpeg", { type: "image/jpeg" }));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const notice = page.getByRole("status", { name: "Hochladen" });
+    await expect(notice).toContainText("„IMG_0001.jpg“ wird hochgeladen");
+    release();
+    await expect(notice).toHaveCount(0);
+
+    // Stored as a JPEG of at most 2560 px.
+    await expect.poll(() => backend.files.size).toBe(1);
+    const [[path, stored]] = [...backend.files];
+    expect(path).toMatch(/-IMG_0001\.jpg$/);
+    const size = jpegSize(stored);
+    expect(size).toEqual([2560, 1920]);
 });

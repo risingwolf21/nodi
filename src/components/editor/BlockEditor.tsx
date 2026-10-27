@@ -14,7 +14,7 @@ import {
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { de } from "@blocknote/core/locales";
-import { Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
+import { AtSign, Columns2, FileText, MessageSquareText, Table2 } from "lucide-react";
 import "@blocknote/mantine/style.css";
 
 import { useAuth } from "@/lib/use-auth";
@@ -24,6 +24,7 @@ import { editorTheme } from "@/components/editor/editor-theme";
 import { DatabaseBlockContext, type DatabaseBlockContextValue } from "@/components/editor/database-block-context";
 import { editorSchema } from "@/components/editor/editor-schema";
 import { CommentButton } from "@/components/editor/CommentButton";
+import { TemplateChoices, type PageTemplates } from "@/components/editor/TemplateChoices";
 import { displayTitle } from "@/features/pages/page-display";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { documentChangesFor } from "@/features/editor/services/document-changes";
@@ -35,10 +36,14 @@ import {
     type SessionStatus,
 } from "@/features/editor/services/page-document-session";
 import { remoteDocumentRepository } from "@/features/editor/services/remote-document-repository";
+import { templateContent } from "@/features/editor/template-content";
 import type { DocumentContent } from "@/features/editor/types";
 import { fileCacheFor } from "@/features/files/services/file-cache";
 import { createFileUrlResolver } from "@/features/files/services/file-url-resolver";
-import { signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
+import { copyPageFile, signedFileUrl, uploadPageFile } from "@/features/files/services/page-files";
+import { onPageActivity } from "@/features/realtime/page-activity";
+import { personName } from "@/features/mentions/mentions";
+import type { Page } from "@/features/pages/types";
 
 type FrameProps = {
     topBarStart: ReactNode;
@@ -48,6 +53,8 @@ type FrameProps = {
     renderHeader: (canEdit: boolean) => ReactNode;
     /** What "Datenbank" blocks need from the app (package 19c). */
     databaseBlocks: DatabaseBlockApp;
+    /** Offered while the page is empty (package 38b); undefined where templates do not apply. */
+    templates?: PageTemplates;
 };
 
 /** The part of a database block's context that does not come from the editor. */
@@ -61,8 +68,11 @@ type LoadResult = { pageId: string; initial: InitialDocument } | { pageId: strin
 
 // Long enough to read, short enough not to get in the way (Option A).
 const SUPERSEDED_NOTICE_MS = 8000;
-// The "@" menu shows this many pages; typing narrows them down.
+// A live change is loaded after this pause, so saves in a row cause one load.
+const LIVE_REFRESH_DELAY_MS = 1000;
+// The "@" menu shows this many pages and people; typing narrows them down.
 const PAGE_LINK_CHOICES = 12;
+const PEOPLE_CHOICES = 5;
 
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
@@ -143,6 +153,15 @@ function toEditorBlocks(content: DocumentContent): DocumentContent {
     return content.length > 0 ? content : [{ type: "paragraph" }];
 }
 
+/** Nothing written yet: no blocks, or the one empty paragraph the editor starts with. */
+function isEmptyDocument(content: DocumentContent): boolean {
+    if (content.length === 0) return true;
+    if (content.length > 1) return false;
+    const [block] = content;
+    const noContent = block.content === undefined || (Array.isArray(block.content) && block.content.length === 0);
+    return block.type === "paragraph" && noContent && (block.children ?? []).length === 0;
+}
+
 function EditorContent({
     userId,
     pageId,
@@ -153,6 +172,7 @@ function EditorContent({
     fullWidth,
     renderHeader,
     databaseBlocks,
+    templates,
 }: FrameProps & {
     userId: string;
     pageId: string;
@@ -164,6 +184,9 @@ function EditorContent({
     );
     const [canEdit, setCanEdit] = useState(initial.document.canEdit);
     const [showSupersededNotice, setShowSupersededNotice] = useState(false);
+    const [empty, setEmpty] = useState(() => isEmptyDocument(initial.document.content));
+    const [applyingTemplate, setApplyingTemplate] = useState(false);
+    const [templateError, setTemplateError] = useState("");
 
     const session = useRef<PageDocumentSession | null>(null);
     // Content set by sync is not a user edit and must not be saved again.
@@ -218,6 +241,15 @@ function EditorContent({
         // A hint only; the request itself shows whether the server answers.
         // Unsynced edits are resent by the sync engine.
         const refreshWhenOnline = () => void current.refresh();
+        // Saved elsewhere (another device or person, package 36): load it unless typing here.
+        // Our own save comes back too; its mutation is the one shown.
+        let liveTimer: ReturnType<typeof setTimeout> | null = null;
+        const stopLive = onPageActivity((activity) => {
+            if (activity.change !== "document" || activity.pageId !== pageId) return;
+            if (activity.mutationId && current.holdsMutation(activity.mutationId)) return;
+            if (liveTimer) clearTimeout(liveTimer);
+            liveTimer = setTimeout(() => void current.refresh(), LIVE_REFRESH_DELAY_MS);
+        });
 
         document.addEventListener("visibilitychange", flushWhenHidden);
         window.addEventListener("pagehide", flush);
@@ -227,6 +259,8 @@ function EditorContent({
             document.removeEventListener("visibilitychange", flushWhenHidden);
             window.removeEventListener("pagehide", flush);
             window.removeEventListener("online", refreshWhenOnline);
+            stopLive();
+            if (liveTimer) clearTimeout(liveTimer);
             disposed = true;
             session.current = null;
             void current.dispose();
@@ -241,9 +275,36 @@ function EditorContent({
     }, [showSupersededNotice]);
 
     useEditorChange(() => {
+        setEmpty(isEmptyDocument(editor.document));
         if (applyingRemoteContent.current) return;
         session.current?.recordEdit(editor.document);
     }, editor);
+
+    // A template's text becomes the page's text like typing it (package 38b);
+    // its files are copied into this page's folder first.
+    async function applyTemplate(template: Page) {
+        if (!templates) return;
+        setApplyingTemplate(true);
+        setTemplateError("");
+        try {
+            const local = await store.get(template.id);
+            const source = local
+                ? local.content
+                : ((await remoteDocumentRepository.fetch(template.id)).document?.content ?? []);
+            const copy = templateContent(source, pageId);
+            if (!copy) throw new Error("Die Vorlage ist kein gültiges Dokument.");
+            for (const file of copy.files) await copyPageFile(file.from, file.to);
+            // Left meanwhile, or typed: the page keeps what it has.
+            if (!session.current || !isEmptyDocument(editor.document)) return;
+            editor.replaceBlocks(editor.document, toEditorBlocks(copy.content));
+            await templates.onApply(template);
+        } catch (err) {
+            console.error("Vorlage konnte nicht übernommen werden:", err);
+            setTemplateError(err instanceof Error ? err.message : "Die Vorlage konnte nicht übernommen werden.");
+        } finally {
+            setApplyingTemplate(false);
+        }
+    }
 
     // Pages to link: known pages (not templates), title matches first, a few at a time.
     // Columns (package 32e): each column starts with an empty paragraph, the cursor in the first.
@@ -262,8 +323,28 @@ function EditorContent({
     // A stable component: a new one on each render would remount the toolbar.
     const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
 
-    const pageLinkItems = (query: string) => {
+    // "@" offers people first (package 37), then pages (28), like Notion.
+    const mentionItems = (query: string) => {
         const needle = query.trim().toLocaleLowerCase("de");
+        const people = databaseBlocks.people
+            .filter((person) => person.userId !== userId && person.email.toLocaleLowerCase("de").includes(needle))
+            .slice(0, PEOPLE_CHOICES)
+            .map((person) => ({
+                title: personName(person.email),
+                subtext: person.email,
+                group: "Person erwähnen",
+                icon: <AtSign size={18} />,
+                onItemClick: () => {
+                    editor.insertInlineContent([
+                        { type: "mention", props: { userId: person.userId, label: person.email } },
+                        " ",
+                    ]);
+                },
+            }));
+        return [...people, ...pageLinkItems(needle)];
+    };
+
+    const pageLinkItems = (needle: string) => {
         return databaseBlocks.pages
             .filter((page) => !page.is_template && page.id !== pageId)
             .filter((page) => displayTitle(page).toLocaleLowerCase("de").includes(needle))
@@ -401,13 +482,21 @@ function EditorContent({
                             )
                         }
                     />
-                    {/* "@" links a page (package 28). */}
+                    {/* "@" mentions a person (package 37) or links a page (28). */}
                     <SuggestionMenuController
                         triggerCharacter="@"
-                        getItems={(query) => Promise.resolve(pageLinkItems(query))}
+                        getItems={(query) => Promise.resolve(mentionItems(query))}
                     />
                 </BlockNoteView>
             </DatabaseBlockContext>
+            {templates && templates.pages.length > 0 && empty && canEdit !== false && !databaseBlocks.readOnly && (
+                <TemplateChoices
+                    templates={templates.pages}
+                    busy={applyingTemplate}
+                    error={templateError}
+                    onChoose={(template) => void applyTemplate(template)}
+                />
+            )}
         </EditorFrame>
     );
 }

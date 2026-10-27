@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadCacheThenServer, useServerReload } from "@/features/pages/hooks/load-cache-then-server";
+import { useActivityReload } from "@/features/realtime/useActivityReload";
 import { pageTreeCacheFor } from "@/features/pages/services/page-tree-cache";
 import {
     EMPTY_VIEW_CONFIG,
@@ -111,6 +112,13 @@ export function useDatabase(
     const [confirmedByServer, setConfirmedByServer] = useState(false);
     const [manualReloads, setManualReloads] = useState(0);
     const serverReloads = useServerReload(fromCache || error !== "");
+    // Values written here and not answered yet; a live reload waits for them.
+    const writesInFlight = useRef(0);
+    // Properties, views or values changed elsewhere (package 36).
+    const liveReloads = useActivityReload(
+        (activity) => activity.change === "properties" && activity.pageId === databaseId,
+        () => writesInFlight.current > 0,
+    );
     const shownFromServerFor = useRef("");
     // The newest write per field, so an older failure does not undo a newer edit.
     const latestWrite = useRef(new Map<string, string>());
@@ -170,7 +178,7 @@ export function useDatabase(
         return () => {
             active = false;
         };
-    }, [databaseId, blockRef, loadedFor, userId, manualReloads, serverReloads]);
+    }, [databaseId, blockRef, loadedFor, userId, manualReloads, serverReloads, liveReloads]);
 
     useEffect(() => {
         if (!userId || !data || !confirmedByServer) return;
@@ -394,6 +402,7 @@ export function useDatabase(
             });
             change((latest) => replaceValue(latest, { pageId, propertyId, value, updatedAt: editedAt }));
 
+            writesInFlight.current += 1;
             try {
                 const result = await databaseRepository.setValue(pageId, propertyId, value, editedAt, mutationId);
                 const relation = current.properties.find((item) => item.id === propertyId)?.relation;
@@ -407,6 +416,8 @@ export function useDatabase(
                     change((latest) => replaceValue(latest, previous));
                 }
                 throw err;
+            } finally {
+                writesInFlight.current -= 1;
             }
         },
         [databaseId, requireEditable],

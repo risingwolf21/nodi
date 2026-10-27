@@ -55,6 +55,19 @@ export function isDatabaseEntry(pageId: string, pages: Page[]): boolean {
     );
 }
 
+/** Page templates (package 38b): templates that are no entry of a database, by title. */
+export function pageTemplates(pages: Page[]): Page[] {
+    const databaseIds = new Set(pages.filter((page) => page.kind === "database").map((page) => page.id));
+    return pages
+        .filter(
+            (page) =>
+                page.is_template === true &&
+                page.kind === "page" &&
+                !(page.parent_id !== null && databaseIds.has(page.parent_id)),
+        )
+        .sort((a, b) => a.title.localeCompare(b.title, "de"));
+}
+
 /**
  * Entries of databases are shown in the database, not in the page tree;
  * the database itself stays (its entries are not its tree children). The

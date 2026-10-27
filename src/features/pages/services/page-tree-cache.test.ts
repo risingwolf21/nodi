@@ -144,6 +144,21 @@ describe("PageTreeCache", () => {
         ]);
     });
 
+    it("keeps default templates (package 38c); trees cached before have none", () => {
+        const row = { id: "db", title: "Aufgaben", parent_id: null, is_archived: false, kind: "database" };
+        expect(
+            parseStoredPages([
+                { ...row, default_template_id: "tpl" },
+                { ...row, id: "db2", default_template_id: null },
+                { ...row, id: "db3" },
+            ])?.map((page) => [page.id, page.default_template_id]),
+        ).toEqual([
+            ["db", "tpl"],
+            ["db2", undefined],
+            ["db3", undefined],
+        ]);
+    });
+
     it("keeps shared pages apart from the workspace trees", async () => {
         const shared: StoredPage = {
             id: "s1",

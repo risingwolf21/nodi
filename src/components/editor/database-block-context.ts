@@ -1,9 +1,11 @@
 import { createContext } from "react";
+import type { WorkspaceMember } from "@/features/pages/services/workspace-members";
 import type { Page } from "@/features/pages/types";
 
 /**
- * What a "Datenbank" block needs from the app around the editor (package
- * 19c). The public view has none: there the block shows only a note.
+ * What a "Datenbank" block (package 19c), page links (28) and mentions (37)
+ * need from the app around the editor. The public view has none: there
+ * they show only their stored text.
  */
 export type DatabaseBlockContextValue = {
     pageId: string;
@@ -20,6 +22,8 @@ export type DatabaseBlockContextValue = {
     /** Adds an entry to a database; undefined where that is not possible. */
     onCreateEntry?: (databaseId: string) => Promise<string>;
     onRenameEntry: (pageId: string, title: string) => Promise<void>;
+    /** Who can be mentioned with "@" (package 37); also how mentions show their names. */
+    people: WorkspaceMember[];
 };
 
 export const DatabaseBlockContext = createContext<DatabaseBlockContextValue | null>(null);

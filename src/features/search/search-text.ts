@@ -12,13 +12,31 @@ export type SearchResult = {
     snippet: string | null;
 };
 
-/** The text of a document, like the server's search_text: every "text" in its blocks. */
+/** The prop of a page link or mention that stands for it in the text (package 43). */
+const SHOWN_PROP = new Map([
+    ["pageLink", "title"],
+    ["mention", "label"],
+]);
+
+/**
+ * The text of a document, like the server's search_text: every "text" in its
+ * blocks, the title of a page link and the label of a mention.
+ */
 export function documentText(content: unknown): string {
     const parts: string[] = [];
     const visit = (value: unknown) => {
         if (Array.isArray(value)) {
             value.forEach(visit);
         } else if (typeof value === "object" && value !== null) {
+            const shown = "type" in value && typeof value.type === "string" ? SHOWN_PROP.get(value.type) : undefined;
+            const props: unknown = "props" in value ? value.props : null;
+            if (shown && typeof props === "object" && props !== null) {
+                const text = Object.entries(props).find(([key]) => key === shown)?.[1];
+                if (typeof text === "string") {
+                    parts.push(text);
+                    return;
+                }
+            }
             for (const [key, item] of Object.entries(value)) {
                 if (key === "text" && typeof item === "string") parts.push(item);
                 else visit(item);

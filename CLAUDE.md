@@ -278,6 +278,8 @@ src/
     editor/DatabaseBlock.tsx # Datenbank-Block; Kontext in database-block-context.ts
     editor/PageLink.tsx     # Seitenlink im Text („@“, 28)
     editor/CommentMark.tsx  # Kommentar an einer Textstelle (31b); CommentButton.tsx in der Leiste
+    editor/TemplateChoices.tsx # „Mit einer Vorlage beginnen“ auf leeren Seiten (38b)
+    editor/PersonMention.tsx # Erwähnung einer Person im Text („@“, 37)
                             # editor-schema.tsx auch: Spalten (columns/column, 32e)
     pwa/UpdatePrompt.tsx    # SW-Registrierung und Update-Hinweis
     ui/                     # shadcn: button, card, input, label, separator;
@@ -304,7 +306,7 @@ src/
       components/PropertyBar.tsx     # Eigenschaften eines Eintrags über dem Text
       components/BoardView.tsx       # Board: Spalten je Option, Ziehen setzt den Wert (14c)
       components/ListView.tsx        # Liste (14c)
-      components/GalleryView.tsx     # Galerie (14c); EntryCard.tsx: Karte/Werte
+      components/GalleryView.tsx     # Galerie mit Titelbild (14c, 42); EntryCard.tsx: Karte/Werte
       components/FeedView.tsx        # Feed mit Textvorschau (14d)
       components/CalendarView.tsx    # Kalender: Monat/Woche, Ziehen (14d, 32b)
       components/TimelineView.tsx    # Zeitleiste (32d); GroupedRows.tsx: Gruppen in Tabelle/Liste (32c)
@@ -325,6 +327,7 @@ src/
       components/SyncStatusIndicator.tsx  # Gesamtstatus in der Kopfzeile
       types.ts              # Dokument-, Versions- und Sync-Typen
       document-sync.ts      # Validierung, LWW-Vergleich, Fehlerklassen
+      template-content.ts   # Text einer Seitenvorlage: neue IDs, Dateien kopieren (38b)
       services/
         local-document-store.ts      # IndexedDB `nodi-<userId>`
         remote-document-repository.ts # Supabase: laden, RPC speichern
@@ -336,11 +339,15 @@ src/
     files/                  # Paket 15b
       file-reference.ts     # Verweis `nodi-file:<pfad>`, Pfad, Dateiname (Vitest)
       services/page-files.ts        # Storage: hochladen, signierte URL
+      services/upload-progress.ts   # laufende Uploads; components/UploadProgress.tsx (39)
+      image-resize.ts               # Fotos verkleinern vor dem Hochladen (39, Vitest)
       services/file-cache.ts        # IndexedDB `nodi-<userId>-files` (Bilder offline)
       services/file-url-resolver.ts # BlockNote `resolveFileUrl`: Cache, sonst signierte URL
     search/                 # Paket 27: SearchDialog, page-search.ts (Server/Gerät), search-text.ts
     comments/               # Paket 31a: PageComments, services/page-comments.ts, comment-threads.ts
     export/                 # Paket 34: export-tree, export-markdown, export-csv, build-export; ExportDialog (nachgeladen)
+    realtime/               # Paket 36: page-activity.ts (Realtime-Abo), useActivityReload.ts
+    mentions/               # Paket 37: mentions.ts, services/page-mentions.ts, useMentions, MentionsDialog
     import/                 # Paket 16a
       read-archive.ts       # ZIP lesen (fflate), Teil-ZIPs, NFC-Pfade
       notion-export.ts      # Titel, Pfade, Seitenbaum aus dem Export (Vitest)
@@ -388,6 +395,7 @@ src/
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
     virtual-keyboard.ts     # Bildschirmtastatur erkennen, sichtbarer Bereich (20)
+    touch-drag.ts           # Ziehen per langem Drücken auf Touch-Geräten (41)
 public/
   favicon.svg               # App-Icon (abgerundet), Quelle für pwa-*.png
   icons/                    # pwa-192, pwa-512, maskable-512, apple-touch-icon-180
@@ -417,7 +425,10 @@ supabase/
                             # Person und Dateien (P29), Favoriten (P30b),
                             # Titelbilder (P30c), Kommentare (P31a/b),
                             # Zeitleiste (P32d), Buttons (P32f),
-                            # Konto löschen (P33a), Speicher aufräumen (P35a)
+                            # Konto löschen (P33a), Speicher aufräumen (P35a),
+                            # Echtzeit (P36a), Erwähnungen (P37a),
+                            # Seitenvorlagen (P38a), ungenutzte Dateien (P40),
+                            # Suche in Werten (P43)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2200,8 +2211,8 @@ nicht gewünscht.
         dem Gerät gespeicherten Dokumente (`LocalDocumentStore.listAll`,
         `documentText`), mit Hinweis.
       - Tests: Vitest `search-text.test.ts`, Playwright `search.e2e.ts`.
-      - Noch nicht: Suche in Datenbank-Werten (Eigenschaften), Filter nach
-        Workspace oder Typ, Rangfolge nach Relevanz.
+      - Noch nicht: Filter nach Workspace oder Typ, Rangfolge nach Relevanz
+        (Datenbank-Werte und Seitenlinks findet die Suche seit Paket 43).
 28. **Seitenlinks und Erwähnungen:** Links auf Seiten im Text (`@Seite`),
     Klick öffnet die Seite, Rückverweise; Import macht aus Links auf
     exportierte Seiten echte Seitenlinks.
@@ -2225,8 +2236,8 @@ nicht gewünscht.
         Text). Links auf nicht importierte Seiten bleiben Text.
       - Tests: Vitest (`import-blocks`, `notion-import`), Playwright
         `page-links.e2e.ts`.
-      - Noch nicht: Erwähnungen von Personen und Daten, Seitenlinks in der
-        Suche (der Titel im Link zählt nicht als Text), Rückverweise offline.
+      - Noch nicht: Erwähnungen von Daten, Rückverweise offline (Personen
+        seit 37, Seitenlinks in der Suche seit 43).
 29. **Eigenschaften Person und Dateien:** Person = Workspace-Mitglieder;
     Dateien & Medien im Datei-Speicher (Paket 15).
     - **Umsetzung 29** (`20261020150000_person_and_files_properties.sql`):
@@ -2659,6 +2670,300 @@ false` in `supabase/config.toml`, beim Deploy `--no-verify-jwt`):
         automatisch entfernt.
       - Tests: Playwright `trash.e2e.ts`, `account.e2e.ts` (Aufruf der
         Function im Fake-Backend).
+
+### Plan ab Paket 36 (Nutzer, 2026-10-26)
+
+Reihenfolge nach Wahl des Nutzers: 36 Echtzeit, 37 Erwähnungen von Personen,
+danach Vorlagen & Teilen, Mobil & Dateien, Suche & Leistung (Pakete werden
+vor dem Start genauer geschnitten).
+
+36. **Echtzeit:** Änderungen anderer (und anderer Geräte) erscheinen ohne
+    Neuladen: Seitentext, Seitenbaum, Datenbanken, Kommentare.
+    - **Entschieden (Nutzer, 2026-10-26):** Live-Aktualisieren, kein
+      gleichzeitiges Tippen: Eine offene Seite lädt den neuen Stand, solange
+      dort nicht getippt wird; die Konfliktregel bleibt LWW, Offline-Sync und
+      Warteschlange bleiben unverändert.
+    - **Aufteilung:** 36a Datenbank, 36b App.
+    - **Umsetzung 36a** (`20261026090000_page_activity.sql`):
+      - Tabelle `page_activity (page_id, workspace_id, change, actor,
+mutation_id, changed_at)`, eine Zeile je Seite, ohne Inhalt. `change`: `page`
+        (Zeile in `pages`, neue Freigabe), `document` (Text), `properties`
+        (Eigenschaften, Ansichten, Block-Ansichten und Werte; die Zeile gehört
+        der Datenbank, bei Werten der Datenbank des Eintrags), `comments`.
+        Bei `document` steht die gespeicherte Mutation-ID dabei: Wer sie schon
+        hat (eigenes Speichern), lädt den Text nicht neu. Gesetzt nur von
+        Triggern (`touch_page_activity`, security definer).
+      - Realtime (`postgres_changes`, Publication `supabase_realtime`) prüft
+        die Select-Policy `can_read_page(page_id)` je Empfänger: Eine Änderung
+        erreicht nur, wer die Seite lesen darf, auch über Freigaben aus
+        anderen Workspaces. Kein Fremdschlüssel und kein Löschen: Für
+        gelöschte Zeilen prüft Realtime keine Rechte und schickte ihre
+        Schlüssel an alle. Zeilen endgültig gelöschter Seiten bleiben und sind
+        für niemanden lesbar.
+      - pgTAP: `page_activity.test.sql`; zusätzlich gegen die lokale Supabase
+        mit Realtime geprüft (Owner bekommt Anlegen, Text und Umbenennen,
+        ein Fremder nichts).
+      - Noch nicht: Live-Hinweis auf endgültig gelöschte Seiten und entzogene
+        Freigaben (bleibt beim Bereinigen beim Start bzw. `online`).
+    - **Umsetzung 36b** (nur Frontend, keine Migration;
+      `src/features/realtime/`):
+      - `startPageActivity()` (in `WorkspaceHome`, je Konto und Tab): ein
+        Kanal `page-activity` mit `postgres_changes` auf `page_activity`;
+        Zeilen werden geprüft (`parsePageActivity`) und an Zuhörer verteilt
+        (`onPageActivity`). Verpasstes (Verbindung weg) holen wie bisher
+        `online` und „App wieder sichtbar“ nach.
+      - `useActivityReload(passt, beschäftigt?)`: zählt passende Änderungen
+        nach 1 s Ruhe (mehrere hintereinander = ein Laden) und ist wie
+        `useServerReload` eine Abhängigkeit des Ladens; solange
+        `beschäftigt` gilt, wartet es.
+      - Seitenbaum (`usePages`): `page` im aktuellen Workspace. Ein
+        Live-Laden, das vor einem hier angelegten Eintrag begann, wird nicht
+        angezeigt (sonst fehlte die neue Seite bis zur nächsten Änderung; der
+        Notion-Import legt viele hintereinander an). „Mit mir geteilt“: `page`
+        aus anderen Workspaces (auch neue Freigaben).
+      - Offene Seite (`BlockEditor`): `document` dieser Seite →
+        `session.refresh()` nach 1 s, also nur über eine synchronisierte
+        Kopie und ohne laufendes Tippen (wie beim Abgleich nach dem Öffnen;
+        LWW bleibt). Die eigene Speicherung kommt auch zurück; hält die Seite
+        dieselbe Mutation (`holdsMutation`), wird nichts geladen.
+      - Datenbanken (`useDatabase`, auch Blöcke): `properties` der Datenbank;
+        wartet, solange hier Werte unterwegs sind. Kommentare
+        (`PageComments`): `comments` der Seite; Entwürfe bleiben.
+      - Tests: Vitest `page-activity.test.ts`, Playwright `realtime.e2e.ts`
+        (das Fake-Backend spricht Realtime über `routeWebSocket`: Baum, Text,
+        eigene Mutation lädt nichts, Kommentar, Tippen gewinnt, Werte);
+        zusätzlich in Chromium gegen die lokale Supabase mit Realtime geprüft
+        (Umbenennen, Text und Kommentar von „einem anderen Gerät“ erscheinen).
+      - Noch nicht: Live für Rückverweise, Suche und Favoriten; Hinweis, wer
+        gerade auf der Seite ist.
+37. **Erwähnungen von Personen** („@Name“ im Text).
+    - **Entschieden (Nutzer, 2026-10-26):** Erwähnung im Text und ein
+      Hinweis in der App („Erwähnungen“ in der Seitenleiste, live, ungelesene
+      markiert); keine E-Mails.
+    - **Aufteilung:** 37a Datenbank, 37b Oberfläche.
+    - **Umsetzung 37a** (`20261026100000_page_mentions.sql`):
+      - Im Dokument ist eine Erwähnung Inline-Inhalt
+        `{type: "mention", props: {userId, label}}`.
+      - Tabelle `page_mentions (id, page_id, user_id, mentioned_by,
+mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
+        `record_page_mentions` (nach Speichern des Dokuments) legt sie für neu
+        Erwähnte an (nicht in der vorigen Fassung, nicht der Autor, nur
+        bestehende Konten) bzw. macht sie wieder ungelesen; entfernte
+        Erwähnungen lassen die Zeile stehen. `document_mentions(document)`
+        liest die IDs (ungültige entfallen).
+      - Sichtbar nur der erwähnten Person und nur, solange sie die Seite lesen
+        darf; ändern kann sie nur `read_at` (Spaltenrecht). RPC
+        `list_my_mentions(limit)`: eigene Erwähnungen auf lesbaren Seiten
+        außerhalb des Papierkorbs, neueste zuerst, mit Workspace, Titel, Icon und E-Mail
+        dessen, der erwähnt hat. Realtime (`postgres_changes`) prüft dieselbe
+        Policy; Löschen (Seite, Konto) verrät nur die zufällige ID der Zeile.
+      - pgTAP: `page_mentions.test.sql`.
+    - **Umsetzung 37b** (nur Frontend, keine Migration;
+      `src/features/mentions/`):
+      - Inline-Inhalt `mention` im Editor-Schema (`PersonMention`): zeigt
+        „@“ und den Teil der E-Mail vor dem „@“ (`personName`), die volle
+        Adresse im Tooltip; Name aus den Mitgliedern des Workspace, sonst
+        `label` (öffentliche Ansicht, ausgetretene Person).
+      - „@“ im Text bietet zuerst Mitglieder des Workspace der Seite an
+        (höchstens 5, ohne einen selbst; „Person erwähnen“), dann Seiten wie
+        bisher. Mitglieder lädt `useWorkspaceMembers` (nur online; geteilte
+        Seiten anderer Workspaces: keine Personen), über den Kontext des
+        Editors (`DatabaseBlockContext.people`).
+      - Seitenleiste: „Erwähnungen“ unter „Suchen“ mit Zahl der ungelesenen;
+        `MentionsDialog` (neueste zuerst, ungelesene fett mit Punkt, „Alle als
+        gelesen markieren“). Klick markiert gelesen und öffnet die Seite,
+        wechselt dafür bei Bedarf in den eigenen Workspace der Seite.
+        `useMentions`: nur online (ein Hinweis, kein Inhalt; nichts offline),
+        lädt neu bei Änderungen über Realtime (zweiter Filter auf
+        `page_mentions` im Kanal `page-activity`) und bei `online`.
+      - Export: Erwähnungen werden Text „@name“.
+      - Tests: Vitest `mentions.test.ts`, `export-markdown.test.ts`,
+        Playwright `mentions.e2e.ts`; zusätzlich mit zwei Konten gegen die
+        lokale Supabase geprüft (A erwähnt B, B sieht es live, öffnet die
+        Seite, gelesen).
+      - Noch nicht: Erwähnungen in Kommentaren, Namen statt E-Mail (es gibt
+        noch keine Profilnamen), Erwähnungen von Daten.
+38. **Seitenvorlagen und Standardvorlage** (Thema „Vorlagen & Teilen“).
+    - **Entschieden (Nutzer, 2026-10-26):** Aus dem Thema nur Seitenvorlagen
+      (auch außerhalb von Datenbanken) und eine Standardvorlage je Datenbank
+      für „Neu“. Vorlagen anlegen und ändern darf, wer Schreibrecht hat (wie
+      Paket 26). Öffentliche Links mit Unterseiten, `noindex`, Titelbilder
+      öffentlich und in der Galerie vorerst nicht.
+    - **Annahmen:** Eine Seitenvorlage bleibt eine Seite im Baum (Rechte,
+      Bereich, Teilen wie jede Seite). Angewendet wird sie auf eine neue,
+      leere Seite: Text, und Titel, Icon und Titelbild, sofern dort noch
+      keins ist; Unterseiten der Vorlage werden nicht kopiert.
+    - **Aufteilung:** 38a Datenbank, 38b Seitenvorlagen (Oberfläche), 38c
+      Standardvorlage (Oberfläche).
+    - **Umsetzung 38a** (`20261026110000_page_templates.sql`):
+      - `is_template` an jeder Seite außer Datenbanken (`22023`); Verschieben
+        in eine Datenbank oder heraus lässt eine Vorlage Vorlage.
+      - `create_entry_from_template` nur noch für Vorlagen in einer Datenbank
+        (`22023`).
+      - `pages.default_template_id`: nur an Datenbanken, nur eine Vorlage
+        dieser Datenbank (Trigger, `22023`), ändern mit Schreibrecht (RLS wie
+        jede Einstellung); Löschen der Vorlage leert es. Ist die Vorlage
+        keine mehr, legt die App leere Einträge an.
+      - pgTAP: `page_templates.test.sql`, `entry_templates.test.sql`
+        angepasst.
+    - **Umsetzung 38b** (nur Frontend, keine Migration):
+      - Seitenmenü „Als Vorlage verwenden“ / „Keine Vorlage mehr“ (Seiten,
+        keine Datenbanken; Einträge werden so Vorlage ihrer Datenbank). In
+        der Seitenleiste steht „Vorlage“ hinter dem Titel, auf der Vorlage
+        ein Hinweis.
+      - Eine leere Seite (kein Text) außerhalb von Datenbanken zeigt unter
+        dem Editor „Mit einer Vorlage beginnen“ mit den Seitenvorlagen des
+        Workspace (`pageTemplates`: Vorlagen, die kein Eintrag sind; nur mit
+        Schreibrecht und online). Ein Klick übernimmt den Text wie Tippen
+        (lokal speichern, Sync, LWW) und danach Titel (wenn leer oder
+        „Unbenannte Seite“), Icon und Titelbild, wenn die Seite keins hat.
+      - `template-content.ts`: neue Block-IDs, ohne Kommentar-Markierungen;
+        Bilder und Anhänge (`nodi-file:`) und ein Titelbild aus dem
+        Datei-Speicher werden in den Ordner der neuen Seite kopiert
+        (`copyPageFile`, Storage prüft Lesen der Vorlage und Schreiben der
+        Seite; gegen die lokale Supabase geprüft). Sonst sähen Leser der neuen
+        Seite die Dateien nicht, und sie verschwänden mit der Vorlage.
+      - Der Text der Vorlage kommt aus der Kopie auf dem Gerät, sonst vom
+        Server. Wird währenddessen getippt, bleibt die Seite, wie sie ist.
+      - Export: Seitenvorlagen werden wie Seiten exportiert (nur Vorlagen von
+        Datenbanken nicht).
+      - Tests: Vitest (`template-content.test.ts`, `page-hierarchy.test.ts`,
+        `export-tree.test.ts`), Playwright `page-templates.e2e.ts`.
+      - Noch nicht: Unterseiten der Vorlage mitkopieren, Vorlagen beim
+        Anlegen wählen („+“ mit Vorlage), Vorlagen in geteilten Seiten
+        anderer Workspaces.
+    - **Umsetzung 38c** (nur Frontend, keine Migration):
+      - `Page.default_template_id` wird mit dem Seitenbaum geladen und gecacht
+        (alte Caches: keine).
+      - Menü „Vorlagen“ der Datenbank: je Vorlage ein ✓ („… als Standard für
+        „Neu““, `aria-pressed`), erneuter Klick nimmt den Standard weg;
+        darunter, womit „Neu“ beginnt. Gespeichert per `updatePage` (nur mit
+        Schreibrecht, online).
+      - „Neu“ in allen Ansichten und in Datenbank-Blöcken
+        (`WorkspaceHome.createEntry`): Ist der Standard noch eine Vorlage
+        dieser Datenbank, entsteht der Eintrag per
+        `create_entry_from_template`, sonst leer. Der Wert einer
+        Board-Spalte oder eines Kalendertags wird danach gesetzt und gewinnt.
+      - Tests: Vitest `page-tree-cache.test.ts`, Playwright
+        `entry-templates.e2e.ts`.
+      - Noch nicht: Standard je Ansicht (wie Notion), Standardvorlage für
+        Seiten außerhalb von Datenbanken.
+
+### Mobil & Dateien (Nutzer, 2026-10-26)
+
+- **Entschieden (Nutzer, 2026-10-26):** Alle vier Teile, in dieser
+  Reihenfolge: 39 Bilder verkleinern (höchstens 2560 px, JPEG 85 %) mit
+  Fortschrittsanzeige, 40 nicht mehr verwendete Dateien löschen, 41 Ziehen
+  auf Touch-Geräten, 42 Titelbild in der Galerie.
+
+39. **Bilder verkleinern, Fortschritt beim Hochladen** (nur Frontend, keine
+    Migration):
+    - `features/files/image-resize.ts`: JPEG, WebP und PNG werden verkleinert,
+      wenn die längste Seite über 2560 px liegt oder die Datei über 2 MB hat
+      (`shrinkTarget`), und als JPEG mit 85 % gespeichert (`.jpg`). Bleiben
+      unverändert: kleinere Bilder, GIF, SVG, PNG mit Transparenz, Bilder,
+      die der Browser nicht lesen kann (z. B. HEIC außer in Safari), und wenn
+      die Kopie nicht kleiner wäre. Die Ausrichtung des Fotos bleibt
+      (`imageOrientation: "from-image"`); Metadaten (Ort, Kamera) entfallen.
+    - Gilt für jedes Hochladen über `uploadPageFile`: Editor, Titelbild,
+      Dateien & Medien und Notion-Import. Die 10-MB-Grenze gilt nach dem
+      Verkleinern.
+    - Hochladen per `XMLHttpRequest` (wie storage-js, `FormData`, gleiche
+      Header), weil `fetch` keinen Fortschritt meldet. `upload-progress.ts`
+      führt die laufenden Uploads, `UploadProgress` zeigt sie unten in der
+      App (Name, Prozent, Balken; mehrere: Anzahl und Mittelwert).
+    - Tests: Vitest `image-resize.test.ts`, `upload-progress.test.ts`,
+      Playwright „Große Fotos werden … verkleinert“ (`page-files.e2e.ts`).
+    - Noch nicht: Abbrechen eines Uploads, Verkleinern in einem Worker.
+40. **Nicht mehr verwendete Dateien löschen** (`20261026120000_unused_page_files.sql`,
+    Edge Function):
+    - **Entschieden (Nutzer, 2026-10-26):** gelöscht wird eine Datei, auf die
+      seit 30 Tagen nichts mehr verweist; Verweise zählen von überall in nodi
+      (nicht nur von der eigenen Seite).
+    - Verweise (`referenced_file_paths`): jeder `nodi-file:`-Text in einem
+      Dokument (auch Kopien in anderen Seiten und Seiten im Papierkorb),
+      Titelbilder und Werte von „Dateien & Medien“. Dateien endgültig
+      gelöschter Seiten bleiben Sache von Paket 35.
+    - Tabelle `unused_page_files (name, unused_since)`: wann eine Datei zuerst
+      ohne Verweis gesehen wurde; ein neuer Verweis (Rückgängig, anderes
+      Gerät) löscht die Zeile, die 30 Tage beginnen neu. Nur der Server liest
+      sie.
+    - `next_unused_page_files(limit)` (nur `service_role`): sieht sich alle
+      Dateien höchstens einmal je Stunde an (die Edge Function kann jeder
+      aufrufen) und immer, bevor sie fällige Dateien liefert; eine seit dem
+      letzten Blick wieder verwendete Datei wird so nie geliefert.
+    - Edge Function `purge-deleted-files`: nach den Dateien gelöschter Seiten
+      auch die fälligen ungenutzten (je höchstens 10 Runden à 1000), Antwort
+      wie bisher `{removed}`. Datenschutzerklärung (Abschnitt 8) ergänzt.
+    - Nicht geschützt: lokale Änderungen, die länger als 30 Tage nicht
+      synchronisiert werden und eine Datei wieder einfügen.
+    - Tests: pgTAP `unused_page_files.test.sql`; zusätzlich mit `supabase
+functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
+      nach 30 Tagen gelöscht, verwendete bleibt, Liste danach leer).
+41. **Ziehen auf Touch-Geräten** (nur Frontend, keine Migration):
+    - `lib/touch-drag.ts` (gestartet in `WorkspaceHome`): Langes Drücken
+      (400 ms) auf ein Element mit `draggable="true"` startet einen Drag;
+      danach gehen `dragstart`, `dragenter`/`dragover`/`dragleave`, `drop` und
+      `dragend` mit einem eigenen `DataTransfer` an die Elemente unter dem
+      Finger. Die vorhandenen Handler (Seitenleiste: Reihenfolge, Unterseite,
+      Bereich; Board-Karten; Kalender-Einträge, auch in Datenbank-Blöcken)
+      arbeiten dadurch unverändert, wie mit der Maus.
+    - Bewegt sich der Finger vor Ablauf mehr als 8 px, ist es Scrollen. Während
+      des Ziehens scrollt die Seite nicht (`touchmove` abgefangen), eine Kopie
+      des Elements folgt dem Finger, nahe am Rand eines scrollbaren Bereichs
+      (unter dem Finger oder um das gezogene Element) scrollt er weiter.
+      Kein Klick nach dem Loslassen, kein Kontextmenü beim langen Drücken;
+      auf groben Zeigern keine Textauswahl auf ziehbaren Elementen
+      (`index.css`). Zieht der Browser selbst (natives Drag and Drop auf iOS),
+      tritt die eigene Logik zurück. BlockNotes Block-Griff ist ausgenommen.
+    - Damit gelten die Hinweise „auf Touch-Geräten über das Menü“ bzw. „Noch
+      nicht: auf Touch-Geräten“ in 14c, 18b, 32a und 32b nicht mehr.
+    - Tests: Playwright `touch-drag.e2e.ts` (echte Touch-Ereignisse über CDP:
+      Seitenleiste ordnen ohne Öffnen, Wischen zieht nicht, Board mit Wert und
+      Scrollen am Rand, Kalender). Auf echten iOS-/Android-Geräten noch nicht
+      geprüft.
+42. **Titelbild in der Galerie** (nur Frontend, keine Migration):
+    - Eine Karte der Galerie zeigt oben das Titelbild des Eintrags
+      (`Page.cover`: Farbverlauf oder Bild), sonst das erste Bild unter den
+      ersten drei Blöcken seines Textes (`previewImage`; dieselbe Abfrage wie
+      die Vorschau im Feed, `document->0..2`). Ohne beides bleibt die Karte
+      wie bisher.
+    - `DatabaseData.documentImage` (URL je Eintrag) wird mit der Datenbank
+      gecacht (alte Caches: keine). Bilder kommen wie das Titelbild einer
+      Seite zuerst aus dem Bild-Cache, sind also nach einmaligem Ansehen
+      offline zu sehen.
+    - Tests: Vitest `database-model.test.ts`, Playwright `gallery.e2e.ts`.
+    - Noch nicht: Wahl der Vorschau je Ansicht (Titelbild, Inhalt, Dateien,
+      keine), Bilder weiter unten im Text, Bilder aus „Dateien & Medien“.
+
+### Suche & Leistung (Nutzer, 2026-10-26)
+
+- **Entschieden (Nutzer, 2026-10-26):** Aus dem Thema nur die Suche in
+  Werten; die Suche findet weiter alles Lesbare (auch geteilte Seiten anderer
+  Workspaces). Filter, Rangfolge, schnellere Rechte-Abfragen und App-Start
+  vorerst nicht.
+
+43. **Suche in Werten** (`20261026130000_search_property_values.sql`):
+    - `page_documents.search_text` enthält jetzt auch den Titel jedes
+      Seitenlinks und das `label` (E-Mail) jeder Erwähnung, in der Reihenfolge
+      des Dokuments (`document_search_text`, ersetzt `document_plain_text`).
+      Die generierte Spalte wird dafür gelöscht und neu angelegt (vor
+      PostgreSQL 17 lässt sich ihr Ausdruck nicht ändern); der Text wird für
+      alle Zeilen neu berechnet, `updated_at` bleibt.
+    - `search_pages` (Signatur und Spalten unverändert) findet Einträge auch
+      über ihre Werte: Text, URL, E-Mail, Namen gewählter Optionen (Auswahl,
+      Mehrfachauswahl, Status) und die Adresse eines Orts
+      (`property_value_search_text`). Ausschnitt ist dann „Eigenschaft: Wert“
+      (der erste passende Wert in Reihenfolge der Eigenschaften), außer der
+      Text des Eintrags trifft auch. Zahlen, Daten, Checkboxen, Verknüpfungen
+      und Option-IDs werden nicht durchsucht. RLS entscheidet wie bisher.
+    - App: `documentText` (Suche auf dem Gerät) zählt Seitenlinks und
+      Erwähnungen wie der Server.
+    - Tests: pgTAP `search_property_values.test.sql` (auch mit Bestandsdaten
+      gegen die lokale Supabase geprüft), Vitest `search-text.test.ts`.
+    - Noch nicht: Werte offline durchsuchen (offline weiter nur Titel und
+      gespeicherte Seiten), Formel- und Rollup-Ergebnisse (werden in der App
+      berechnet).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

@@ -412,6 +412,7 @@ export function DatabaseView({
                         {templateActions && editable && (
                             <TemplatesMenu
                                 templates={templates}
+                                defaultTemplateId={database.default_template_id ?? null}
                                 actions={templateActions}
                                 onOpen={onOpenEntry}
                                 onError={report}
@@ -519,6 +520,8 @@ export function DatabaseView({
                     rows={rows}
                     properties={columns}
                     editable={editable}
+                    images={data.documentImage}
+                    userId={userId}
                     onOpenEntry={onOpenEntry}
                     onCreateEntry={onCreateEntry ? () => createAndOpenEntry() : undefined}
                 />

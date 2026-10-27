@@ -1,7 +1,7 @@
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
 import { supabase } from "@/lib/supabase";
 import { parseMembers } from "@/features/pages/services/workspace-members";
-import { parseProperties, parseValues, parseViews, previewText } from "../database-model";
+import { parseProperties, parseValues, parseViews, previewImage, previewText } from "../database-model";
 import { canRollUp } from "../rollup";
 import {
     TITLE_FIELD,
@@ -254,6 +254,7 @@ export const databaseRepository = {
 
         const documentEditedAt: Record<string, string> = {};
         const documentPreview: Record<string, string> = {};
+        const documentImage: Record<string, string> = {};
         const documentRows: unknown[] = documents.data ?? [];
         for (const row of documentRows) {
             if (
@@ -272,6 +273,8 @@ export const databaseRepository = {
                 ];
                 const preview = previewText(blocks);
                 if (preview) documentPreview[row.pageId] = preview;
+                const image = previewImage(blocks);
+                if (image) documentImage[row.pageId] = image;
             }
         }
 
@@ -284,6 +287,7 @@ export const databaseRepository = {
             values: parseValues(values.data),
             documentEditedAt,
             documentPreview,
+            documentImage,
             canEdit: canEdit.data === true,
         };
     },

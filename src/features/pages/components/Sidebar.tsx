@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+    AtSign,
     Check,
     ChevronsUpDown,
     Download,
@@ -55,6 +56,9 @@ type SidebarProps = {
     onExportWorkspace: () => void;
     /** Opens the search (package 27). */
     onSearch: () => void;
+    /** Unread mentions of the user (package 37); the button opens the list. */
+    unreadMentions: number;
+    onMentions: () => void;
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onRestore: (pageId: string) => Promise<string[]>;
@@ -102,6 +106,8 @@ export function Sidebar({
     onImportNotion,
     onExportWorkspace,
     onSearch,
+    unreadMentions,
+    onMentions,
     onRename,
     onArchive,
     onRestore,
@@ -276,6 +282,20 @@ export function Sidebar({
                     <kbd className="text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
                         Strg K
                     </kbd>
+                </button>
+                <button
+                    type="button"
+                    onClick={onMentions}
+                    className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground pointer-coarse:h-10"
+                >
+                    <AtSign className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="flex-1">Erwähnungen</span>
+                    {unreadMentions > 0 && (
+                        <span className="rounded-full bg-brand px-1.5 text-xs font-medium text-white">
+                            {unreadMentions}
+                            <span className="sr-only"> ungelesen</span>
+                        </span>
+                    )}
                 </button>
             </div>
 

@@ -1,4 +1,5 @@
 import { filePathFromReference } from "@/features/files/file-reference";
+import { personName } from "@/features/mentions/mentions";
 
 // A page's blocks (BlockNote JSON, nodi's schema) as Markdown that nodi's
 // import reads back (package 34a). BlockNote converts its own blocks; nodi's
@@ -34,6 +35,10 @@ function exportInline(items: unknown[], links: ExportLinks): JsonObject[] {
             return target
                 ? [{ type: "link", href: target.href, content: [text(target.title || stored)] }]
                 : [text(stored || "Ohne Titel")];
+        }
+        if (item.type === "mention" && isObject(item.props)) {
+            // A person (package 37) becomes their name as text; Markdown has no mentions.
+            return [text(`@${personName(typeof item.props.label === "string" ? item.props.label : "")}`)];
         }
         if (item.type === "text" && isObject(item.styles) && "comment" in item.styles) {
             // A comment mark (package 31b) is not part of the text.

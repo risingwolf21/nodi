@@ -40,7 +40,8 @@ describe("planExport", () => {
         page(ID_B, "Tag 2", { parent_id: ID_A }),
         page(ID_C, "Aufgaben", { parent_id: ID_A, kind: "database" }),
         page(ID_D, "Eintrag", { parent_id: ID_C }),
-        page("eeeeeeee-0000-4000-8000-000000000005", "Vorlage", { parent_id: ID_A, is_template: true }),
+        page("eeeeeeee-0000-4000-8000-000000000005", "Vorlage", { parent_id: ID_C, is_template: true }),
+        page("ffffffff-0000-4000-8000-000000000006", "Protokoll", { parent_id: ID_A, is_template: true }),
     ];
 
     it("puts subpages and entries into the folder of their page, parents first and by title", () => {
@@ -48,8 +49,15 @@ describe("planExport", () => {
             "Reise aaaaaaaa000040008000000000000001.md",
             "Reise aaaaaaaa000040008000000000000001/Aufgaben cccccccc000040008000000000000003.csv",
             "Reise aaaaaaaa000040008000000000000001/Aufgaben cccccccc000040008000000000000003/Eintrag dddddddd000040008000000000000004.md",
+            "Reise aaaaaaaa000040008000000000000001/Protokoll ffffffff000040008000000000000006.md",
             "Reise aaaaaaaa000040008000000000000001/Tag 2 bbbbbbbb000040008000000000000002.md",
         ]);
+    });
+
+    it("leaves out templates of databases, not page templates", () => {
+        const paths = planExport(pages, [ID_A]).map((item) => item.path);
+        expect(paths.some((path) => path.includes("Vorlage"))).toBe(false);
+        expect(paths.some((path) => path.includes("Protokoll"))).toBe(true);
     });
 
     it("exports a subpage on its own at the top", () => {
