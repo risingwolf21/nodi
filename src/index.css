@@ -376,3 +376,12 @@ body .bn-mobile-formatting-toolbar {
         gap: 1.5rem;
     }
 }
+
+/* A long press drags on touch screens (package 41): no text selection or callout menu. */
+@media (pointer: coarse) {
+    [draggable="true"] {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+}

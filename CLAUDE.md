@@ -395,6 +395,7 @@ src/
     use-auth.tsx
     utils.ts                # re-exportiert `cn` aus dem Paket `cn`
     virtual-keyboard.ts     # Bildschirmtastatur erkennen, sichtbarer Bereich (20)
+    touch-drag.ts           # Ziehen per langem Drücken auf Touch-Geräten (41)
 public/
   favicon.svg               # App-Icon (abgerundet), Quelle für pwa-*.png
   icons/                    # pwa-192, pwa-512, maskable-512, apple-touch-icon-180
@@ -2898,6 +2899,28 @@ mentioned_at, read_at)`, eine Zeile je Seite und Person. Der Trigger
     - Tests: pgTAP `unused_page_files.test.sql`; zusätzlich mit `supabase
 functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       nach 30 Tagen gelöscht, verwendete bleibt, Liste danach leer).
+41. **Ziehen auf Touch-Geräten** (nur Frontend, keine Migration):
+    - `lib/touch-drag.ts` (gestartet in `WorkspaceHome`): Langes Drücken
+      (400 ms) auf ein Element mit `draggable="true"` startet einen Drag;
+      danach gehen `dragstart`, `dragenter`/`dragover`/`dragleave`, `drop` und
+      `dragend` mit einem eigenen `DataTransfer` an die Elemente unter dem
+      Finger. Die vorhandenen Handler (Seitenleiste: Reihenfolge, Unterseite,
+      Bereich; Board-Karten; Kalender-Einträge, auch in Datenbank-Blöcken)
+      arbeiten dadurch unverändert, wie mit der Maus.
+    - Bewegt sich der Finger vor Ablauf mehr als 8 px, ist es Scrollen. Während
+      des Ziehens scrollt die Seite nicht (`touchmove` abgefangen), eine Kopie
+      des Elements folgt dem Finger, nahe am Rand eines scrollbaren Bereichs
+      (unter dem Finger oder um das gezogene Element) scrollt er weiter.
+      Kein Klick nach dem Loslassen, kein Kontextmenü beim langen Drücken;
+      auf groben Zeigern keine Textauswahl auf ziehbaren Elementen
+      (`index.css`). Zieht der Browser selbst (natives Drag and Drop auf iOS),
+      tritt die eigene Logik zurück. BlockNotes Block-Griff ist ausgenommen.
+    - Damit gelten die Hinweise „auf Touch-Geräten über das Menü“ bzw. „Noch
+      nicht: auf Touch-Geräten“ in 14c, 18b, 32a und 32b nicht mehr.
+    - Tests: Playwright `touch-drag.e2e.ts` (echte Touch-Ereignisse über CDP:
+      Seitenleiste ordnen ohne Öffnen, Wischen zieht nicht, Board mit Wert und
+      Scrollen am Rand, Kalender). Auf echten iOS-/Android-Geräten noch nicht
+      geprüft.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
