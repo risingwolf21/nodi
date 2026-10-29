@@ -153,6 +153,26 @@
 }
 
 /*
+ * iOS 26+ blurs the top edge of a web app (Liquid Glass) unless WebKit finds
+ * a fixed box there; it then shows that box's colour instead. WebKit's check
+ * (LocalFrameView::fixedContainerEdges): the box hit 4 px below the middle of
+ * the top edge, ignoring pointer-events, is fixed or sticky, at least 90 % of
+ * the width and more than 10 px tall, with a background colour. This strip is
+ * that box. `background-clip: text` keeps the colour from painting (the strip
+ * has no text), so it covers nothing and takes no input.
+ */
+.nodi-top-edge {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    height: 12px;
+    z-index: 2147483647;
+    pointer-events: none;
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+/*
  * Typing on a phone (package 20): the app fits the area above the keyboard
  * (`lib/virtual-keyboard.ts`), so iOS does not pan it around, and the top
  * bar of a page makes room while typing.

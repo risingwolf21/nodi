@@ -284,6 +284,14 @@ export default function WorkspaceHome() {
 
     return (
         <main className="nodi-app-viewport flex h-svh bg-background">
+            {/* The colour of what is at the top: the page list below md, else the page. */}
+            <div
+                aria-hidden
+                className={cn(
+                    "nodi-top-edge",
+                    page || workspaces.length === 0 ? "bg-background" : "bg-sidebar md:bg-background",
+                )}
+            />
             {workspaces.length === 0 ? (
                 !workspacesError && (
                     <div className="flex flex-1 items-center justify-center p-6">

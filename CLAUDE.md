@@ -2965,6 +2965,25 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       gespeicherte Seiten), Formel- und Rollup-Ergebnisse (werden in der App
       berechnet).
 
+44. **Unscharfer Rand oben auf dem iPhone** (Nutzer, 2026-10-27; iPhone 15
+    Pro, iOS 27; nur Frontend, keine Migration):
+    - Ursache: iOS ab 26 legt über den oberen Rand einer Web-App einen
+      Weichzeichner (Liquid Glass), außer WebKit findet dort ein festes
+      Element; dann zeigt iOS dessen Farbe. Regel laut WebKit-Quelltext
+      (`LocalFrameView::fixedContainerEdges`): das Element 4 px unter der
+      Mitte des oberen Rands (ohne Rücksicht auf `pointer-events`), `fixed`
+      oder `sticky`, mindestens 90 % breit, über 10 px hoch, mit
+      Hintergrundfarbe. Eine CSS-Eigenschaft oder ein Meta-Tag zum Abschalten
+      gibt es nicht.
+    - `WorkspaceHome` legt dafür einen 12 px hohen Streifen `.nodi-top-edge`
+      (`index.css`) oben über die App: fest, volle Breite, oberste Ebene,
+      `pointer-events: none`. Seine Farbe ist die der Seitenliste (unter `md`
+      ohne offene Seite), sonst die der Seite; `background-clip: text` malt
+      sie nicht (der Streifen hat keinen Text), er verdeckt also nichts.
+    - Tests: Playwright `ios-top-edge.e2e.ts` (prüft den Streifen gegen die
+      Regeln von WebKit und die Farbe; Chromium zeigt den Weichzeichner
+      nicht). Auf einem echten iPhone noch nicht geprüft.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.
