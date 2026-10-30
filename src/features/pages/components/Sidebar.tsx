@@ -279,7 +279,7 @@ export function Sidebar({
                 >
                     <Search className="size-4 shrink-0" aria-hidden="true" />
                     <span className="flex-1">Suchen</span>
-                    <kbd className="text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
+                    <kbd className="font-sans text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
                         Strg K
                     </kbd>
                 </button>

@@ -3034,6 +3034,22 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       - Tests: Playwright `database-table.e2e.ts` (Datum als Text, Uhrzeit,
         Enddatum, Leeren), `page-layout.e2e.ts` (ganze Breite, „Neu“ so breit
         wie die Tabelle, kein „Volle Breite“).
+    - **Umsetzung 45c:**
+      - Slash-Menü kompakt (`slashMenuItems` in `BlockEditor`): nur Titel, Icon
+        im Rahmen, Kürzel als grauer Text auf Deutsch („Strg+Alt+1“). Callout
+        und Spalten stehen bei BlockNotes „Grundlegende Blöcke“ (vorher eine
+        eigene Gruppe „Einfache Blöcke“ am Ende), „Datenbank“ zuletzt.
+      - Codeblock hellgrau in Textfarbe (vorher schwarz), Inline-Code rot auf
+        Grau; Checkboxen 16 px in Akzentfarbe, erledigte Punkte grau.
+      - Seitenleiste 240 px breit, „Strg K“ in normaler Schrift. Mit Maus steht
+        der Pfeil zum Aufklappen beim Überfahren an der Stelle des Icons (nur
+        bei Seiten mit Unterseiten), sonst ist er weg; die obersten Icons
+        stehen bündig mit „Suchen“. Touch-Geräte behalten den Pfeil davor.
+      - Ansichts-Tabs einer Datenbank stehen in einer Zeile und scrollen auf
+        dem Handy seitlich (`.nodi-scroll-x`, ohne Scrollbalken); ihre Menüs
+        sind `detached`.
+      - Tests: Playwright `page-layout.e2e.ts` (Slash-Menü, Codeblock,
+        Checkbox, Pfeil in der Seitenleiste, Tabs auf dem Handy).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

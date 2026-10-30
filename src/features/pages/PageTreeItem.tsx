@@ -21,7 +21,8 @@ type PageTreeItemProps = {
     dragAndDrop?: TreeDragAndDrop;
 };
 
-// Indentation per tree level, in pixels.
+// Room before the icon, and the indentation per tree level, in pixels.
+const ROW_PADDING = 8;
 const INDENT = 14;
 
 const actionButton =
@@ -56,6 +57,7 @@ export function PageTreeItem({
     };
     const hasChildren = children.length > 0;
     const selected = selectedPageId === page.id;
+    const indent = ROW_PADDING + depth * INDENT;
 
     return (
         <div>
@@ -83,7 +85,7 @@ export function PageTreeItem({
                     else if (where) dragAndDrop?.place(page, where);
                 }}
                 className={cn(
-                    "group flex h-7 items-center gap-0.5 rounded-md pr-1 text-sm pointer-coarse:h-10",
+                    "group relative flex h-7 items-center gap-0.5 rounded-md pr-1 text-sm pointer-coarse:h-10",
                     selected
                         ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/70",
@@ -92,15 +94,22 @@ export function PageTreeItem({
                     dropHere === "after" && "shadow-[inset_0_-2px_0_var(--brand)]",
                     dragAndDrop?.draggedId === page.id && "opacity-50",
                 )}
-                style={{ paddingLeft: 4 + depth * INDENT }}
+                style={{ paddingLeft: indent }}
             >
+                {/* With a mouse the arrow takes the icon's place on hover, like Notion; touch keeps it in front. */}
                 <button
                     type="button"
                     aria-label={expanded ? "Unterseiten einklappen" : "Unterseiten ausklappen"}
                     aria-expanded={hasChildren ? expanded : undefined}
                     disabled={!hasChildren}
                     onClick={() => setExpanded((value) => !value)}
-                    className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-sidebar-accent disabled:opacity-0 pointer-coarse:size-8"
+                    style={{ left: indent }}
+                    className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground disabled:opacity-0 pointer-coarse:size-8",
+                        hasChildren
+                            ? "pointer-fine:absolute pointer-fine:top-1 pointer-fine:z-10 pointer-fine:bg-sidebar-accent pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:hover:text-foreground pointer-fine:focus-visible:opacity-100"
+                            : "pointer-fine:hidden",
+                    )}
                 >
                     <ChevronRight className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
                 </button>
