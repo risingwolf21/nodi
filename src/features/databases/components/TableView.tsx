@@ -153,94 +153,99 @@ export function TableView({
 
     return (
         <div className="overflow-x-auto px-[var(--page-gutter)]">
-            <table className="w-max min-w-full border-collapse text-sm">
-                <thead>
-                    <tr className="border-y">
-                        <th scope="col" className="w-64 min-w-64 border-r p-0 text-left">
-                            <span className="flex h-8 items-center px-2 text-xs font-medium text-muted-foreground">
-                                Name
-                            </span>
-                        </th>
-                        {properties.map((property) => (
-                            <th
-                                key={property.id}
-                                scope="col"
-                                className="w-48 min-w-48 border-r p-0 text-left font-normal"
-                            >
-                                <PropertyHeader
-                                    property={property}
-                                    editable={editable}
-                                    onRename={(name) => onRenameProperty(property.id, name)}
-                                    onChangeType={(type) => onChangePropertyType(property.id, type)}
-                                    onHide={() => onHideProperty(property.id)}
-                                    onDelete={() => onDeleteProperty(property.id)}
-                                    onEditFormula={() => onEditFormula(property.id)}
-                                    onChangeNumberFormat={(format) => onChangeNumberFormat(property.id, format)}
-                                    onError={onError}
-                                />
+            {/* As wide as the table: the "Neu" row and the hint end where it ends. */}
+            <div className="w-max min-w-full">
+                <table className="w-max min-w-full border-collapse text-sm">
+                    <thead>
+                        <tr className="border-y">
+                            <th scope="col" className="w-64 min-w-64 border-r p-0 text-left">
+                                <span className="flex h-8 items-center px-2 text-xs font-medium text-muted-foreground">
+                                    Name
+                                </span>
                             </th>
-                        ))}
-                        <th scope="col" className="p-0 text-left">
-                            {editable && (
-                                <AddPropertyButton
-                                    onAdd={onAddProperty}
-                                    relationTargets={relationTargets}
-                                    onAddRelation={onAddRelation}
-                                    onError={onError}
-                                />
-                            )}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row) => (
-                        <tr key={row.page.id} className="border-b hover:bg-accent/30">
-                            <td className="border-r p-0 align-top">
-                                <TitleCell
-                                    key={row.page.id === newEntryId ? `${row.page.id}-new` : row.page.id}
-                                    row={row}
-                                    editable={editable}
-                                    startEditing={row.page.id === newEntryId}
-                                    onOpen={() => onOpenEntry(row.page.id)}
-                                    onRename={(title) => onRenameEntry(row.page.id, title)}
-                                    onError={onError}
-                                />
-                            </td>
                             {properties.map((property) => (
-                                <td key={property.id} className="max-w-48 border-r p-0 align-top">
-                                    <PropertyValueEditor
+                                <th
+                                    key={property.id}
+                                    scope="col"
+                                    className="w-48 min-w-48 border-r p-0 text-left font-normal"
+                                >
+                                    <PropertyHeader
                                         property={property}
-                                        pageId={row.page.id}
-                                        value={row.values[property.id] ?? null}
                                         editable={editable}
-                                        onChange={(value) => onSetValue(row.page.id, property.id, value)}
-                                        onCreateOption={(name) => onCreateOption(property.id, name)}
+                                        onRename={(name) => onRenameProperty(property.id, name)}
+                                        onChangeType={(type) => onChangePropertyType(property.id, type)}
+                                        onHide={() => onHideProperty(property.id)}
+                                        onDelete={() => onDeleteProperty(property.id)}
+                                        onEditFormula={() => onEditFormula(property.id)}
+                                        onChangeNumberFormat={(format) => onChangeNumberFormat(property.id, format)}
                                         onError={onError}
-                                        alignNumbersRight
-                                        error={row.errors[property.id]}
-                                        onRunButton={onRunButton ? () => onRunButton(row.page.id, property) : undefined}
+                                    />
+                                </th>
+                            ))}
+                            <th scope="col" className="p-0 text-left">
+                                {editable && (
+                                    <AddPropertyButton
+                                        onAdd={onAddProperty}
+                                        relationTargets={relationTargets}
+                                        onAddRelation={onAddRelation}
+                                        onError={onError}
+                                    />
+                                )}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row) => (
+                            <tr key={row.page.id} className="border-b hover:bg-accent/30">
+                                <td className="border-r p-0 align-top">
+                                    <TitleCell
+                                        key={row.page.id === newEntryId ? `${row.page.id}-new` : row.page.id}
+                                        row={row}
+                                        editable={editable}
+                                        startEditing={row.page.id === newEntryId}
+                                        onOpen={() => onOpenEntry(row.page.id)}
+                                        onRename={(title) => onRenameEntry(row.page.id, title)}
+                                        onError={onError}
                                     />
                                 </td>
-                            ))}
-                            <td />
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            {rows.length === 0 && (
-                <p className="py-3 pl-2 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>
-            )}
-            {editable && onCreateEntry && (
-                <button
-                    type="button"
-                    disabled={creating}
-                    onClick={() => void createEntry()}
-                    className="flex h-8 w-full items-center gap-1.5 border-b px-2 text-left text-sm text-muted-foreground hover:bg-accent/40 pointer-coarse:h-10"
-                >
-                    <Plus className="size-4" />
-                    Neu
-                </button>
-            )}
+                                {properties.map((property) => (
+                                    <td key={property.id} className="max-w-48 border-r p-0 align-top">
+                                        <PropertyValueEditor
+                                            property={property}
+                                            pageId={row.page.id}
+                                            value={row.values[property.id] ?? null}
+                                            editable={editable}
+                                            onChange={(value) => onSetValue(row.page.id, property.id, value)}
+                                            onCreateOption={(name) => onCreateOption(property.id, name)}
+                                            onError={onError}
+                                            alignNumbersRight
+                                            error={row.errors[property.id]}
+                                            onRunButton={
+                                                onRunButton ? () => onRunButton(row.page.id, property) : undefined
+                                            }
+                                        />
+                                    </td>
+                                ))}
+                                <td />
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {rows.length === 0 && (
+                    <p className="py-3 pl-2 text-sm text-muted-foreground">Keine Einträge in dieser Ansicht.</p>
+                )}
+                {editable && onCreateEntry && (
+                    <button
+                        type="button"
+                        disabled={creating}
+                        onClick={() => void createEntry()}
+                        className="flex h-8 w-full items-center gap-1.5 border-b px-2 text-left text-sm text-muted-foreground hover:bg-accent/40 pointer-coarse:h-10"
+                    >
+                        <Plus className="size-4" />
+                        Neu
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
