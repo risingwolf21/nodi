@@ -61,6 +61,8 @@ type PageViewProps = {
     onMoveSection?: (page: Page, target: PageSection) => void;
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
+    /** "Duplizieren" (package 47); in the page's own workspace only. */
+    onDuplicate?: (page: Page) => void;
     userId: string | undefined;
     /** Who can be mentioned with "@" (package 37). */
     people: WorkspaceMember[];
@@ -114,6 +116,7 @@ export function PageView({
     onShare,
     onMoveSection,
     onMove,
+    onDuplicate,
     userId,
     people,
     entries,
@@ -263,6 +266,16 @@ export function PageView({
                                 }}
                             >
                                 Verschieben nach …
+                            </MenuItem>
+                        )}
+                        {onDuplicate && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onDuplicate(page);
+                                }}
+                            >
+                                Duplizieren
                             </MenuItem>
                         )}
                         {onMoveSection && (

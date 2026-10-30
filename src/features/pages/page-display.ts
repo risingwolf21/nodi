@@ -9,3 +9,8 @@ export const NEW_PAGE_TITLE = "Unbenannte Seite";
 export function displayTitle(page: Pick<Page, "title">): string {
     return page.title || UNTITLED;
 }
+
+/** The title of a duplicate (package 47), as duplicate_page names it. */
+export function duplicateTitle(title: string): string {
+    return `${title.trim() ? title : UNTITLED} (Kopie)`;
+}
