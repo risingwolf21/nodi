@@ -132,7 +132,7 @@ function ViewTab({
                 <Icon className="size-3.5" aria-hidden="true" />
                 {view.name}
             </button>
-            <Menu open={menuOpen} onClose={() => rename()} align="start" className="w-56">
+            <Menu detached open={menuOpen} onClose={() => rename()} align="start" className="w-56">
                 <form onSubmit={rename} className="p-1">
                     <input
                         autoFocus
@@ -310,46 +310,51 @@ export function DatabaseView({
 
     return (
         <div className="space-y-2">
-            {/* No overflow here: it would clip the menus of the tabs and the toolbar. */}
+            {/*
+             * No overflow on the row: it would clip the menus of the toolbar. The tabs
+             * scroll sideways when they do not fit (phones), so their menus are detached.
+             */}
             <div className="flex flex-wrap items-center gap-1 px-[var(--page-gutter)]">
-                <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Ansichten">
-                    {views.map((view) => (
-                        <ViewTab
-                            key={view.id}
-                            view={view}
-                            active={view.id === activeView?.id}
-                            editable={viewsEditable}
-                            canDelete={views.length > 1}
-                            onSelect={() => setActiveViewId(view.id)}
-                            onRename={(name) => run(updateView(view.id, { name }))}
-                            onDelete={() => setViewToDelete(view)}
-                        />
-                    ))}
-                </div>
-                {viewsEditable && (
-                    <div className="relative shrink-0">
-                        <button
-                            type="button"
-                            aria-label="Ansicht hinzufügen"
-                            aria-expanded={addViewOpen}
-                            onClick={() => setAddViewOpen(true)}
-                            className="flex size-8 items-center justify-center rounded text-muted-foreground hover:bg-accent/60"
-                        >
-                            <Plus className="size-4" />
-                        </button>
-                        <Menu open={addViewOpen} onClose={() => setAddViewOpen(false)} align="start">
-                            {VIEW_TYPES.map((type) => {
-                                const Icon = VIEW_ICONS[type];
-                                return (
-                                    <MenuItem key={type} onSelect={() => void addNewView(type)}>
-                                        <Icon className="size-4" aria-hidden="true" />
-                                        {VIEW_TYPE_LABELS[type]}
-                                    </MenuItem>
-                                );
-                            })}
-                        </Menu>
+                <div className="nodi-scroll-x flex max-w-full min-w-0 items-center gap-1 overflow-x-auto">
+                    <div className="flex items-center gap-1" role="tablist" aria-label="Ansichten">
+                        {views.map((view) => (
+                            <ViewTab
+                                key={view.id}
+                                view={view}
+                                active={view.id === activeView?.id}
+                                editable={viewsEditable}
+                                canDelete={views.length > 1}
+                                onSelect={() => setActiveViewId(view.id)}
+                                onRename={(name) => run(updateView(view.id, { name }))}
+                                onDelete={() => setViewToDelete(view)}
+                            />
+                        ))}
                     </div>
-                )}
+                    {viewsEditable && (
+                        <div className="relative shrink-0">
+                            <button
+                                type="button"
+                                aria-label="Ansicht hinzufügen"
+                                aria-expanded={addViewOpen}
+                                onClick={() => setAddViewOpen(true)}
+                                className="flex size-8 items-center justify-center rounded text-muted-foreground hover:bg-accent/60"
+                            >
+                                <Plus className="size-4" />
+                            </button>
+                            <Menu detached open={addViewOpen} onClose={() => setAddViewOpen(false)} align="start">
+                                {VIEW_TYPES.map((type) => {
+                                    const Icon = VIEW_ICONS[type];
+                                    return (
+                                        <MenuItem key={type} onSelect={() => void addNewView(type)}>
+                                            <Icon className="size-4" aria-hidden="true" />
+                                            {VIEW_TYPE_LABELS[type]}
+                                        </MenuItem>
+                                    );
+                                })}
+                            </Menu>
+                        </div>
+                    )}
+                </div>
                 {activeView && (
                     <div className="ml-auto flex flex-wrap items-center gap-0.5">
                         {activeView.type === "board" && (

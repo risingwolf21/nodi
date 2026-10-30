@@ -134,11 +134,16 @@ test.describe("in Berlin", () => {
         const localIso = (hours: number, minutes: number) =>
             page.evaluate(([h, m]) => new Date(2026, 9, 19, h, m).toISOString(), [hours, minutes]);
 
-        const toggle = page.getByRole("button", { name: "Uhrzeit für Fällig" }).first();
-        await expect(toggle).toHaveAttribute("aria-pressed", "false");
+        // Shown as text like Notion; a click opens the date (package 45b).
+        const cell = page.getByRole("button", { name: "Fällig wählen" }).first();
+        await expect(cell).toHaveText("19. Okt. 2026");
+        await cell.click();
+        const picker = page.getByRole("dialog", { name: "Fällig" });
+        const toggle = picker.getByRole("switch", { name: "Uhrzeit für Fällig" });
+        await expect(toggle).toHaveAttribute("aria-checked", "false");
         await toggle.click();
         await expect.poll(lastValue).toEqual({ start: await localIso(9, 0), end: null });
-        const input = page.getByLabel("Fällig", { exact: true }).first();
+        const input = picker.getByLabel("Fällig", { exact: true });
         await expect(input).toHaveAttribute("type", "datetime-local");
         await expect(input).toHaveValue("2026-10-19T09:00");
 
@@ -148,5 +153,17 @@ test.describe("in Berlin", () => {
         await toggle.click();
         await expect.poll(lastValue).toEqual({ start: "2026-10-19", end: null });
         await expect(input).toHaveAttribute("type", "date");
+
+        // An end turns the date into a range; "Leeren" removes it.
+        await picker.getByRole("switch", { name: "Enddatum" }).click();
+        await expect.poll(lastValue).toEqual({ start: "2026-10-19", end: "2026-10-19" });
+        await picker.getByLabel("Fällig: Ende").fill("2026-10-22");
+        await expect.poll(lastValue).toEqual({ start: "2026-10-19", end: "2026-10-22" });
+        await page.keyboard.press("Escape");
+        await expect(cell).toHaveText(/19\. Okt\. 2026\s.\s22\. Okt\. 2026/);
+        await cell.click();
+        await picker.getByRole("button", { name: "Leeren" }).click();
+        await expect.poll(lastValue).toBeNull();
+        await expect(cell).toHaveText("");
     });
 });

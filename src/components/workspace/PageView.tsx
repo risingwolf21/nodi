@@ -1,5 +1,15 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, LayoutTemplate, MoreHorizontal, Star, Table2 } from "lucide-react";
+import {
+    Check,
+    ChevronLeft,
+    FileText,
+    LayoutTemplate,
+    Link,
+    MessageSquare,
+    MoreHorizontal,
+    Star,
+    Table2,
+} from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
@@ -11,6 +21,7 @@ import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle, NEW_PAGE_TITLE } from "@/features/pages/page-display";
+import { pageLink } from "@/features/pages/page-url";
 import type { PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
@@ -50,6 +61,8 @@ type PageViewProps = {
     onMoveSection?: (page: Page, target: PageSection) => void;
     /** "Verschieben nach …"; not for pages shared from other workspaces. */
     onMove?: (page: Page) => void;
+    /** "Duplizieren" (package 47); in the page's own workspace only. */
+    onDuplicate?: (page: Page) => void;
     userId: string | undefined;
     /** Who can be mentioned with "@" (package 37). */
     people: WorkspaceMember[];
@@ -103,6 +116,7 @@ export function PageView({
     onShare,
     onMoveSection,
     onMove,
+    onDuplicate,
     userId,
     people,
     entries,
@@ -118,6 +132,9 @@ export function PageView({
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
+    const [linkCopied, setLinkCopied] = useState(false);
+    // The page is remounted for every page (key), so a draft belongs to this one.
+    const [writingComment, setWritingComment] = useState(false);
 
     function toggleFullWidth() {
         setMenuOpen(false);
@@ -189,88 +206,128 @@ export function PageView({
         </>
     );
 
-    const topBarEnd =
-        readOnly || !showPageMenu ? null : (
-            <div className="relative shrink-0">
-                <button
-                    type="button"
-                    aria-label="Seitenmenü"
-                    aria-expanded={menuOpen}
-                    onClick={() => setMenuOpen((open) => !open)}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                    <MoreHorizontal className="size-5" />
-                </button>
-                <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
-                    {onSetFavorite && (
-                        <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
-                            <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
-                            {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
-                        </MenuItem>
-                    )}
-                    {onShare && (
+    // Copying the link works offline and on shared pages too; the rest needs the own workspace online.
+    const manageable = !readOnly && showPageMenu;
+
+    async function copyLink() {
+        setMenuError("");
+        try {
+            await navigator.clipboard.writeText(pageLink(page.id));
+            setLinkCopied(true);
+        } catch (err) {
+            console.warn("Link konnte nicht kopiert werden:", err);
+            setMenuOpen(false);
+            setMenuError("Der Link konnte nicht kopiert werden. Kopiere ihn aus der Adresszeile.");
+        }
+    }
+
+    const topBarEnd = (
+        <div className="relative shrink-0">
+            <button
+                type="button"
+                aria-label="Seitenmenü"
+                aria-expanded={menuOpen}
+                onClick={() => {
+                    setLinkCopied(false);
+                    setMenuOpen((open) => !open);
+                }}
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+                <MoreHorizontal className="size-5" />
+            </button>
+            <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                <MenuItem onSelect={() => void copyLink()}>
+                    {linkCopied ? <Check className="size-4 text-brand" /> : <Link className="size-4" />}
+                    {linkCopied ? "Link kopiert" : "Link kopieren"}
+                </MenuItem>
+                {manageable && (
+                    <>
+                        {onSetFavorite && (
+                            <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
+                                <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
+                                {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+                            </MenuItem>
+                        )}
+                        {onShare && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onShare(page);
+                                }}
+                            >
+                                Teilen
+                            </MenuItem>
+                        )}
+                        {onMove && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onMove(page);
+                                }}
+                            >
+                                Verschieben nach …
+                            </MenuItem>
+                        )}
+                        {onDuplicate && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onDuplicate(page);
+                                }}
+                            >
+                                Duplizieren
+                            </MenuItem>
+                        )}
+                        {onMoveSection && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
+                                }}
+                            >
+                                {page.visibility === "private"
+                                    ? "In den Workspace verschieben"
+                                    : "In Privat verschieben"}
+                            </MenuItem>
+                        )}
+                        {onExport && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onExport(page);
+                                }}
+                            >
+                                Exportieren
+                            </MenuItem>
+                        )}
+                        {page.kind === "page" && (
+                            <MenuItem onSelect={toggleTemplate}>
+                                <LayoutTemplate className="size-4" />
+                                {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
+                            </MenuItem>
+                        )}
+                        {/* Databases always use the whole width (package 45b). */}
+                        {page.kind !== "database" && (
+                            <MenuItem onSelect={toggleFullWidth}>
+                                <span className="flex-1">Volle Breite</span>
+                                {page.full_width && <Check className="size-4 text-brand" />}
+                            </MenuItem>
+                        )}
+                        <div className="my-1 border-t" />
                         <MenuItem
+                            destructive
                             onSelect={() => {
                                 setMenuOpen(false);
-                                onShare(page);
+                                onArchive(page);
                             }}
                         >
-                            Teilen
+                            In den Papierkorb
                         </MenuItem>
-                    )}
-                    {onMove && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onMove(page);
-                            }}
-                        >
-                            Verschieben nach …
-                        </MenuItem>
-                    )}
-                    {onMoveSection && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
-                            }}
-                        >
-                            {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
-                        </MenuItem>
-                    )}
-                    {onExport && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onExport(page);
-                            }}
-                        >
-                            Exportieren
-                        </MenuItem>
-                    )}
-                    {page.kind === "page" && (
-                        <MenuItem onSelect={toggleTemplate}>
-                            <LayoutTemplate className="size-4" />
-                            {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
-                        </MenuItem>
-                    )}
-                    <MenuItem onSelect={toggleFullWidth}>
-                        <span className="flex-1">Volle Breite</span>
-                        {page.full_width && <Check className="size-4 text-brand" />}
-                    </MenuItem>
-                    <div className="my-1 border-t" />
-                    <MenuItem
-                        destructive
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onArchive(page);
-                        }}
-                    >
-                        In den Papierkorb
-                    </MenuItem>
-                </Menu>
-            </div>
-        );
+                    </>
+                )}
+            </Menu>
+        </div>
+    );
 
     const setCover = (cover: string | null) => onUpdate(page.id, { cover });
 
@@ -297,14 +354,24 @@ export function PageView({
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
                 actions={
-                    !page.cover && (
-                        <CoverPicker
-                            pageId={page.id}
-                            label="Titelbild hinzufügen"
-                            hasCover={false}
-                            onSetCover={setCover}
-                        />
-                    )
+                    <>
+                        {!page.cover && (
+                            <CoverPicker
+                                pageId={page.id}
+                                label="Titelbild hinzufügen"
+                                hasCover={false}
+                                onSetCover={setCover}
+                            />
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setWritingComment(true)}
+                            className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:bg-accent"
+                        >
+                            <MessageSquare className="size-4" aria-hidden="true" />
+                            Kommentar hinzufügen
+                        </button>
+                    </>
                 }
             />
             <Backlinks pageId={page.id} knownPages={knownPages} online={!readOnly} onOpen={onSelect} />
@@ -347,14 +414,22 @@ export function PageView({
                     }
                 />
             )}
-            <PageComments pageId={page.id} userId={userId} online={!readOnly} canComment={canEdit && !readOnly} />
+            <PageComments
+                pageId={page.id}
+                userId={userId}
+                online={!readOnly}
+                canComment={canEdit && !readOnly}
+                writing={writingComment}
+                onWritingChange={setWritingComment}
+            />
         </>
     );
 
     if (page.kind === "database") {
-        // A database shows its views instead of a text (no editor chunk needed).
+        // A database shows its views instead of a text (no editor chunk needed), like
+        // Notion over the whole width: a table or board needs the room.
         return (
-            <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+            <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth>
                 {renderHeader(!readOnly)}
                 <LoadErrorBoundary
                     key={page.id}

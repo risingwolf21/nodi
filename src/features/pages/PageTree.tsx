@@ -25,6 +25,8 @@ type PageTreeProps = {
     onArchive: (page: Page) => void;
     /** "Verschieben nach …"; undefined: not offered. */
     onMove?: (page: Page) => void;
+    /** "Duplizieren" (package 47); undefined: not offered. */
+    onDuplicate?: (page: Page) => void;
     dragAndDrop?: TreeDragAndDrop;
     emptyText?: string;
 };
@@ -38,6 +40,7 @@ export function PageTree({
     onRename,
     onArchive,
     onMove,
+    onDuplicate,
     dragAndDrop,
     emptyText = "Noch keine Seiten",
 }: PageTreeProps) {
@@ -62,6 +65,7 @@ export function PageTree({
                     onRename={onRename}
                     onArchive={onArchive}
                     onMove={onMove}
+                    onDuplicate={onDuplicate}
                     dragAndDrop={dragAndDrop}
                 />
             ))}

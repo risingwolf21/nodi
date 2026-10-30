@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createDueRecurringEntries } from "@/features/databases/services/recurring-entries";
+import { copyPageFile } from "@/features/files/services/page-files";
 import { requestDeletedFilesCleanup } from "@/features/files/services/purge-deleted-files";
 import { useActivityReload } from "@/features/realtime/useActivityReload";
 import { RemoteRequestError, toRequestError } from "@/lib/request-errors";
@@ -9,9 +10,11 @@ import {
     collectRestoreIds,
     isDatabaseEntry,
     nextPosition,
+    positionAfter,
     type MoveTarget,
     type PositionUpdate,
 } from "../page-hierarchy";
+import { duplicateTitle } from "../page-display";
 import { pageTreeCacheFor, parseStoredPages } from "../services/page-tree-cache";
 import type { Page, PageKind, PageSection, PageSettings, StoredPage } from "../types";
 import { loadCacheThenServer, useServerReload } from "./load-cache-then-server";
@@ -113,6 +116,11 @@ type UsePagesResult = {
     ) => Promise<Page>;
     /** A new entry from a template of its database (RPC create_entry_from_template, package 26). */
     createEntryFromTemplate: (templateId: string) => Promise<Page>;
+    /**
+     * A copy of the page with everything below it, right after it (RPC
+     * duplicate_page, package 47); with the number of files that could not be copied.
+     */
+    duplicatePage: (pageId: string) => Promise<{ page: Page; missingFiles: number }>;
     /** Moves a root page with all subpages to the other section (owner only). */
     setPageSection: (pageId: string, section: PageSection) => Promise<void>;
     /** Below another page (or into a database) or to the top of a section (RPC move_page, package 18). */
@@ -396,6 +404,56 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
                 setMovesToLoad((count) => count + 1);
             }
             return created;
+        },
+        [userId, workspaceId, requireOnline, switchedSince],
+    );
+
+    const duplicatePage = useCallback(
+        async (pageId: string): Promise<{ page: Page; missingFiles: number }> => {
+            if (!userId) throw new Error("Bitte melde dich an.");
+            requireOnline();
+            const original = latestPages.current.find((page) => page.id === pageId);
+            if (!original) throw new Error("Diese Seite gibt es nicht mehr.");
+            setError("");
+
+            const response = await supabase.rpc("duplicate_page", { p_page_id: pageId });
+            const failure = pageChangeError(
+                response,
+                response.error?.code === "22023"
+                    ? "Diese Seite ist zu groß zum Duplizieren (höchstens 1000 Seiten)."
+                    : "Die Seite konnte nicht dupliziert werden.",
+            );
+            if (failure) throw failure;
+            const result = parseDuplicate(response.data);
+            if (!result) throw new Error("Unerwartete Antwort beim Duplizieren.");
+
+            // Only the Storage API copies files; a missing one leaves its image empty in the copy.
+            let missingFiles = 0;
+            for (const file of result.files) {
+                try {
+                    await copyPageFile(file.from, file.to);
+                } catch {
+                    missingFiles += 1;
+                }
+            }
+
+            // At once in the tree; what is below it comes with the reload.
+            const siblings = latestPages.current.filter((page) => page.parent_id === original.parent_id);
+            const copy: Page = {
+                ...original,
+                id: result.pageId,
+                title: duplicateTitle(original.title),
+                owner_id: userId,
+                position: positionAfter(original, siblings),
+                created_at: new Date().toISOString(),
+                favorite: false,
+            };
+            if (!switchedSince(workspaceId)) {
+                latestPages.current = [...latestPages.current, copy];
+                setPages((current) => [...current, copy]);
+                setMovesToLoad((count) => count + 1);
+            }
+            return { page: copy, missingFiles };
         },
         [userId, workspaceId, requireOnline, switchedSince],
     );
@@ -724,11 +782,13 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
     return {
         pages: showsCurrentWorkspace ? pages : [],
         archivedPages: showsCurrentWorkspace ? archivedPages : [],
-        loading,
+        // Also before the first load of a new workspace has started.
+        loading: loading || !showsCurrentWorkspace,
         error,
         fromCache,
         createPage,
         createEntryFromTemplate,
+        duplicatePage,
         setPageSection,
         movePage,
         renamePage,
@@ -740,4 +800,23 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
         permanentlyDeletePage,
         emptyTrash,
     };
+}
+
+/** The answer of duplicate_page: the copy and the files to copy into its folders. */
+function parseDuplicate(data: unknown): { pageId: string; files: { from: string; to: string }[] } | null {
+    const row: unknown = Array.isArray(data) ? data[0] : data;
+    if (typeof row !== "object" || row === null || !("page_id" in row) || !("files" in row)) return null;
+    const { page_id: pageId, files } = row;
+    if (typeof pageId !== "string" || !Array.isArray(files)) return null;
+    const copies = files.flatMap((file: unknown) =>
+        typeof file === "object" &&
+        file !== null &&
+        "from" in file &&
+        "to" in file &&
+        typeof file.from === "string" &&
+        typeof file.to === "string"
+            ? [{ from: file.from, to: file.to }]
+            : [],
+    );
+    return copies.length === files.length ? { pageId, files: copies } : null;
 }

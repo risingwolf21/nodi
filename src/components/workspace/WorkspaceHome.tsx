@@ -21,6 +21,7 @@ import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
+import { useLinkedPage, type LinkedPageStatus } from "@/features/pages/hooks/useLinkedPage";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { startPageActivity } from "@/features/realtime/page-activity";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
@@ -71,6 +72,7 @@ export default function WorkspaceHome() {
     const [creatingWorkspace, setCreatingWorkspace] = useState(false);
     // Repeated taps on "Neue Seite" while one is being created add nothing.
     const creatingPage = useRef(false);
+    const [duplicating, setDuplicating] = useState(false);
     const [error, setError] = useState("");
     const [signOutStep, setSignOutStep] = useState<
         { kind: "idle" } | { kind: "syncing" } | { kind: "confirm"; unsyncedPages: number }
@@ -79,10 +81,12 @@ export default function WorkspaceHome() {
     const {
         pages,
         archivedPages,
+        loading: pagesLoading,
         error: pagesError,
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
         createEntryFromTemplate,
+        duplicatePage: duplicateWorkspacePage,
         setPageSection,
         movePage,
         renamePage,
@@ -125,6 +129,15 @@ export default function WorkspaceHome() {
     // a share was revoked.
     const sharedPage = sharedPages.find((item) => item.id === pageId) ?? null;
     const page = pages.find((item) => item.id === pageId) ?? sharedPage;
+    // A page opened by its address may belong to another workspace (package 46).
+    const linkedPage = useLinkedPage({
+        pageId,
+        found: page !== null,
+        pagesLoading,
+        workspaceId,
+        workspaceIds: workspaces.map((workspace) => workspace.id),
+        onSwitchWorkspace: setWorkspaceId,
+    });
     const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
     // Database blocks in a text may show databases shared from elsewhere.
     const knownPages = useMemo(() => [...pages, ...sharedPages], [pages, sharedPages]);
@@ -181,6 +194,29 @@ export default function WorkspaceHome() {
     function changeWorkspace(nextWorkspaceId: string) {
         closePage();
         setWorkspaceId(nextWorkspaceId);
+    }
+
+    // A copy with everything below it opens when it is ready (package 47).
+    async function duplicatePage(item: Page) {
+        if (duplicating) return;
+        setDuplicating(true);
+        setError("");
+        try {
+            const { page: copy, missingFiles } = await duplicateWorkspacePage(item.id);
+            openPage(copy.id);
+            if (missingFiles > 0) {
+                setError(
+                    missingFiles === 1
+                        ? "Eine Datei konnte nicht kopiert werden; in der Kopie fehlt sie."
+                        : `${missingFiles} Dateien konnten nicht kopiert werden; in der Kopie fehlen sie.`,
+                );
+            }
+        } catch (err) {
+            console.error("Page duplication failed:", err);
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht dupliziert werden.");
+        } finally {
+            setDuplicating(false);
+        }
     }
 
     async function createPage(parentId: string | null, section: PageSection, kind: PageKind = "page") {
@@ -323,8 +359,8 @@ export default function WorkspaceHome() {
                     {/* Below md, like the Notion app: the list or one page, full screen. */}
                     <aside
                         className={cn(
-                            "w-full md:block md:w-64 md:shrink-0 md:border-r md:border-sidebar-border",
-                            page ? "hidden" : "block",
+                            "w-full md:block md:w-60 md:shrink-0 md:border-r md:border-sidebar-border",
+                            page || linkedPage ? "hidden" : "block",
                         )}
                     >
                         <Sidebar
@@ -370,12 +406,13 @@ export default function WorkspaceHome() {
                             onDelete={permanentlyDeletePage}
                             onEmptyTrash={emptyTrash}
                             onMove={(item) => setMovePageDialog({ page: item })}
+                            onDuplicate={(item) => void duplicatePage(item)}
                             onDropPage={(item, target) => void dropPage(item, target)}
                             onReorder={(updates) => void reorder(updates)}
                         />
                     </aside>
 
-                    <section className={cn("min-w-0 flex-1 md:block", page ? "block" : "hidden")}>
+                    <section className={cn("min-w-0 flex-1 md:block", page || linkedPage ? "block" : "hidden")}>
                         {page ? (
                             <PageView
                                 key={page.id}
@@ -406,6 +443,7 @@ export default function WorkspaceHome() {
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                                 // Moving stays within the page's own workspace.
                                 onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}
+                                onDuplicate={sharedPage ? undefined : (item) => void duplicatePage(item)}
                                 onMoveSection={
                                     !sharedPage && page.parent_id === null && page.owner_id === user?.id
                                         ? (item, target) => setMovingPage({ page: item, target })
@@ -448,6 +486,8 @@ export default function WorkspaceHome() {
                                 // Entries of other workspaces keep their order (for now).
                                 onReorderPages={sharedPage ? undefined : reorderPages}
                             />
+                        ) : linkedPage ? (
+                            <LinkedPageNotice status={linkedPage} onBack={closePage} />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
                                 <div>
@@ -471,7 +511,15 @@ export default function WorkspaceHome() {
                 </>
             )}
 
-            {visibleError && (
+            {duplicating && (
+                <p
+                    className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 rounded-md border bg-background px-4 py-3 text-sm shadow-md md:left-auto md:w-96"
+                    role="status"
+                >
+                    Seite wird dupliziert …
+                </p>
+            )}
+            {!duplicating && visibleError && (
                 <p
                     className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 rounded-md border bg-background px-4 py-3 text-sm text-destructive shadow-md md:left-auto md:w-96"
                     role="alert"
@@ -649,5 +697,29 @@ export default function WorkspaceHome() {
                 />
             )}
         </main>
+    );
+}
+
+const LINKED_PAGE_TEXTS: Record<NonNullable<LinkedPageStatus>, string> = {
+    loading: "Seite wird geladen …",
+    missing: "Diese Seite gibt es nicht mehr, sie liegt im Papierkorb, oder du hast keinen Zugriff darauf.",
+    unavailable: "Diese Seite konnte nicht geladen werden. Prüfe die Internetverbindung.",
+};
+
+/** In place of a page opened by its address that is not shown (yet). */
+function LinkedPageNotice({ status, onBack }: { status: NonNullable<LinkedPageStatus>; onBack: () => void }) {
+    return (
+        <div className="flex h-full items-center justify-center p-6 text-center">
+            <div className="max-w-sm">
+                <p className="text-sm text-muted-foreground" role={status === "loading" ? "status" : "alert"}>
+                    {LINKED_PAGE_TEXTS[status]}
+                </p>
+                {status !== "loading" && (
+                    <Button variant="outline" className="mt-4" onClick={onBack}>
+                        Zur Seitenliste
+                    </Button>
+                )}
+            </div>
+        </div>
     );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { pageIdFromSearch, pagePath } from "../page-url";
 
-// Open pages are history entries (without URL change), so the browser and
-// Android back button return to the previous page or the page list.
+// Open pages are history entries with their own address (package 46), so the
+// browser and Android back button return to the previous page or the page list.
 const HISTORY_PAGE_KEY = "nodiPageId";
 
 export function pageIdFromHistory(state: unknown): string {
@@ -10,15 +11,23 @@ export function pageIdFromHistory(state: unknown): string {
     return typeof pageId === "string" ? pageId : "";
 }
 
-/** The open page, kept in the browser history. */
+/** The open page, kept in the browser history and the address bar. */
 export function usePageNavigation() {
-    const [pageId, setPageId] = useState("");
+    // A link to a page opens it; so does a reload.
+    const [pageId, setPageId] = useState(() => pageIdFromSearch(location.search));
     // A page created just now: its title gets the focus.
     const [newPageId, setNewPageId] = useState("");
 
     useEffect(() => {
-        // An entry left from before a reload would reopen a stale page.
-        if (pageIdFromHistory(history.state)) history.replaceState(null, "");
+        const linked = pageIdFromSearch(location.search);
+        if (linked && pageIdFromHistory(history.state) !== linked) {
+            // Opened from a link: "back" leads to the page list, not out of the app.
+            history.replaceState(null, "", import.meta.env.BASE_URL);
+            history.pushState({ [HISTORY_PAGE_KEY]: linked }, "", pagePath(linked));
+        } else if (!linked && pageIdFromHistory(history.state)) {
+            // An entry without an address (older versions) would reopen a stale page.
+            history.replaceState(null, "");
+        }
 
         const followHistory = (event: PopStateEvent) => setPageId(pageIdFromHistory(event.state));
         window.addEventListener("popstate", followHistory);
@@ -29,7 +38,7 @@ export function usePageNavigation() {
         setNewPageId(isNew ? nextPageId : "");
         if (nextPageId === pageId) return;
 
-        history.pushState({ [HISTORY_PAGE_KEY]: nextPageId }, "");
+        history.pushState({ [HISTORY_PAGE_KEY]: nextPageId }, "", pagePath(nextPageId));
         setPageId(nextPageId);
     }
 

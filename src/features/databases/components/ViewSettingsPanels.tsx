@@ -14,7 +14,8 @@ type PanelProps = {
 
 const selectClass =
     "h-7 min-w-0 rounded border bg-background px-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-60";
-const toolbarButton =
+/** A button of the database toolbar; the template menu uses it too (package 45b). */
+export const toolbarButton =
     "flex h-7 items-center gap-1 rounded px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground pointer-coarse:h-9";
 
 function fieldType(propertyId: string, properties: DatabaseProperty[]) {
@@ -126,12 +127,17 @@ export function FilterPanel({ config, properties, editable, onChange, onError }:
         <div className="relative">
             <button
                 type="button"
+                aria-label={`Filter${config.filter.length > 0 ? ` (${config.filter.length})` : ""}`}
                 aria-expanded={open}
                 onClick={() => setOpen(true)}
                 className={`${toolbarButton} ${config.filter.length > 0 ? "text-brand" : ""}`}
             >
                 <Filter className="size-3.5" />
-                Filter{config.filter.length > 0 ? ` (${config.filter.length})` : ""}
+                {/* Icons only on a phone, like the other buttons of the toolbar. */}
+                <span className="hidden sm:inline">
+                    Filter
+                    {config.filter.length > 0 ? ` (${config.filter.length})` : ""}
+                </span>
             </button>
             <Menu
                 detached
@@ -290,12 +296,17 @@ export function SortPanel({ config, properties, editable, onChange, onError }: P
         <div className="relative">
             <button
                 type="button"
+                aria-label={`Sortieren${config.sort.length > 0 ? ` (${config.sort.length})` : ""}`}
                 aria-expanded={open}
                 onClick={() => setOpen(true)}
                 className={`${toolbarButton} ${config.sort.length > 0 ? "text-brand" : ""}`}
             >
                 <ArrowUpDown className="size-3.5" />
-                Sortieren{config.sort.length > 0 ? ` (${config.sort.length})` : ""}
+                {/* Icons only on a phone, like the other buttons of the toolbar. */}
+                <span className="hidden sm:inline">
+                    Sortieren
+                    {config.sort.length > 0 ? ` (${config.sort.length})` : ""}
+                </span>
             </button>
             <Menu
                 detached

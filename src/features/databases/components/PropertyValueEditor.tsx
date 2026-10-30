@@ -1,11 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
-import { Clock, Paperclip } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { fileNameOfPath } from "@/features/files/file-reference";
 import { displayTitle } from "@/features/pages/page-display";
 import {
-    dateFromInput,
-    dateHasTime,
-    dateInputValue,
     formatValue,
     hasOptions,
     isComputed,
@@ -13,9 +10,9 @@ import {
     isPlaceValue,
     chosenPeople,
     relatedEntries,
-    setDateTime,
 } from "../database-model";
 import type { DatabaseProperty, PropertyOption, PropertyValue } from "../types";
+import { DatePicker } from "./DatePicker";
 import { OptionBadge } from "./OptionBadge";
 import { OptionPicker } from "./OptionPicker";
 import { FilesPicker } from "./FilesPicker";
@@ -278,31 +275,20 @@ export function PropertyValueEditor({
 
     if (property.type === "date") {
         const date = isDateValue(value) ? value : null;
-        const withTime = date !== null && dateHasTime(date);
         return (
-            <div className="flex min-w-0 items-center">
-                <input
-                    type={withTime ? "datetime-local" : "date"}
+            <div className="relative min-w-0">
+                <button
+                    type="button"
                     disabled={!canChange}
-                    value={date ? dateInputValue(date.start) : ""}
-                    aria-label={property.name}
-                    onChange={(event) => {
-                        const start = dateFromInput(event.target.value);
-                        save(start ? { start, end: date?.end ?? null } : null);
-                    }}
-                    className={`${fieldClass} min-w-0 flex-1 bg-transparent disabled:opacity-100`}
-                />
-                {date && canChange && (
-                    <button
-                        type="button"
-                        aria-pressed={withTime}
-                        aria-label={`Uhrzeit für ${property.name}`}
-                        title={withTime ? "Uhrzeit entfernen" : "Uhrzeit hinzufügen"}
-                        onClick={() => save(setDateTime(date, !withTime))}
-                        className={`flex size-7 shrink-0 items-center justify-center rounded hover:bg-accent pointer-coarse:size-9 ${withTime ? "text-brand" : "text-muted-foreground"}`}
-                    >
-                        <Clock className="size-3.5" />
-                    </button>
+                    aria-label={`${property.name} wählen`}
+                    aria-expanded={pickerOpen}
+                    onClick={() => setPickerOpen(true)}
+                    className={`${fieldClass} hover:bg-accent/60 disabled:cursor-default disabled:hover:bg-transparent`}
+                >
+                    <span className="truncate">{date ? formatValue(property, date) : ""}</span>
+                </button>
+                {pickerOpen && (
+                    <DatePicker property={property} value={date} onClose={() => setPickerOpen(false)} onChange={save} />
                 )}
             </div>
         );

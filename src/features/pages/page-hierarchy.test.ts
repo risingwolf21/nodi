@@ -8,6 +8,7 @@ import {
     pagesInSection,
     pageTemplates,
     placeBefore,
+    positionAfter,
     withoutDatabaseEntries,
 } from "./page-hierarchy";
 import type { Page } from "./types";
@@ -316,5 +317,20 @@ describe("placeBefore", () => {
         const pages = [sibling("a", 1), sibling("b", 2)];
         expect(placeBefore(pages, "a", "a")).toEqual([]);
         expect(placeBefore(pages, "a", "gone")).toEqual([]);
+    });
+});
+
+describe("positionAfter", () => {
+    const page = (id: string, position: number | null): Page => ({ ...project, id, title: id, position });
+
+    it("places a copy between the page and the next sibling, or after the last", () => {
+        const pages = [page("a", 1), page("b", 2), page("c", 4)];
+        expect(positionAfter(pages[0], pages)).toBe(1.5);
+        expect(positionAfter(pages[1], pages)).toBe(3);
+        expect(positionAfter(pages[2], pages)).toBe(5);
+    });
+
+    it("has no position for a page without one (ordered by creation)", () => {
+        expect(positionAfter(page("a", null), [page("b", 1)])).toBeNull();
     });
 });

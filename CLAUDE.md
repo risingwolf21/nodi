@@ -428,7 +428,7 @@ supabase/
                             # Konto löschen (P33a), Speicher aufräumen (P35a),
                             # Echtzeit (P36a), Erwähnungen (P37a),
                             # Seitenvorlagen (P38a), ungenutzte Dateien (P40),
-                            # Suche in Werten (P43)
+                            # Suche in Werten (P43), Duplizieren (P47a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -2983,6 +2983,158 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
     - Tests: Playwright `ios-top-edge.e2e.ts` (prüft den Streifen gegen die
       Regeln von WebKit und die Farbe; Chromium zeigt den Weichzeichner
       nicht). Auf einem echten iPhone noch nicht geprüft.
+
+### Optik angleichen (Nutzer, 2026-10-30)
+
+- **Befund** (Vergleich mit Notion, 2026-10-30): Überschriften größer als der
+  Seitentitel; Datenbank-Seiten zu schmal mit springenden rechten Kanten,
+  Datumszellen als Eingabefelder; Titelbild als abgerundeter Kasten, Icon
+  darunter; „Kommentar hinzufügen“ immer unter dem Titel; Slash-Menü,
+  Codeblock, Checkboxen, Einrückung der Seitenleiste und Tabs auf dem Handy
+  weichen ab. Funktionslücken (URL je Seite, Duplizieren, Optionen bearbeiten,
+  Summenzeile, Spaltenbreite …) folgen danach.
+- **Entschieden (Nutzer, 2026-10-30):** zuerst die Optik in drei PRs: 45a
+  Seitenkopf und Überschriften, 45b Datenbank-Seiten, 45c Editor-Details und
+  Seitenleiste.
+
+45. **Optik angleichen** (nur Frontend, keine Migration).
+    - **Umsetzung 45a:**
+      - Überschriften im Text wie Notion (`index.css`): 30, 24 und 20 px
+        (vorher BlockNotes 48, 32 und 21 px), Zeilenhöhe 1,3, oben 32, 22 bzw.
+        16 px Abstand. Seitentitel 40 px (Handy 32 px), Zeilenhöhe 1,2; Icon
+        78 px (Handy 64 px), auch in der öffentlichen Ansicht.
+      - Titelbild über die ganze Breite der Seite direkt unter der oberen
+        Leiste, ohne Rundung, 30 % der Fensterhöhe (144–280 px); das Icon ragt
+        zur Hälfte hinein. Dafür begrenzt `.nodi-page-column` (`EditorFrame`)
+        jedes Kind auf 860 px statt die ganze Spalte; das Titelbild
+        (`.nodi-page-cover`) ist ausgenommen und zieht den oberen Abstand
+        (`--page-top`) ab.
+      - „Kommentar hinzufügen“ steht wie „Icon hinzufügen“ und „Titelbild
+        hinzufügen“ in der Leiste über dem Titel (nur beim Überfahren, auf
+        Touch-Geräten immer); `PageComments` erscheint erst mit Kommentaren oder
+        dem Formular (`writing` aus `PageView`).
+      - Tests: Playwright `page-layout.e2e.ts` (Schriftgrößen, Titelbild über
+        die ganze Breite, Icon im Titelbild, Kommentar-Knopf),
+        `page-comments.e2e.ts` angepasst.
+    - **Umsetzung 45b:**
+      - Datenbank-Seiten nutzen wie in Notion immer die ganze Breite (Titel,
+        Tabs, Leiste und Ansicht mit `--page-gutter` bündig); „Volle Breite“
+        gibt es im Seitenmenü nur noch für Seiten. Einträge bleiben, wie
+        eingestellt.
+      - Tabelle: Die Zeile „Neu“ und der Hinweis ohne Einträge sind so breit
+        wie die Tabelle, auch wenn sie seitlich scrollt (vorher endeten sie am
+        sichtbaren Rand).
+      - Datum (`DatePicker`): Tabelle und Eigenschaftsleiste zeigen den Wert
+        als Text („30. Okt. 2026“, Zeitraum mit „–“) statt als Eingabefeld;
+        ein Klick öffnet die Auswahl mit Beginn, Schalter „Enddatum“ (vorher
+        ließ sich das Ende nicht setzen) und „Uhrzeit“ sowie „Leeren“.
+      - Leiste der Datenbank einheitlich (`toolbarButton`): „Vorlagen“ so
+        groß wie die anderen Knöpfe; auf dem Handy zeigen alle nur das Icon
+        (auch „Filter“ und „Sortieren“, Name bleibt für Screenreader).
+      - Tests: Playwright `database-table.e2e.ts` (Datum als Text, Uhrzeit,
+        Enddatum, Leeren), `page-layout.e2e.ts` (ganze Breite, „Neu“ so breit
+        wie die Tabelle, kein „Volle Breite“).
+    - **Umsetzung 45c:**
+      - Slash-Menü kompakt (`slashMenuItems` in `BlockEditor`): nur Titel, Icon
+        im Rahmen, Kürzel als grauer Text auf Deutsch („Strg+Alt+1“). Callout
+        und Spalten stehen bei BlockNotes „Grundlegende Blöcke“ (vorher eine
+        eigene Gruppe „Einfache Blöcke“ am Ende), „Datenbank“ zuletzt.
+      - Codeblock hellgrau in Textfarbe (vorher schwarz), Inline-Code rot auf
+        Grau; Checkboxen 16 px in Akzentfarbe, erledigte Punkte grau.
+      - Seitenleiste 240 px breit, „Strg K“ in normaler Schrift. Mit Maus steht
+        der Pfeil zum Aufklappen beim Überfahren an der Stelle des Icons (nur
+        bei Seiten mit Unterseiten), sonst ist er weg; die obersten Icons
+        stehen bündig mit „Suchen“. Touch-Geräte behalten den Pfeil davor.
+      - Ansichts-Tabs einer Datenbank stehen in einer Zeile und scrollen auf
+        dem Handy seitlich (`.nodi-scroll-x`, ohne Scrollbalken); ihre Menüs
+        sind `detached`.
+      - Tests: Playwright `page-layout.e2e.ts` (Slash-Menü, Codeblock,
+        Checkbox, Pfeil in der Seitenleiste, Tabs auf dem Handy).
+
+### Funktionen wie Notion (Nutzer, 2026-10-30)
+
+- **Reihenfolge** (Vorschlag nach 45, „Los“): 46 URL je Seite und „Link
+  kopieren“, 47 Duplizieren, danach Optionen bearbeiten, Summenzeile,
+  Spaltenbreite (je ein PR, vor dem Start genauer geschnitten).
+
+46. **URL je Seite und „Link kopieren“** (nur Frontend, keine Migration):
+    - Eine offene Seite steht in der Adresse: `…/nodi/?id=<Seiten-ID>`
+      (`features/pages/page-url.ts`; Query-Parameter wie `?p=`, braucht auf
+      GitHub Pages keine Route, der Service Worker liefert offline dieselbe
+      `index.html`). `usePageNavigation` setzt sie mit `pushState` und liest
+      sie beim Start: Neuladen lässt die Seite offen. Kommt man über einen
+      Link, liegt die Seitenliste als Eintrag davor, „Zurück“ führt also
+      dorthin und nicht aus der App. Andere Werte als eine Seiten-ID werden
+      übergangen.
+    - Liegt die Seite nicht im geladenen Baum (`useLinkedPage`), fragt die App
+      ihren Workspace ab (`pageWorkspaceId`: `pages.workspace_id`, nicht im
+      Papierkorb, RLS entscheidet) und wechselt in einen eigenen Workspace;
+      geteilte Seiten anderer Workspaces kommen mit „Mit mir geteilt“. Sonst
+      steht dort „gibt es nicht mehr, liegt im Papierkorb oder kein Zugriff“
+      bzw. „konnte nicht geladen werden“ (offline) mit „Zur Seitenliste“.
+      Ohne Anmeldung kommt zuerst das Login, die Adresse bleibt.
+    - Seitenmenü: „Link kopieren“ (Zwischenablage, danach „Link kopiert“),
+      auch offline und bei geteilten Seiten; das übrige Menü bleibt dem
+      eigenen Workspace online vorbehalten. Der Link öffnet die Seite nur für
+      Leute mit Zugriff (öffentliche Links bleiben `?p=`).
+    - `usePages.loading` gilt jetzt auch, bevor das erste Laden eines neuen
+      Workspace begonnen hat.
+    - Tests: Vitest `page-url.test.ts`, Playwright `page-address.e2e.ts`
+      (Adresse, Neuladen, Zurück, Link vom Handy, Link kopieren, unbekannte
+      Seite).
+    - Noch nicht: Titel in der Adresse (wie Notion `Titel-<id>`), Link auf
+      einen Block, „Link kopieren“ in der Seitenleiste.
+47. **Duplizieren** wie Notion.
+    - **Entschieden (Nutzer, 2026-10-30):** (1) Eine Seite wird mit allen
+      Unterseiten kopiert. (2) Eine Datenbank kommt mit Einträgen und Werten.
+    - **Annahmen:** Die Kopie steht direkt hinter dem Original und heißt
+      „Titel (Kopie)“; Bilder und Anhänge werden mitkopiert (wie bei
+      Seitenvorlagen, 38b). Kommentare, Freigaben, öffentliche Links,
+      Favoriten und Wiederholungen bleiben beim Original.
+    - **Aufteilung:** 47a Datenbank, 47b Oberfläche.
+    - **Umsetzung 47a** (`20261030090000_duplicate_page.sql`):
+      - RPC `duplicate_page(page)` → `(page_id, files)`: kopiert die Seite und
+        alles darunter, was der Aufrufer lesen kann (nicht im Papierkorb,
+        Tiefe ≤ 50, höchstens 1000 Seiten, sonst `22023`). Rechte wie beim
+        Anlegen an dieser Stelle: Mitglied des Workspace, Schreibrecht auf die
+        Elternseite (`42501`); `22004` ohne Seite. Owner der Kopien ist der
+        Aufrufer, der Bereich bleibt (private Seiten anderer kann er nicht
+        lesen, sie fehlen also). Position zwischen Original und nächstem
+        Geschwister.
+      - Mitkopiert: Text, Icon, Titelbild, volle Breite, Vorlage,
+        Eigenschaften, Ansichten (statt der automatisch angelegten Tabelle),
+        Block-Ansichten, Werte und Standardvorlage. `remap_ids` ersetzt in
+        Texten, Optionen, Konfigurationen und Werten die IDs kopierter Seiten
+        und Eigenschaften durch die der Kopien: Seitenlinks und
+        Datenbank-Blöcke zeigen auf die Kopien, Filter/Gruppierung auf die
+        kopierten Eigenschaften, `nodi-file:`-Verweise auf den Ordner der
+        Kopie.
+      - Verknüpfungen: innerhalb der Kopie verknüpfen die kopierten Einträge
+        (nicht kopierte fallen weg). Zu einer Datenbank außerhalb bekommt diese
+        eine neue Gegenseite (Name der kopierten Datenbank), die auf die
+        kopierten Einträge zeigt; ohne Schreibrecht dort entfällt die
+        Eigenschaft. Ein kopierter Eintrag einer Datenbank außerhalb (die Seite
+        selbst) bekommt seine Werte per `set_page_property`; Verknüpfungen ohne
+        Schreibrecht auf den verknüpften Eintrag entfallen.
+      - `files`: `{from, to}` je vorhandener Datei im Ordner einer kopierten
+        Seite, auf die die Kopie verweist; kopiert werden sie von der App
+        (nur die Storage-API kann das).
+      - Erwähnungen im kopierten Text melden sich wie neue (Trigger aus 37a).
+      - pgTAP: `duplicate_page.test.sql`; ein Baum mit 601 Seiten und Texten
+        braucht lokal unter 1 s.
+    - **Umsetzung 47b** (nur Frontend, keine Migration):
+      - „Duplizieren“ im Seitenmenü und im Menü der Baumzeile (nur eigener
+        Workspace, online). `usePages.duplicatePage`: RPC, danach die Dateien
+        aus `files` per `copyPageFile` (eine nach der anderen; scheitert eine,
+        fehlt sie in der Kopie, ein Hinweis nennt die Anzahl). Die Kopie steht
+        sofort im Baum (`duplicateTitle`, `positionAfter`), der Rest kommt mit
+        dem neuen Laden; danach öffnet sie sich. Unten steht währenddessen
+        „Seite wird dupliziert …“.
+      - Tests: Vitest `page-hierarchy.test.ts` (`positionAfter`), Playwright
+        `page-duplicate.e2e.ts` (Seitenmenü: Titel, Platz, Unterseite, Link im
+        Text auf die Kopie, Bild kopiert; Menü der Seitenleiste).
+      - Noch nicht: Duplizieren geteilter Seiten anderer Workspaces und von
+        Einträgen aus Tabelle oder Board heraus.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

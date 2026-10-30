@@ -139,7 +139,7 @@ export function PageCover({ pageId, cover, userId, editable, onSetCover }: PageC
 
     return (
         <div
-            className="group/cover relative mb-6 h-36 w-full bg-muted bg-cover bg-center md:h-52 md:rounded-lg"
+            className="nodi-page-cover group/cover relative mb-6 h-[30vh] max-h-[280px] min-h-36 bg-muted bg-cover bg-center"
             style={gradient ? { backgroundImage: gradient.css } : url ? { backgroundImage: `url("${url}")` } : {}}
             role="img"
             aria-label="Titelbild"

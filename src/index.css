@@ -140,16 +140,138 @@
 /* Same side margin for page title and editor text (Paket 10). */
 :root {
     --page-gutter: 1.25rem;
+    /* Room above the title of a page without a cover. */
+    --page-top: 2rem;
 }
 
 @media (min-width: 768px) {
     :root {
         --page-gutter: 54px;
+        --page-top: 4rem;
     }
+}
+
+/*
+ * The column of an open page (package 45a): everything in it is at most
+ * 860 px wide and centered (or the whole width with "Volle Breite"), except
+ * the cover, which spans the page from the top bar on, like in Notion.
+ */
+.nodi-page-column > * {
+    max-width: 860px;
+    margin-inline: auto;
+}
+
+.nodi-page-column-full > * {
+    max-width: none;
+}
+
+.nodi-page-column > .nodi-page-cover {
+    max-width: none;
+    margin-top: calc(var(--page-top) * -1);
+}
+
+/*
+ * Headings like Notion (package 45a): smaller than the page title (40 px) and
+ * with more room above than below. BlockNote's own sizes (3em, 2em, 1.3em)
+ * made a heading 1 larger than the title.
+ */
+.bn-editor [data-content-type="heading"] {
+    --level: 1.875em;
+    padding-top: 2rem;
+    padding-bottom: 1px;
+    line-height: 1.3;
+}
+
+.bn-editor [data-content-type="heading"][data-level="2"] {
+    --level: 1.5em;
+    padding-top: 1.4rem;
+}
+
+.bn-editor [data-content-type="heading"][data-level="3"] {
+    --level: 1.25em;
+    padding-top: 1rem;
 }
 
 .bn-container .bn-editor {
     padding-inline: var(--page-gutter);
+}
+
+/*
+ * Editor details like Notion (package 45c). Code: a light grey surface in
+ * the text colour instead of BlockNote's black one; inline code tinted.
+ */
+.bn-editor .bn-block-content[data-content-type="codeBlock"] {
+    background-color: var(--muted);
+    color: var(--foreground);
+    border-radius: 4px;
+}
+
+.bn-editor .bn-block-content[data-content-type="codeBlock"] > pre {
+    --bn-suggestion-surface: var(--muted);
+    padding: 2rem 1rem 1.5rem 2rem;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+.bn-editor .bn-block-content[data-content-type="codeBlock"] > div > select {
+    color: var(--muted-foreground);
+}
+
+.bn-editor code:not(pre code) {
+    border-radius: 4px;
+    padding: 0.2em 0.4em;
+    font-size: 0.85em;
+    color: #eb5757;
+    background-color: color-mix(in oklch, var(--muted-foreground) 15%, transparent);
+}
+
+/* To-dos: a 16 px box in the accent colour; done ones struck through and grey. */
+.bn-editor .bn-block-content[data-content-type="checkListItem"] > div > input {
+    width: 16px;
+    height: 16px;
+    margin-block: 4px;
+    margin-left: 2px;
+    accent-color: var(--brand);
+}
+
+.bn-editor .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+    color: var(--muted-foreground);
+}
+
+/* The "/" and "@" menus: compact rows with a framed icon, like Notion. */
+/* `:root` outranks BlockNote's rule, whose stylesheet loads after this one. */
+:root .bn-mantine .bn-suggestion-menu-item:not(.bn-suggestion-menu-item-small) {
+    min-height: 0;
+    padding: 4px 8px;
+}
+
+.bn-mantine .bn-suggestion-menu-item .bn-mt-suggestion-menu-item-section[data-position="left"] {
+    padding: 2px;
+    border: 1px solid var(--border);
+    background-color: var(--background);
+    color: var(--foreground);
+}
+
+.bn-mantine .bn-suggestion-menu-item .bn-mt-suggestion-menu-item-section[data-position="left"] svg {
+    width: 18px;
+    height: 18px;
+}
+
+.bn-mantine .bn-mt-suggestion-menu-item-title {
+    font-weight: 400;
+}
+
+.bn-mantine .bn-mt-suggestion-menu-item-subtitle {
+    color: var(--muted-foreground);
+    font-size: 12px;
+}
+
+.bn-mantine .bn-mt-suggestion-menu-item-section[data-position="right"] .mantine-Badge-root {
+    padding: 0;
+    background: none;
+    color: var(--muted-foreground);
+    font-weight: 400;
+    text-transform: none;
 }
 
 /*
@@ -404,4 +526,13 @@ body .bn-mobile-formatting-toolbar {
         user-select: none;
         -webkit-touch-callout: none;
     }
+}
+
+/* A row that scrolls sideways without a visible scrollbar (view tabs on phones, 45c). */
+.nodi-scroll-x {
+    scrollbar-width: none;
+}
+
+.nodi-scroll-x::-webkit-scrollbar {
+    display: none;
 }

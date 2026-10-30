@@ -6,6 +6,16 @@ export function nextPosition(siblings: Page[]): number {
     return positions.length === 0 ? siblings.length : Math.max(...positions) + 1;
 }
 
+/** Right after a page among its siblings, as duplicate_page places a copy (package 47). */
+export function positionAfter(page: Page, siblings: Page[]): number | null {
+    if (page.position === null) return null;
+    const original = page.position;
+    const later = siblings.flatMap((item) =>
+        item.position !== null && item.position > original ? [item.position] : [],
+    );
+    return later.length === 0 ? original + 1 : (original + Math.min(...later)) / 2;
+}
+
 /** Manual order, then creation; for siblings in the tree and entries of a database. */
 export function compareByPosition(a: Page, b: Page): number {
     if (a.position !== null && b.position !== null && a.position !== b.position) return a.position - b.position;

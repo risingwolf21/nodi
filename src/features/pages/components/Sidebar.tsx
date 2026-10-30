@@ -66,6 +66,7 @@ type SidebarProps = {
     onEmptyTrash: () => Promise<number>;
     /** "Verschieben nach …" for a page of the tree. */
     onMove: (page: Page) => void;
+    onDuplicate: (page: Page) => void;
     /** A page dragged onto another page or a section title. */
     onDropPage: (page: Page, target: MoveTarget) => void;
     /** A page dragged before or after a sibling (package 32a). */
@@ -114,6 +115,7 @@ export function Sidebar({
     onDelete,
     onEmptyTrash,
     onMove,
+    onDuplicate,
     onDropPage,
     onReorder,
 }: SidebarProps) {
@@ -279,7 +281,7 @@ export function Sidebar({
                 >
                     <Search className="size-4 shrink-0" aria-hidden="true" />
                     <span className="flex-1">Suchen</span>
-                    <kbd className="text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
+                    <kbd className="font-sans text-xs text-muted-foreground pointer-coarse:hidden" aria-hidden="true">
                         Strg K
                     </kbd>
                 </button>
@@ -398,6 +400,7 @@ export function Sidebar({
                                     onRename={onRename}
                                     onArchive={onArchive}
                                     onMove={onMove}
+                                    onDuplicate={onDuplicate}
                                     dragAndDrop={dragAndDrop}
                                 />
                             </section>

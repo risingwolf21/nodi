@@ -21,9 +21,9 @@ export async function openApp(
     page: Page,
     context: BrowserContext,
     backend: FakeBackend,
-    { signedIn = true } = {},
+    { signedIn = true, path = "./" } = {},
 ): Promise<void> {
     await installFakeSupabase(context, backend);
     if (signedIn) await signIn(context);
-    await page.goto("./");
+    await page.goto(path);
 }
