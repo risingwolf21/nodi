@@ -74,6 +74,9 @@ const LIVE_REFRESH_DELAY_MS = 1000;
 const PAGE_LINK_CHOICES = 12;
 const PEOPLE_CHOICES = 5;
 
+// The group of BlockNote's basic blocks in the "/" menu; ours join it.
+const BASIC_GROUP = de.slash_menu.paragraph.group;
+
 const SUPERSEDED_NOTICE = "Diese Seite wurde auf einem anderen Gerät geändert. Die neuere Version wurde geladen.";
 
 // BlockNote shows only this text when an upload fails, so it names the limits.
@@ -320,6 +323,47 @@ function EditorContent({
         editor.setTextCursorPosition(paragraphIds[0], "start");
     };
 
+    // The "/" menu like Notion (package 45c): titles only, German shortcuts, our
+    // blocks among the basic ones (and databases on their own).
+    const slashMenuItems = () => {
+        const items = getDefaultReactSlashMenuItems(editor).map((item) => ({
+            ...item,
+            subtext: undefined,
+            badge: item.badge?.replace("Ctrl", "Strg").replaceAll("-", "+"),
+        }));
+        const basicGroup = items.findLast((item) => item.group === BASIC_GROUP);
+        const basic = [
+            {
+                title: "Callout",
+                aliases: ["callout", "hinweis", "info", "box", "aside"],
+                group: BASIC_GROUP,
+                icon: <MessageSquareText size={18} />,
+                onItemClick: () => {
+                    insertOrUpdateBlockForSlashMenu(editor, { type: "callout" });
+                },
+            },
+            ...[2, 3].map((count) => ({
+                title: `${count} Spalten`,
+                aliases: ["spalten", "columns", "nebeneinander", `${count}`],
+                group: BASIC_GROUP,
+                icon: <Columns2 size={18} />,
+                onItemClick: () => insertColumns(count),
+            })),
+        ];
+        const database = {
+            title: "Datenbank",
+            aliases: ["datenbank", "database", "tabelle", "ansicht", "view"],
+            group: "Datenbanken",
+            icon: <Table2 size={18} />,
+            onItemClick: () => {
+                insertOrUpdateBlockForSlashMenu(editor, { type: "database" });
+            },
+        };
+        // BlockNote starts a new heading whenever the group changes, so ours go right after its own.
+        const at = basicGroup ? items.indexOf(basicGroup) + 1 : items.length;
+        return [...items.slice(0, at), ...basic, ...items.slice(at), database];
+    };
+
     // A stable component: a new one on each render would remount the toolbar.
     const commentToolbar = useMemo(() => toolbarWithComments(pageId), [pageId]);
 
@@ -443,44 +487,7 @@ function EditorContent({
                     )}
                     <SuggestionMenuController
                         triggerCharacter="/"
-                        getItems={(query) =>
-                            Promise.resolve(
-                                filterSuggestionItems(
-                                    [
-                                        ...getDefaultReactSlashMenuItems(editor),
-                                        {
-                                            title: "Callout",
-                                            subtext: "Hervorgehobener Text mit Emoji",
-                                            aliases: ["callout", "hinweis", "info", "box", "aside"],
-                                            group: "Einfache Blöcke",
-                                            icon: <MessageSquareText size={18} />,
-                                            onItemClick: () => {
-                                                insertOrUpdateBlockForSlashMenu(editor, { type: "callout" });
-                                            },
-                                        },
-                                        ...[2, 3].map((count) => ({
-                                            title: `${count} Spalten`,
-                                            subtext: "Blöcke nebeneinander (auf dem Handy untereinander)",
-                                            aliases: ["spalten", "columns", "nebeneinander", `${count}`],
-                                            group: "Einfache Blöcke",
-                                            icon: <Columns2 size={18} />,
-                                            onItemClick: () => insertColumns(count),
-                                        })),
-                                        {
-                                            title: "Datenbank",
-                                            subtext: "Ansicht einer bestehenden Datenbank",
-                                            aliases: ["datenbank", "database", "tabelle", "ansicht", "view"],
-                                            group: "Datenbanken",
-                                            icon: <Table2 size={18} />,
-                                            onItemClick: () => {
-                                                insertOrUpdateBlockForSlashMenu(editor, { type: "database" });
-                                            },
-                                        },
-                                    ],
-                                    query,
-                                ),
-                            )
-                        }
+                        getItems={(query) => Promise.resolve(filterSuggestionItems(slashMenuItems(), query))}
                     />
                     {/* "@" mentions a person (package 37) or links a page (28). */}
                     <SuggestionMenuController

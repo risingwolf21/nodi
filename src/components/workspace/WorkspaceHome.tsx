@@ -323,7 +323,7 @@ export default function WorkspaceHome() {
                     {/* Below md, like the Notion app: the list or one page, full screen. */}
                     <aside
                         className={cn(
-                            "w-full md:block md:w-64 md:shrink-0 md:border-r md:border-sidebar-border",
+                            "w-full md:block md:w-60 md:shrink-0 md:border-r md:border-sidebar-border",
                             page ? "hidden" : "block",
                         )}
                     >
