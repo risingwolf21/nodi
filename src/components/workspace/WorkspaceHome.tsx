@@ -21,6 +21,7 @@ import { usePages } from "@/features/pages/hooks/usePages";
 import { useSharedPages } from "@/features/pages/hooks/useSharedPages";
 import { useWorkspaces } from "@/features/pages/hooks/useWorkspaces";
 import { usePageNavigation } from "@/features/pages/hooks/usePageNavigation";
+import { useLinkedPage, type LinkedPageStatus } from "@/features/pages/hooks/useLinkedPage";
 import { syncEngineFor } from "@/features/editor/services/account-sync";
 import { startPageActivity } from "@/features/realtime/page-activity";
 import { localDocumentStoreFor } from "@/features/editor/services/local-document-store";
@@ -79,6 +80,7 @@ export default function WorkspaceHome() {
     const {
         pages,
         archivedPages,
+        loading: pagesLoading,
         error: pagesError,
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
@@ -125,6 +127,15 @@ export default function WorkspaceHome() {
     // a share was revoked.
     const sharedPage = sharedPages.find((item) => item.id === pageId) ?? null;
     const page = pages.find((item) => item.id === pageId) ?? sharedPage;
+    // A page opened by its address may belong to another workspace (package 46).
+    const linkedPage = useLinkedPage({
+        pageId,
+        found: page !== null,
+        pagesLoading,
+        workspaceId,
+        workspaceIds: workspaces.map((workspace) => workspace.id),
+        onSwitchWorkspace: setWorkspaceId,
+    });
     const ancestors = page ? findAncestors(page.id, sharedPage ? sharedPages : pages).reverse() : [];
     // Database blocks in a text may show databases shared from elsewhere.
     const knownPages = useMemo(() => [...pages, ...sharedPages], [pages, sharedPages]);
@@ -324,7 +335,7 @@ export default function WorkspaceHome() {
                     <aside
                         className={cn(
                             "w-full md:block md:w-60 md:shrink-0 md:border-r md:border-sidebar-border",
-                            page ? "hidden" : "block",
+                            page || linkedPage ? "hidden" : "block",
                         )}
                     >
                         <Sidebar
@@ -375,7 +386,7 @@ export default function WorkspaceHome() {
                         />
                     </aside>
 
-                    <section className={cn("min-w-0 flex-1 md:block", page ? "block" : "hidden")}>
+                    <section className={cn("min-w-0 flex-1 md:block", page || linkedPage ? "block" : "hidden")}>
                         {page ? (
                             <PageView
                                 key={page.id}
@@ -448,6 +459,8 @@ export default function WorkspaceHome() {
                                 // Entries of other workspaces keep their order (for now).
                                 onReorderPages={sharedPage ? undefined : reorderPages}
                             />
+                        ) : linkedPage ? (
+                            <LinkedPageNotice status={linkedPage} onBack={closePage} />
                         ) : (
                             <div className="flex h-full items-center justify-center p-6 text-center">
                                 <div>
@@ -649,5 +662,29 @@ export default function WorkspaceHome() {
                 />
             )}
         </main>
+    );
+}
+
+const LINKED_PAGE_TEXTS: Record<NonNullable<LinkedPageStatus>, string> = {
+    loading: "Seite wird geladen …",
+    missing: "Diese Seite gibt es nicht mehr, sie liegt im Papierkorb, oder du hast keinen Zugriff darauf.",
+    unavailable: "Diese Seite konnte nicht geladen werden. Prüfe die Internetverbindung.",
+};
+
+/** In place of a page opened by its address that is not shown (yet). */
+function LinkedPageNotice({ status, onBack }: { status: NonNullable<LinkedPageStatus>; onBack: () => void }) {
+    return (
+        <div className="flex h-full items-center justify-center p-6 text-center">
+            <div className="max-w-sm">
+                <p className="text-sm text-muted-foreground" role={status === "loading" ? "status" : "alert"}>
+                    {LINKED_PAGE_TEXTS[status]}
+                </p>
+                {status !== "loading" && (
+                    <Button variant="outline" className="mt-4" onClick={onBack}>
+                        Zur Seitenliste
+                    </Button>
+                )}
+            </div>
+        </div>
     );
 }

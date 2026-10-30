@@ -3051,6 +3051,40 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       - Tests: Playwright `page-layout.e2e.ts` (Slash-Menü, Codeblock,
         Checkbox, Pfeil in der Seitenleiste, Tabs auf dem Handy).
 
+### Funktionen wie Notion (Nutzer, 2026-10-30)
+
+- **Reihenfolge** (Vorschlag nach 45, „Los“): 46 URL je Seite und „Link
+  kopieren“, danach Duplizieren, Optionen bearbeiten, Summenzeile,
+  Spaltenbreite (je ein PR, vor dem Start genauer geschnitten).
+
+46. **URL je Seite und „Link kopieren“** (nur Frontend, keine Migration):
+    - Eine offene Seite steht in der Adresse: `…/nodi/?id=<Seiten-ID>`
+      (`features/pages/page-url.ts`; Query-Parameter wie `?p=`, braucht auf
+      GitHub Pages keine Route, der Service Worker liefert offline dieselbe
+      `index.html`). `usePageNavigation` setzt sie mit `pushState` und liest
+      sie beim Start: Neuladen lässt die Seite offen. Kommt man über einen
+      Link, liegt die Seitenliste als Eintrag davor, „Zurück“ führt also
+      dorthin und nicht aus der App. Andere Werte als eine Seiten-ID werden
+      übergangen.
+    - Liegt die Seite nicht im geladenen Baum (`useLinkedPage`), fragt die App
+      ihren Workspace ab (`pageWorkspaceId`: `pages.workspace_id`, nicht im
+      Papierkorb, RLS entscheidet) und wechselt in einen eigenen Workspace;
+      geteilte Seiten anderer Workspaces kommen mit „Mit mir geteilt“. Sonst
+      steht dort „gibt es nicht mehr, liegt im Papierkorb oder kein Zugriff“
+      bzw. „konnte nicht geladen werden“ (offline) mit „Zur Seitenliste“.
+      Ohne Anmeldung kommt zuerst das Login, die Adresse bleibt.
+    - Seitenmenü: „Link kopieren“ (Zwischenablage, danach „Link kopiert“),
+      auch offline und bei geteilten Seiten; das übrige Menü bleibt dem
+      eigenen Workspace online vorbehalten. Der Link öffnet die Seite nur für
+      Leute mit Zugriff (öffentliche Links bleiben `?p=`).
+    - `usePages.loading` gilt jetzt auch, bevor das erste Laden eines neuen
+      Workspace begonnen hat.
+    - Tests: Vitest `page-url.test.ts`, Playwright `page-address.e2e.ts`
+      (Adresse, Neuladen, Zurück, Link vom Handy, Link kopieren, unbekannte
+      Seite).
+    - Noch nicht: Titel in der Adresse (wie Notion `Titel-<id>`), Link auf
+      einen Block, „Link kopieren“ in der Seitenleiste.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.

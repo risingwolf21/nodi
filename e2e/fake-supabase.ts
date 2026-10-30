@@ -508,6 +508,11 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
             backend.pages = backend.pages.filter((item) => !gone.has(item.id));
             return json(deleted.map((item) => ({ id: item.id })));
         }
+        // The workspace of a page opened by its address, outside the trash (package 46).
+        if (query.get("select") === "workspace_id" && query.get("is_archived") === "eq.false") {
+            const found = backend.pages.find((item) => `eq.${item.id}` === query.get("id") && !item.is_archived);
+            return json(found ? [{ workspace_id: WORKSPACE }] : []);
+        }
         // The workspace of a database, for the members of person properties (package 29).
         if (query.get("select") === "workspace_id") return json([{ workspace_id: WORKSPACE }]);
         // Readable page ids, for deleting local copies of revoked pages.
