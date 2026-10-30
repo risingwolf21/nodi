@@ -75,11 +75,11 @@ export function PublicPage({ token }: { token: string }) {
                     <>
                         <header className="mb-2 px-[var(--page-gutter)]">
                             {state.page.icon && (
-                                <p className="mb-2 px-1 text-6xl leading-none" aria-hidden="true">
+                                <p className="mb-1 p-0.5 text-[64px] leading-[1.1] md:text-[78px]" aria-hidden="true">
                                     {state.page.icon}
                                 </p>
                             )}
-                            <h1 className="text-3xl font-bold leading-tight md:text-4xl">{state.page.title}</h1>
+                            <h1 className="text-[32px] leading-[1.2] font-bold md:text-[40px]">{state.page.title}</h1>
                         </header>
                         <LoadErrorBoundary
                             fallback={

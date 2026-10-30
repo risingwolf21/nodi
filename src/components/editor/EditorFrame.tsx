@@ -16,7 +16,8 @@ type EditorFrameProps = {
 
 /**
  * Layout of an open page: a slim top bar and a narrow, centered column
- * that scrolls with title and content. Kept out of the lazily loaded
+ * that scrolls with title and content; a cover spans the whole width
+ * (`.nodi-page-column` in index.css). Kept out of the lazily loaded
  * editor chunk so that loading states use the same frame.
  */
 export function EditorFrame({
@@ -36,7 +37,7 @@ export function EditorFrame({
             </div>
             {notices}
             <div className="nodi-page-scroll min-h-0 flex-1 overflow-y-auto pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
-                <div className={cn("mx-auto w-full pt-8 pb-32 md:pt-16", fullWidth ? "max-w-none" : "max-w-[860px]")}>
+                <div className={cn("nodi-page-column pt-(--page-top) pb-32", fullWidth && "nodi-page-column-full")}>
                     {children}
                 </div>
             </div>

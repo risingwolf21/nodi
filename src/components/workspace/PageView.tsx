@@ -1,5 +1,14 @@
 import { Fragment, lazy, Suspense, useState } from "react";
-import { Check, ChevronLeft, FileText, LayoutTemplate, MoreHorizontal, Star, Table2 } from "lucide-react";
+import {
+    Check,
+    ChevronLeft,
+    FileText,
+    LayoutTemplate,
+    MessageSquare,
+    MoreHorizontal,
+    Star,
+    Table2,
+} from "lucide-react";
 import { EditorFrame } from "@/components/editor/EditorFrame";
 import { LoadErrorBoundary, LoadErrorNotice } from "@/components/LoadErrorBoundary";
 import { Menu, MenuItem } from "@/components/ui/menu";
@@ -118,6 +127,8 @@ export function PageView({
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
+    // The page is remounted for every page (key), so a draft belongs to this one.
+    const [writingComment, setWritingComment] = useState(false);
 
     function toggleFullWidth() {
         setMenuOpen(false);
@@ -297,14 +308,24 @@ export function PageView({
                 onRename={onRename}
                 onSetIcon={(pageId, icon) => onUpdate(pageId, { icon })}
                 actions={
-                    !page.cover && (
-                        <CoverPicker
-                            pageId={page.id}
-                            label="Titelbild hinzufügen"
-                            hasCover={false}
-                            onSetCover={setCover}
-                        />
-                    )
+                    <>
+                        {!page.cover && (
+                            <CoverPicker
+                                pageId={page.id}
+                                label="Titelbild hinzufügen"
+                                hasCover={false}
+                                onSetCover={setCover}
+                            />
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setWritingComment(true)}
+                            className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:bg-accent"
+                        >
+                            <MessageSquare className="size-4" aria-hidden="true" />
+                            Kommentar hinzufügen
+                        </button>
+                    </>
                 }
             />
             <Backlinks pageId={page.id} knownPages={knownPages} online={!readOnly} onOpen={onSelect} />
@@ -347,7 +368,14 @@ export function PageView({
                     }
                 />
             )}
-            <PageComments pageId={page.id} userId={userId} online={!readOnly} canComment={canEdit && !readOnly} />
+            <PageComments
+                pageId={page.id}
+                userId={userId}
+                online={!readOnly}
+                canComment={canEdit && !readOnly}
+                writing={writingComment}
+                onWritingChange={setWritingComment}
+            />
         </>
     );
 
