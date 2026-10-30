@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Check, MessageSquare, RotateCcw } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 import { commentMarks, onCommentRequest, onShowThread, type CommentRequest } from "../comment-marks";
 import { groupThreads, MAX_COMMENT_LENGTH, type CommentThread, type PageComment } from "../comment-threads";
 import { pageComments } from "../services/page-comments";
@@ -20,14 +20,16 @@ type PageCommentsProps = {
     online: boolean;
     /** Whoever may edit the page comments, replies and resolves (package 31a). */
     canComment: boolean;
+    /** A new comment is being written; started by "Kommentar hinzufügen" above the title (package 45a). */
+    writing: boolean;
+    onWritingChange: (writing: boolean) => void;
 };
 
 /** Comments of a page, like Notion's discussion under the title (package 31a). */
-export function PageComments({ pageId, userId, online, canComment }: PageCommentsProps) {
+export function PageComments({ pageId, userId, online, canComment, writing, onWritingChange }: PageCommentsProps) {
     const [loaded, setLoaded] = useState<{ pageId: string; comments: PageComment[] } | null>(null);
     const [reloads, setReloads] = useState(0);
     const [error, setError] = useState("");
-    const [writing, setWriting] = useState(false);
     const [showResolved, setShowResolved] = useState(false);
     // A thread on selected text, waiting for its first comment (package 31b).
     const [pending, setPending] = useState<CommentRequest | null>(null);
@@ -100,7 +102,7 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
     if (!online) return null;
     const open = threads.filter((thread) => thread.root.resolvedAt === null);
     const resolved = threads.filter((thread) => thread.root.resolvedAt !== null);
-    if (threads.length === 0 && !canComment && !error) return null;
+    if (threads.length === 0 && !(canComment && writing) && !pending && !error) return null;
 
     const renderThread = (thread: CommentThread) => (
         <Thread
@@ -159,28 +161,18 @@ export function PageComments({ pageId, userId, online, canComment }: PageComment
                     {showResolved && <div className="mt-2 space-y-3 opacity-80">{resolved.map(renderThread)}</div>}
                 </div>
             )}
-            {canComment &&
-                (writing ? (
-                    <CommentForm
-                        label="Kommentar"
-                        submitLabel="Kommentieren"
-                        onCancel={() => setWriting(false)}
-                        onSubmit={async (body) => {
-                            const done = await run(() => pageComments.add(pageId, body, null));
-                            if (done) setWriting(false);
-                            return done;
-                        }}
-                    />
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setWriting(true)}
-                        className="mt-1 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm text-muted-foreground hover:bg-accent"
-                    >
-                        <MessageSquare className="size-4" aria-hidden="true" />
-                        Kommentar hinzufügen
-                    </button>
-                ))}
+            {canComment && writing && (
+                <CommentForm
+                    label="Kommentar"
+                    submitLabel="Kommentieren"
+                    onCancel={() => onWritingChange(false)}
+                    onSubmit={async (body) => {
+                        const done = await run(() => pageComments.add(pageId, body, null));
+                        if (done) onWritingChange(false);
+                        return done;
+                    }}
+                />
+            )}
         </section>
     );
 }

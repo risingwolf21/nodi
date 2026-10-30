@@ -9,7 +9,8 @@ test("Kommentare: schreiben, antworten, bearbeiten, erledigen, löschen", async 
     await page.getByRole("button", { name: "Notizen", exact: true }).click();
     const comments = page.getByRole("region", { name: "Kommentare" });
 
-    await comments.getByRole("button", { name: "Kommentar hinzufügen" }).click();
+    // The button sits above the title (package 45a), the form opens with the comments.
+    await page.getByRole("button", { name: "Kommentar hinzufügen" }).click();
     await comments.getByLabel("Kommentar", { exact: true }).fill("Termin klären?");
     await comments.getByRole("button", { name: "Kommentieren" }).click();
     const thread = comments.getByRole("article", { name: "Kommentar von owner@nodi.test" });

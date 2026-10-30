@@ -2984,6 +2984,39 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       Regeln von WebKit und die Farbe; Chromium zeigt den Weichzeichner
       nicht). Auf einem echten iPhone noch nicht geprüft.
 
+### Optik angleichen (Nutzer, 2026-10-30)
+
+- **Befund** (Vergleich mit Notion, 2026-10-30): Überschriften größer als der
+  Seitentitel; Datenbank-Seiten zu schmal mit springenden rechten Kanten,
+  Datumszellen als Eingabefelder; Titelbild als abgerundeter Kasten, Icon
+  darunter; „Kommentar hinzufügen“ immer unter dem Titel; Slash-Menü,
+  Codeblock, Checkboxen, Einrückung der Seitenleiste und Tabs auf dem Handy
+  weichen ab. Funktionslücken (URL je Seite, Duplizieren, Optionen bearbeiten,
+  Summenzeile, Spaltenbreite …) folgen danach.
+- **Entschieden (Nutzer, 2026-10-30):** zuerst die Optik in drei PRs: 45a
+  Seitenkopf und Überschriften, 45b Datenbank-Seiten, 45c Editor-Details und
+  Seitenleiste.
+
+45. **Optik angleichen** (nur Frontend, keine Migration).
+    - **Umsetzung 45a:**
+      - Überschriften im Text wie Notion (`index.css`): 30, 24 und 20 px
+        (vorher BlockNotes 48, 32 und 21 px), Zeilenhöhe 1,3, oben 32, 22 bzw.
+        16 px Abstand. Seitentitel 40 px (Handy 32 px), Zeilenhöhe 1,2; Icon
+        78 px (Handy 64 px), auch in der öffentlichen Ansicht.
+      - Titelbild über die ganze Breite der Seite direkt unter der oberen
+        Leiste, ohne Rundung, 30 % der Fensterhöhe (144–280 px); das Icon ragt
+        zur Hälfte hinein. Dafür begrenzt `.nodi-page-column` (`EditorFrame`)
+        jedes Kind auf 860 px statt die ganze Spalte; das Titelbild
+        (`.nodi-page-cover`) ist ausgenommen und zieht den oberen Abstand
+        (`--page-top`) ab.
+      - „Kommentar hinzufügen“ steht wie „Icon hinzufügen“ und „Titelbild
+        hinzufügen“ in der Leiste über dem Titel (nur beim Überfahren, auf
+        Touch-Geräten immer); `PageComments` erscheint erst mit Kommentaren oder
+        dem Formular (`writing` aus `PageView`).
+      - Tests: Playwright `page-layout.e2e.ts` (Schriftgrößen, Titelbild über
+        die ganze Breite, Icon im Titelbild, Kommentar-Knopf),
+        `page-comments.e2e.ts` angepasst.
+
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
 Ergebnis erklären, bevor größere Folgeänderungen vorgenommen werden.

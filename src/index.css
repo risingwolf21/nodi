@@ -140,12 +140,56 @@
 /* Same side margin for page title and editor text (Paket 10). */
 :root {
     --page-gutter: 1.25rem;
+    /* Room above the title of a page without a cover. */
+    --page-top: 2rem;
 }
 
 @media (min-width: 768px) {
     :root {
         --page-gutter: 54px;
+        --page-top: 4rem;
     }
+}
+
+/*
+ * The column of an open page (package 45a): everything in it is at most
+ * 860 px wide and centered (or the whole width with "Volle Breite"), except
+ * the cover, which spans the page from the top bar on, like in Notion.
+ */
+.nodi-page-column > * {
+    max-width: 860px;
+    margin-inline: auto;
+}
+
+.nodi-page-column-full > * {
+    max-width: none;
+}
+
+.nodi-page-column > .nodi-page-cover {
+    max-width: none;
+    margin-top: calc(var(--page-top) * -1);
+}
+
+/*
+ * Headings like Notion (package 45a): smaller than the page title (40 px) and
+ * with more room above than below. BlockNote's own sizes (3em, 2em, 1.3em)
+ * made a heading 1 larger than the title.
+ */
+.bn-editor [data-content-type="heading"] {
+    --level: 1.875em;
+    padding-top: 2rem;
+    padding-bottom: 1px;
+    line-height: 1.3;
+}
+
+.bn-editor [data-content-type="heading"][data-level="2"] {
+    --level: 1.5em;
+    padding-top: 1.4rem;
+}
+
+.bn-editor [data-content-type="heading"][data-level="3"] {
+    --level: 1.25em;
+    padding-top: 1rem;
 }
 
 .bn-container .bn-editor {
