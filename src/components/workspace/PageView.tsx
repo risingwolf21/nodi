@@ -265,10 +265,13 @@ export function PageView({
                             {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
                         </MenuItem>
                     )}
-                    <MenuItem onSelect={toggleFullWidth}>
-                        <span className="flex-1">Volle Breite</span>
-                        {page.full_width && <Check className="size-4 text-brand" />}
-                    </MenuItem>
+                    {/* Databases always use the whole width (package 45b). */}
+                    {page.kind !== "database" && (
+                        <MenuItem onSelect={toggleFullWidth}>
+                            <span className="flex-1">Volle Breite</span>
+                            {page.full_width && <Check className="size-4 text-brand" />}
+                        </MenuItem>
+                    )}
                     <div className="my-1 border-t" />
                     <MenuItem
                         destructive
@@ -380,9 +383,10 @@ export function PageView({
     );
 
     if (page.kind === "database") {
-        // A database shows its views instead of a text (no editor chunk needed).
+        // A database shows its views instead of a text (no editor chunk needed), like
+        // Notion over the whole width: a table or board needs the room.
         return (
-            <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth={page.full_width}>
+            <EditorFrame topBarStart={topBarStart} topBarEnd={topBarEnd} fullWidth>
                 {renderHeader(!readOnly)}
                 <LoadErrorBoundary
                     key={page.id}

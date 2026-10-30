@@ -1,4 +1,4 @@
-import { createBackend, page as fakePage } from "./fake-supabase";
+import { createBackend, page as fakePage, taskDatabase } from "./fake-supabase";
 import { expect, openApp, test } from "./test";
 
 const NOTES = "b0000000-0000-4000-8000-000000000001";
@@ -50,4 +50,39 @@ test("Titel, Überschriften und Titelbild haben Notions Maße", async ({ page, c
     await expect(
         page.getByRole("region", { name: "Kommentare" }).getByLabel("Kommentar", { exact: true }),
     ).toBeFocused();
+});
+
+// Database pages like Notion (package 45b): the whole width, and the "Neu" row as wide as the table.
+test("Eine Datenbank nutzt die ganze Breite; „Neu“ ist so breit wie die Tabelle", async ({ page, context }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const backend = taskDatabase({
+        properties: ["Eins", "Zwei", "Drei", "Vier", "Fünf", "Sechs"].map((name, index) => ({
+            id: `p${index}`,
+            databaseId: "db",
+            name,
+            type: "text",
+            options: {},
+            position: index,
+        })),
+    });
+    await openApp(page, context, backend);
+    await page.getByRole("button", { name: "Aufgaben", exact: true }).click();
+    await page.getByRole("table").waitFor();
+
+    const scroll = await page.locator(".nodi-page-scroll").boundingBox();
+    const title = await page.getByRole("textbox", { name: "Seitentitel" }).boundingBox();
+    expect(scroll && title).toBeTruthy();
+    if (!scroll || !title) return;
+    expect(title.x - scroll.x).toBe(54);
+    expect(title.width).toBe(scroll.width - 2 * 54);
+
+    const table = await page.getByRole("table").boundingBox();
+    const newRow = await page.getByRole("button", { name: "Neu", exact: true }).boundingBox();
+    expect(table && newRow).toBeTruthy();
+    if (!table || !newRow) return;
+    expect(newRow.x).toBe(table.x);
+    expect(newRow.width).toBe(table.width);
+    await expect(page.getByRole("button", { name: "Seitenmenü" })).toBeVisible();
+    await page.getByRole("button", { name: "Seitenmenü" }).click();
+    await expect(page.getByRole("menuitem", { name: "Volle Breite" })).toHaveCount(0);
 });

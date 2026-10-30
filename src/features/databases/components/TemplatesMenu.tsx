@@ -3,6 +3,7 @@ import { Check, LayoutTemplate, Pencil, Plus } from "lucide-react";
 import { Menu, MenuItem } from "@/components/ui/menu";
 import { displayTitle } from "@/features/pages/page-display";
 import type { Page } from "@/features/pages/types";
+import { toolbarButton } from "./ViewSettingsPanels";
 
 /** What a database page offers for its templates (package 26). */
 export type TemplateActions = {
@@ -52,12 +53,13 @@ export function TemplatesMenu({
         <div className="relative">
             <button
                 type="button"
+                aria-label="Vorlagen"
                 aria-expanded={open}
                 onClick={() => setOpen(true)}
-                className="flex h-8 items-center gap-1.5 rounded px-2 text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground pointer-coarse:h-10"
+                className={toolbarButton}
             >
                 <LayoutTemplate className="size-3.5" aria-hidden="true" />
-                Vorlagen
+                <span className="hidden sm:inline">Vorlagen</span>
             </button>
             <Menu open={open} onClose={() => setOpen(false)} align="end" className="w-64" label="Vorlagen">
                 {templates.length > 0 && (

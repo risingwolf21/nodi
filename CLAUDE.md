@@ -3016,6 +3016,24 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       - Tests: Playwright `page-layout.e2e.ts` (Schriftgrößen, Titelbild über
         die ganze Breite, Icon im Titelbild, Kommentar-Knopf),
         `page-comments.e2e.ts` angepasst.
+    - **Umsetzung 45b:**
+      - Datenbank-Seiten nutzen wie in Notion immer die ganze Breite (Titel,
+        Tabs, Leiste und Ansicht mit `--page-gutter` bündig); „Volle Breite“
+        gibt es im Seitenmenü nur noch für Seiten. Einträge bleiben, wie
+        eingestellt.
+      - Tabelle: Die Zeile „Neu“ und der Hinweis ohne Einträge sind so breit
+        wie die Tabelle, auch wenn sie seitlich scrollt (vorher endeten sie am
+        sichtbaren Rand).
+      - Datum (`DatePicker`): Tabelle und Eigenschaftsleiste zeigen den Wert
+        als Text („30. Okt. 2026“, Zeitraum mit „–“) statt als Eingabefeld;
+        ein Klick öffnet die Auswahl mit Beginn, Schalter „Enddatum“ (vorher
+        ließ sich das Ende nicht setzen) und „Uhrzeit“ sowie „Leeren“.
+      - Leiste der Datenbank einheitlich (`toolbarButton`): „Vorlagen“ so
+        groß wie die anderen Knöpfe; auf dem Handy zeigen alle nur das Icon
+        (auch „Filter“ und „Sortieren“, Name bleibt für Screenreader).
+      - Tests: Playwright `database-table.e2e.ts` (Datum als Text, Uhrzeit,
+        Enddatum, Leeren), `page-layout.e2e.ts` (ganze Breite, „Neu“ so breit
+        wie die Tabelle, kein „Volle Breite“).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
