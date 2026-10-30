@@ -72,6 +72,7 @@ export default function WorkspaceHome() {
     const [creatingWorkspace, setCreatingWorkspace] = useState(false);
     // Repeated taps on "Neue Seite" while one is being created add nothing.
     const creatingPage = useRef(false);
+    const [duplicating, setDuplicating] = useState(false);
     const [error, setError] = useState("");
     const [signOutStep, setSignOutStep] = useState<
         { kind: "idle" } | { kind: "syncing" } | { kind: "confirm"; unsyncedPages: number }
@@ -85,6 +86,7 @@ export default function WorkspaceHome() {
         fromCache: pagesFromCache,
         createPage: createWorkspacePage,
         createEntryFromTemplate,
+        duplicatePage: duplicateWorkspacePage,
         setPageSection,
         movePage,
         renamePage,
@@ -192,6 +194,29 @@ export default function WorkspaceHome() {
     function changeWorkspace(nextWorkspaceId: string) {
         closePage();
         setWorkspaceId(nextWorkspaceId);
+    }
+
+    // A copy with everything below it opens when it is ready (package 47).
+    async function duplicatePage(item: Page) {
+        if (duplicating) return;
+        setDuplicating(true);
+        setError("");
+        try {
+            const { page: copy, missingFiles } = await duplicateWorkspacePage(item.id);
+            openPage(copy.id);
+            if (missingFiles > 0) {
+                setError(
+                    missingFiles === 1
+                        ? "Eine Datei konnte nicht kopiert werden; in der Kopie fehlt sie."
+                        : `${missingFiles} Dateien konnten nicht kopiert werden; in der Kopie fehlen sie.`,
+                );
+            }
+        } catch (err) {
+            console.error("Page duplication failed:", err);
+            setError(err instanceof Error ? err.message : "Die Seite konnte nicht dupliziert werden.");
+        } finally {
+            setDuplicating(false);
+        }
     }
 
     async function createPage(parentId: string | null, section: PageSection, kind: PageKind = "page") {
@@ -381,6 +406,7 @@ export default function WorkspaceHome() {
                             onDelete={permanentlyDeletePage}
                             onEmptyTrash={emptyTrash}
                             onMove={(item) => setMovePageDialog({ page: item })}
+                            onDuplicate={(item) => void duplicatePage(item)}
                             onDropPage={(item, target) => void dropPage(item, target)}
                             onReorder={(updates) => void reorder(updates)}
                         />
@@ -417,6 +443,7 @@ export default function WorkspaceHome() {
                                 onShare={page.owner_id === user?.id ? setSharingPage : undefined}
                                 // Moving stays within the page's own workspace.
                                 onMove={sharedPage ? undefined : (item) => setMovePageDialog({ page: item })}
+                                onDuplicate={sharedPage ? undefined : (item) => void duplicatePage(item)}
                                 onMoveSection={
                                     !sharedPage && page.parent_id === null && page.owner_id === user?.id
                                         ? (item, target) => setMovingPage({ page: item, target })
@@ -484,7 +511,15 @@ export default function WorkspaceHome() {
                 </>
             )}
 
-            {visibleError && (
+            {duplicating && (
+                <p
+                    className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 rounded-md border bg-background px-4 py-3 text-sm shadow-md md:left-auto md:w-96"
+                    role="status"
+                >
+                    Seite wird dupliziert …
+                </p>
+            )}
+            {!duplicating && visibleError && (
                 <p
                     className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 rounded-md border bg-background px-4 py-3 text-sm text-destructive shadow-md md:left-auto md:w-96"
                     role="alert"

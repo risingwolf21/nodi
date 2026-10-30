@@ -898,6 +898,49 @@ function answer(route: Route, backend: FakeBackend): Promise<void> {
         }
         return json(id);
     }
+    if (path === "/rest/v1/rpc/duplicate_page") {
+        // Like the server (package 47a): the page and its subtree, ids in texts pointing to the copies.
+        const root = backend.pages.find((item) => item.id === text(requestBody(route), "p_page_id"));
+        if (!root) return json({ code: "42501", message: "cannot read" }, 403);
+        const ids = new Map<string, string>();
+        const collect = (id: string) => {
+            ids.set(id, crypto.randomUUID());
+            for (const child of backend.pages.filter((item) => item.parent_id === id && !item.is_archived)) {
+                collect(child.id);
+            }
+        };
+        collect(root.id);
+        const remap = (value: string) => [...ids].reduce((result, [from, to]) => result.replaceAll(from, to), value);
+        const later = backend.pages
+            .filter(
+                (item) =>
+                    item.parent_id === root.parent_id && (item.position ?? -Infinity) > (root.position ?? Infinity),
+            )
+            .map((item) => item.position ?? 0);
+        for (const [from, to] of ids) {
+            const original = backend.pages.find((item) => item.id === from);
+            if (!original) continue;
+            const isRoot = from === root.id;
+            backend.pages.push({
+                ...original,
+                id: to,
+                parent_id: isRoot ? original.parent_id : (ids.get(original.parent_id ?? "") ?? null),
+                title: isRoot ? `${original.title || "Ohne Titel"} (Kopie)` : original.title,
+                position:
+                    isRoot && original.position !== null
+                        ? later.length > 0
+                            ? (original.position + Math.min(...later)) / 2
+                            : original.position + 1
+                        : original.position,
+            });
+            const document = backend.savedDocuments.get(from);
+            if (document !== undefined) backend.savedDocuments.set(to, JSON.parse(remap(JSON.stringify(document))));
+        }
+        const files = [...backend.files.keys()]
+            .filter((key) => ids.has(key.split("/")[0]))
+            .map((key) => ({ from: key, to: remap(key) }));
+        return json([{ page_id: ids.get(root.id), files }]);
+    }
     if (path === "/rest/v1/rpc/create_due_recurring_entries") {
         backend.recurrenceRuns.push(text(requestBody(route), "p_workspace_id"));
         return json(0);

@@ -3122,6 +3122,19 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       - Erwähnungen im kopierten Text melden sich wie neue (Trigger aus 37a).
       - pgTAP: `duplicate_page.test.sql`; ein Baum mit 601 Seiten und Texten
         braucht lokal unter 1 s.
+    - **Umsetzung 47b** (nur Frontend, keine Migration):
+      - „Duplizieren“ im Seitenmenü und im Menü der Baumzeile (nur eigener
+        Workspace, online). `usePages.duplicatePage`: RPC, danach die Dateien
+        aus `files` per `copyPageFile` (eine nach der anderen; scheitert eine,
+        fehlt sie in der Kopie, ein Hinweis nennt die Anzahl). Die Kopie steht
+        sofort im Baum (`duplicateTitle`, `positionAfter`), der Rest kommt mit
+        dem neuen Laden; danach öffnet sie sich. Unten steht währenddessen
+        „Seite wird dupliziert …“.
+      - Tests: Vitest `page-hierarchy.test.ts` (`positionAfter`), Playwright
+        `page-duplicate.e2e.ts` (Seitenmenü: Titel, Platz, Unterseite, Link im
+        Text auf die Kopie, Bild kopiert; Menü der Seitenleiste).
+      - Noch nicht: Duplizieren geteilter Seiten anderer Workspaces und von
+        Einträgen aus Tabelle oder Board heraus.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das

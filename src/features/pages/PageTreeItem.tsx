@@ -18,6 +18,7 @@ type PageTreeItemProps = {
     onRename: (page: Page) => void;
     onArchive: (page: Page) => void;
     onMove?: (page: Page) => void;
+    onDuplicate?: (page: Page) => void;
     dragAndDrop?: TreeDragAndDrop;
 };
 
@@ -39,6 +40,7 @@ export function PageTreeItem({
     onRename,
     onArchive,
     onMove,
+    onDuplicate,
     dragAndDrop,
 }: PageTreeItemProps) {
     const children = pages.filter((item) => item.parent_id === page.id).sort(compareByPosition);
@@ -169,6 +171,16 @@ export function PageTreeItem({
                                         Verschieben nach …
                                     </MenuItem>
                                 )}
+                                {onDuplicate && (
+                                    <MenuItem
+                                        onSelect={() => {
+                                            setMenuOpen(false);
+                                            onDuplicate(page);
+                                        }}
+                                    >
+                                        Duplizieren
+                                    </MenuItem>
+                                )}
                                 <MenuItem
                                     destructive
                                     onSelect={() => {
@@ -214,6 +226,7 @@ export function PageTreeItem({
                         onRename={onRename}
                         onArchive={onArchive}
                         onMove={onMove}
+                        onDuplicate={onDuplicate}
                         dragAndDrop={dragAndDrop}
                     />
                 ))}
