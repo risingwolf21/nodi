@@ -204,7 +204,49 @@ test.describe("Telefon", () => {
 
         // The menu of a tab is not clipped by the scrolling strip.
         await tabs.first().tap();
-        await expect(page.getByRole("textbox", { name: "Name der Ansicht" })).toBeVisible();
         await expect(page.getByRole("menuitem", { name: "Ansicht löschen" })).toBeInViewport();
+    });
+
+    // Switching views, or tapping the open one, brings up no keyboard (package 48).
+    test("Tippen auf Ansichts-Tabs öffnet keine Tastatur; Umbenennen erst auf Wunsch", async ({ page, context }) => {
+        const backend = taskDatabase({
+            views: ["Tabelle", "Board"].map((name, index) => ({
+                id: `v${index}`,
+                databaseId: "db",
+                name,
+                type: (["table", "board"] as const)[index],
+                config: {},
+                position: index,
+            })),
+        });
+        await openApp(page, context, backend);
+        await page.getByRole("button", { name: "Aufgaben", exact: true }).tap();
+        const focusedField = () =>
+            page.evaluate(() => ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName ?? ""));
+
+        await page.getByRole("tab", { name: "Board" }).tap();
+        await expect(page.getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
+        // Tapping the open view again shows its menu, without a text field.
+        await page.getByRole("tab", { name: "Board" }).tap();
+        await expect(page.getByRole("menuitem", { name: "Umbenennen" })).toBeVisible();
+        await expect(page.getByRole("textbox", { name: "Name der Ansicht" })).toHaveCount(0);
+        expect(await focusedField()).toBe(false);
+
+        // A new view neither.
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Ansicht hinzufügen" }).tap();
+        await page.getByRole("menuitem", { name: "Liste" }).tap();
+        await expect(page.getByRole("tab", { name: "Liste" })).toHaveAttribute("aria-selected", "true");
+        expect(await focusedField()).toBe(false);
+
+        // "Umbenennen" is where the keyboard is wanted.
+        await page.getByRole("tab", { name: "Liste" }).tap();
+        await page.getByRole("menuitem", { name: "Umbenennen" }).tap();
+        const name = page.getByRole("textbox", { name: "Name der Ansicht" });
+        await expect(name).toBeFocused();
+        await name.fill("Offen");
+        await name.press("Enter");
+        await expect(page.getByRole("tab", { name: "Offen" })).toBeVisible();
+        await expect.poll(() => backend.views.map((view) => view.name)).toContain("Offen");
     });
 });

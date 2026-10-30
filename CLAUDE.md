@@ -3135,6 +3135,17 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
         Text auf die Kopie, Bild kopiert; Menü der Seitenleiste).
       - Noch nicht: Duplizieren geteilter Seiten anderer Workspaces und von
         Einträgen aus Tabelle oder Board heraus.
+48. **Keine Tastatur beim Wechseln der Ansichten** (Nutzer, 2026-10-30; nur
+    Frontend, keine Migration):
+    - Ursache: Ein Tipp auf den aktiven Ansichts-Tab öffnete das Menü mit dem
+      Namensfeld im Fokus (`autoFocus`), auf dem Handy also die Tastatur. Das
+      passierte beim Wechseln (zweiter Tipp auf denselben Tab) und nach dem
+      Anlegen einer Ansicht (die neue ist aktiv).
+    - Jetzt zeigt das Menü des aktiven Tabs „Umbenennen“ und „Ansicht
+      löschen“; das Namensfeld (mit Fokus) erscheint erst nach „Umbenennen“.
+      Beim Schließen wird nur gespeichert, wenn umbenannt wurde.
+    - Tests: Playwright `page-layout.e2e.ts` (Telefon: Wechseln, erneuter
+      Tipp, neue Ansicht ohne fokussiertes Feld; Umbenennen speichert).
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
