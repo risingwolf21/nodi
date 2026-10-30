@@ -4,6 +4,7 @@ import {
     ChevronLeft,
     FileText,
     LayoutTemplate,
+    Link,
     MessageSquare,
     MoreHorizontal,
     Star,
@@ -20,6 +21,7 @@ import { CoverPicker, PageCover } from "@/features/pages/components/PageCover";
 import { PageHeader } from "@/features/pages/components/PageHeader";
 import { SubpageList } from "@/features/pages/components/SubpageList";
 import { displayTitle, NEW_PAGE_TITLE } from "@/features/pages/page-display";
+import { pageLink } from "@/features/pages/page-url";
 import type { PositionUpdate } from "@/features/pages/page-hierarchy";
 import type { Page, PageKind, PageSection, PageSettings } from "@/features/pages/types";
 import type { TemplateActions } from "@/features/databases/components/TemplatesMenu";
@@ -127,6 +129,7 @@ export function PageView({
     const database = ancestors.at(-1)?.kind === "database" ? ancestors.at(-1) : undefined;
     const [menuOpen, setMenuOpen] = useState(false);
     const [menuError, setMenuError] = useState("");
+    const [linkCopied, setLinkCopied] = useState(false);
     // The page is remounted for every page (key), so a draft belongs to this one.
     const [writingComment, setWritingComment] = useState(false);
 
@@ -200,91 +203,118 @@ export function PageView({
         </>
     );
 
-    const topBarEnd =
-        readOnly || !showPageMenu ? null : (
-            <div className="relative shrink-0">
-                <button
-                    type="button"
-                    aria-label="Seitenmenü"
-                    aria-expanded={menuOpen}
-                    onClick={() => setMenuOpen((open) => !open)}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                    <MoreHorizontal className="size-5" />
-                </button>
-                <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
-                    {onSetFavorite && (
-                        <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
-                            <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
-                            {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
-                        </MenuItem>
-                    )}
-                    {onShare && (
+    // Copying the link works offline and on shared pages too; the rest needs the own workspace online.
+    const manageable = !readOnly && showPageMenu;
+
+    async function copyLink() {
+        setMenuError("");
+        try {
+            await navigator.clipboard.writeText(pageLink(page.id));
+            setLinkCopied(true);
+        } catch (err) {
+            console.warn("Link konnte nicht kopiert werden:", err);
+            setMenuOpen(false);
+            setMenuError("Der Link konnte nicht kopiert werden. Kopiere ihn aus der Adresszeile.");
+        }
+    }
+
+    const topBarEnd = (
+        <div className="relative shrink-0">
+            <button
+                type="button"
+                aria-label="Seitenmenü"
+                aria-expanded={menuOpen}
+                onClick={() => {
+                    setLinkCopied(false);
+                    setMenuOpen((open) => !open);
+                }}
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+                <MoreHorizontal className="size-5" />
+            </button>
+            <Menu open={menuOpen} onClose={() => setMenuOpen(false)}>
+                <MenuItem onSelect={() => void copyLink()}>
+                    {linkCopied ? <Check className="size-4 text-brand" /> : <Link className="size-4" />}
+                    {linkCopied ? "Link kopiert" : "Link kopieren"}
+                </MenuItem>
+                {manageable && (
+                    <>
+                        {onSetFavorite && (
+                            <MenuItem onSelect={() => toggleFavorite(onSetFavorite)}>
+                                <Star className={page.favorite ? "size-4 fill-current text-brand" : "size-4"} />
+                                {page.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten hinzufügen"}
+                            </MenuItem>
+                        )}
+                        {onShare && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onShare(page);
+                                }}
+                            >
+                                Teilen
+                            </MenuItem>
+                        )}
+                        {onMove && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onMove(page);
+                                }}
+                            >
+                                Verschieben nach …
+                            </MenuItem>
+                        )}
+                        {onMoveSection && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
+                                }}
+                            >
+                                {page.visibility === "private"
+                                    ? "In den Workspace verschieben"
+                                    : "In Privat verschieben"}
+                            </MenuItem>
+                        )}
+                        {onExport && (
+                            <MenuItem
+                                onSelect={() => {
+                                    setMenuOpen(false);
+                                    onExport(page);
+                                }}
+                            >
+                                Exportieren
+                            </MenuItem>
+                        )}
+                        {page.kind === "page" && (
+                            <MenuItem onSelect={toggleTemplate}>
+                                <LayoutTemplate className="size-4" />
+                                {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
+                            </MenuItem>
+                        )}
+                        {/* Databases always use the whole width (package 45b). */}
+                        {page.kind !== "database" && (
+                            <MenuItem onSelect={toggleFullWidth}>
+                                <span className="flex-1">Volle Breite</span>
+                                {page.full_width && <Check className="size-4 text-brand" />}
+                            </MenuItem>
+                        )}
+                        <div className="my-1 border-t" />
                         <MenuItem
+                            destructive
                             onSelect={() => {
                                 setMenuOpen(false);
-                                onShare(page);
+                                onArchive(page);
                             }}
                         >
-                            Teilen
+                            In den Papierkorb
                         </MenuItem>
-                    )}
-                    {onMove && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onMove(page);
-                            }}
-                        >
-                            Verschieben nach …
-                        </MenuItem>
-                    )}
-                    {onMoveSection && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onMoveSection(page, page.visibility === "private" ? "workspace" : "private");
-                            }}
-                        >
-                            {page.visibility === "private" ? "In den Workspace verschieben" : "In Privat verschieben"}
-                        </MenuItem>
-                    )}
-                    {onExport && (
-                        <MenuItem
-                            onSelect={() => {
-                                setMenuOpen(false);
-                                onExport(page);
-                            }}
-                        >
-                            Exportieren
-                        </MenuItem>
-                    )}
-                    {page.kind === "page" && (
-                        <MenuItem onSelect={toggleTemplate}>
-                            <LayoutTemplate className="size-4" />
-                            {page.is_template ? "Keine Vorlage mehr" : "Als Vorlage verwenden"}
-                        </MenuItem>
-                    )}
-                    {/* Databases always use the whole width (package 45b). */}
-                    {page.kind !== "database" && (
-                        <MenuItem onSelect={toggleFullWidth}>
-                            <span className="flex-1">Volle Breite</span>
-                            {page.full_width && <Check className="size-4 text-brand" />}
-                        </MenuItem>
-                    )}
-                    <div className="my-1 border-t" />
-                    <MenuItem
-                        destructive
-                        onSelect={() => {
-                            setMenuOpen(false);
-                            onArchive(page);
-                        }}
-                    >
-                        In den Papierkorb
-                    </MenuItem>
-                </Menu>
-            </div>
-        );
+                    </>
+                )}
+            </Menu>
+        </div>
+    );
 
     const setCover = (cover: string | null) => onUpdate(page.id, { cover });
 

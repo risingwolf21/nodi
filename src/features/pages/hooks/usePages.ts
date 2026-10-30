@@ -724,7 +724,8 @@ export function usePages(workspaceId: string, userId: string | undefined): UsePa
     return {
         pages: showsCurrentWorkspace ? pages : [],
         archivedPages: showsCurrentWorkspace ? archivedPages : [],
-        loading,
+        // Also before the first load of a new workspace has started.
+        loading: loading || !showsCurrentWorkspace,
         error,
         fromCache,
         createPage,
