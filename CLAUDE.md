@@ -428,7 +428,7 @@ supabase/
                             # Konto löschen (P33a), Speicher aufräumen (P35a),
                             # Echtzeit (P36a), Erwähnungen (P37a),
                             # Seitenvorlagen (P38a), ungenutzte Dateien (P40),
-                            # Suche in Werten (P43)
+                            # Suche in Werten (P43), Duplizieren (P47a)
   tests/                    # pgTAP: Berechtigungen, Spaltenschutz, LWW,
                             # Seiteneinstellungen, Teilen, Löschrecht,
                             # Reparatur, Titel/Icon geteilter Seiten,
@@ -3054,7 +3054,7 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
 ### Funktionen wie Notion (Nutzer, 2026-10-30)
 
 - **Reihenfolge** (Vorschlag nach 45, „Los“): 46 URL je Seite und „Link
-  kopieren“, danach Duplizieren, Optionen bearbeiten, Summenzeile,
+  kopieren“, 47 Duplizieren, danach Optionen bearbeiten, Summenzeile,
   Spaltenbreite (je ein PR, vor dem Start genauer geschnitten).
 
 46. **URL je Seite und „Link kopieren“** (nur Frontend, keine Migration):
@@ -3084,6 +3084,44 @@ functions serve` gegen die lokale Supabase geprüft (ungenutzte Datei
       Seite).
     - Noch nicht: Titel in der Adresse (wie Notion `Titel-<id>`), Link auf
       einen Block, „Link kopieren“ in der Seitenleiste.
+47. **Duplizieren** wie Notion.
+    - **Entschieden (Nutzer, 2026-10-30):** (1) Eine Seite wird mit allen
+      Unterseiten kopiert. (2) Eine Datenbank kommt mit Einträgen und Werten.
+    - **Annahmen:** Die Kopie steht direkt hinter dem Original und heißt
+      „Titel (Kopie)“; Bilder und Anhänge werden mitkopiert (wie bei
+      Seitenvorlagen, 38b). Kommentare, Freigaben, öffentliche Links,
+      Favoriten und Wiederholungen bleiben beim Original.
+    - **Aufteilung:** 47a Datenbank, 47b Oberfläche.
+    - **Umsetzung 47a** (`20261030090000_duplicate_page.sql`):
+      - RPC `duplicate_page(page)` → `(page_id, files)`: kopiert die Seite und
+        alles darunter, was der Aufrufer lesen kann (nicht im Papierkorb,
+        Tiefe ≤ 50, höchstens 1000 Seiten, sonst `22023`). Rechte wie beim
+        Anlegen an dieser Stelle: Mitglied des Workspace, Schreibrecht auf die
+        Elternseite (`42501`); `22004` ohne Seite. Owner der Kopien ist der
+        Aufrufer, der Bereich bleibt (private Seiten anderer kann er nicht
+        lesen, sie fehlen also). Position zwischen Original und nächstem
+        Geschwister.
+      - Mitkopiert: Text, Icon, Titelbild, volle Breite, Vorlage,
+        Eigenschaften, Ansichten (statt der automatisch angelegten Tabelle),
+        Block-Ansichten, Werte und Standardvorlage. `remap_ids` ersetzt in
+        Texten, Optionen, Konfigurationen und Werten die IDs kopierter Seiten
+        und Eigenschaften durch die der Kopien: Seitenlinks und
+        Datenbank-Blöcke zeigen auf die Kopien, Filter/Gruppierung auf die
+        kopierten Eigenschaften, `nodi-file:`-Verweise auf den Ordner der
+        Kopie.
+      - Verknüpfungen: innerhalb der Kopie verknüpfen die kopierten Einträge
+        (nicht kopierte fallen weg). Zu einer Datenbank außerhalb bekommt diese
+        eine neue Gegenseite (Name der kopierten Datenbank), die auf die
+        kopierten Einträge zeigt; ohne Schreibrecht dort entfällt die
+        Eigenschaft. Ein kopierter Eintrag einer Datenbank außerhalb (die Seite
+        selbst) bekommt seine Werte per `set_page_property`; Verknüpfungen ohne
+        Schreibrecht auf den verknüpften Eintrag entfallen.
+      - `files`: `{from, to}` je vorhandener Datei im Ordner einer kopierten
+        Seite, auf die die Kopie verweist; kopiert werden sie von der App
+        (nur die Storage-API kann das).
+      - Erwähnungen im kopierten Text melden sich wie neue (Trigger aus 37a).
+      - pgTAP: `duplicate_page.test.sql`; ein Baum mit 601 Seiten und Texten
+        braucht lokal unter 1 s.
 
 Jedes Arbeitspaket soll einen klaren Umfang, die betroffenen Dateien und
 überprüfbare Akzeptanzkriterien haben. Nach jedem Paket anhalten und das
