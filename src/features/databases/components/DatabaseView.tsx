@@ -7,6 +7,7 @@ import {
     List,
     Map as MapIcon,
     MapPin,
+    Pencil,
     Plus,
     Rss,
     Table2,
@@ -98,13 +99,16 @@ function ViewTab({
     onDelete: () => void;
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
+    // The name field only after "Umbenennen": focused at once, it opened the keyboard on every tap of the tab.
+    const [renaming, setRenaming] = useState(false);
     const [name, setName] = useState(view.name);
     const Icon = VIEW_ICONS[view.type];
 
-    function rename(event?: FormEvent<HTMLFormElement>) {
+    function closeMenu(event?: FormEvent<HTMLFormElement>) {
         event?.preventDefault();
-        const next = name.trim();
         setMenuOpen(false);
+        if (!renaming) return;
+        const next = name.trim();
         if (next && next !== view.name) void onRename(next);
     }
 
@@ -117,6 +121,7 @@ function ViewTab({
                 onClick={() => {
                     if (active && editable) {
                         setName(view.name);
+                        setRenaming(false);
                         setMenuOpen(true);
                     } else {
                         onSelect();
@@ -132,17 +137,24 @@ function ViewTab({
                 <Icon className="size-3.5" aria-hidden="true" />
                 {view.name}
             </button>
-            <Menu detached open={menuOpen} onClose={() => rename()} align="start" className="w-56">
-                <form onSubmit={rename} className="p-1">
-                    <input
-                        autoFocus
-                        value={name}
-                        maxLength={100}
-                        aria-label="Name der Ansicht"
-                        onChange={(event) => setName(event.target.value)}
-                        className="h-7 w-full rounded border bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    />
-                </form>
+            <Menu detached open={menuOpen} onClose={() => closeMenu()} align="start" className="w-56">
+                {renaming ? (
+                    <form onSubmit={closeMenu} className="p-1">
+                        <input
+                            autoFocus
+                            value={name}
+                            maxLength={100}
+                            aria-label="Name der Ansicht"
+                            onChange={(event) => setName(event.target.value)}
+                            className="h-7 w-full rounded border bg-transparent px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        />
+                    </form>
+                ) : (
+                    <MenuItem onSelect={() => setRenaming(true)}>
+                        <Pencil className="size-4" aria-hidden="true" />
+                        Umbenennen
+                    </MenuItem>
+                )}
                 {canDelete && (
                     <MenuItem
                         destructive
